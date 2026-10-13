@@ -36,6 +36,9 @@ runtime and standard-library behavior, Cargo workflows, and supported targets.
 Each case also names its compatibility-index feature IDs. The report aggregates
 those probes by feature while preserving the hand-curated status; a passing
 probe does not promote a broad feature category to full compatibility.
+The panic runtime case normalizes rustc's process-specific main-thread ID in
+stderr; it still compares the exit status, payload, source location, and
+remaining panic-hook output.
 
 ## Case format
 
@@ -59,17 +62,18 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The latest clean Linux run passes 50 of 53 cases (94.3%) at revision
-`da8b3cd`. The report records the exact binary hash and clean source status.
-It covers Rust 2015 `async`, `await`, and `dyn` identifiers, plus edition-aware
-Rust 2024 reserved `gen`, unsafe extern block, and unsafe attribute rules:
-[`results/2026-10-13-edition-keyword-clean.json`](results/2026-10-13-edition-keyword-clean.json).
+The latest clean Linux run passes 51 of 53 cases (96.2%) at revision
+`26b9230`. The report records the exact binary hash and clean source status.
+It covers static-string panic behavior, Rust 2015 `async`, `await`, and `dyn`
+identifiers, and Rust 2024 reserved `gen`, unsafe extern block, and unsafe
+attribute rules:
+[`results/2026-10-13-panic-runtime-clean.json`](results/2026-10-13-panic-runtime-clean.json).
 Borrowed integer slice iteration and `Vec<String>` growth, indexing, cloning,
 and output match rustc in the maintained cases. Windows output remains
 unprobed.
 
-Three cases fail: generic trait dispatch, panic behavior, and rustc's inability
-to consume Quill's object as an `--extern` library. The paired Rust 2015/2018
+Two cases fail: generic trait dispatch and rustc's inability to consume
+Quill's object as an `--extern` library. The paired Rust 2015/2018
 tests now match rustc: `async`, `await`, and `dyn` are accepted as Rust 2015
 identifiers where appropriate, while Rust 2018 reserves `async` for async
 syntax. Thirteen edition-scoped cases pass across Rust 2015, 2018, 2021, 2024,
@@ -79,7 +83,7 @@ signed widening, tuple projections, borrowed slice iteration, `Vec<String>`
 indexing, and the tested `Result` status check also match rustc. Build-script support covers the tested native script that emits
 `rustc-cfg`; other directives and build dependencies remain incomplete.
 
-The 94.3% rate is only for these curated cases; it is not an overall Rust
+The 96.2% rate is only for these curated cases; it is not an overall Rust
 compatibility score. The case count and the grouped website inventory describe
 different things and must not be compared as percentages. The full destination
 remains in [`TARGET.md`](TARGET.md),
