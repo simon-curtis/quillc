@@ -11,15 +11,15 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 
 ## Paired build measurements
 
-Five runs were collected on 2026-10-13 with a release Quill build and Rust
-nightly `2026-08-23`, on an Intel i7-8700K host with 12 logical CPUs. Both
-commands selected the same binary and eight-crate source dependency graph.
-The table reports medians. Cold runs cleared the Rust target and Quill
-parse/type-check/artifact caches, but retained the OS file cache. Warm runs
-repeated an unchanged build. Comment-only incremental runs changed one source
-file's comment. Semantic incremental runs changed the record range from 128 to
-127, ran both executables, and checked that their changed outputs matched;
-each edit was restored afterward.
+Five runs were collected on 2026-10-13 from a clean release build at revision
+`010a3b9` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+logical CPUs. Both commands selected the same binary and eight-crate source
+dependency graph. The table reports medians. Cold runs cleared the Rust target
+and Quill parse/type-check/artifact caches, but retained the OS file cache.
+Warm runs repeated an unchanged build. Comment-only incremental runs changed
+one source file's comment. Semantic incremental runs changed the record range
+from 128 to 127, ran both executables, and checked that their changed outputs
+matched; each edit was restored afterward.
 
 Wall time uses a blocking process wait. CPU totals use kernel waited-child
 accounting and exclude the RSS sampler. Peak RSS is the maximum sampled sum
@@ -27,22 +27,26 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.683 s | 5.604 s | 565.1 MiB |
-| `quillc cargo-build-subset` | Cold | 0.357 s | 1.925 s | 137.5 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 21.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.006 s | 0.001 s | 21.7 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.408 s | 230.9 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.085 s | 35.6 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.431 s | 229.0 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.179 s | 52.0 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.738 s | 5.724 s | 559.9 MiB |
+| `quillc cargo-build-subset` | Cold | 0.355 s | 1.928 s | 138.6 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.019 s | 21.9 MiB |
+| `quillc cargo-build-subset` | Warm | 0.007 s | 0.001 s | 21.9 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.287 s | 0.410 s | 228.9 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.084 s | 35.6 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.306 s | 0.431 s | 230.2 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.172 s | 52.1 MiB |
 
-Quill's median wall-time ratios were 7.52× cold, 3.17× warm, 11.00× for the
-comment edit, and 3.64× for the semantic edit. Peak RSS was lower in three
-states and equal in the warm state. The semantic-edit CPU-time ratio was 2.39×
-(0.179 s vs. 0.431 s); cold CPU time was 2.91× lower. This clears the 3×
-wall-time bar in all four states on this fixture; it does not establish general
-Rust compiler performance. The clean raw run was built from revision
-`3f16b03`; its binary hash is recorded in the JSON.
+Quill's median wall-time ratios were 7.71× cold, 2.71× warm, 10.63× for the
+comment edit, and 3.69× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. CPU-time ratios were 2.97× cold, 19.00×
+warm, 4.88× for the comment edit, and 2.51× for the semantic edit. This run
+misses the 3× wall-time gate for the warm build; it clears that gate for the
+other three states. The cold and semantic CPU-time ratios are also below 3×.
+These results are specific to this fixture and do not establish general Rust
+compiler performance. The compiler source was clean at revision `010a3b9`; the
+binary hash and raw samples are recorded in the JSON. The previous clean run
+from `3f16b03` is retained in
+[`results-20261013-3f16b03.json`](results-20261013-3f16b03.json).
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
