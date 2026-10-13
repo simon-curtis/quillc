@@ -4077,7 +4077,7 @@ fn infer_with_structs(
                 }
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             let base_type = infer_with_structs(
                 base,
                 locals,

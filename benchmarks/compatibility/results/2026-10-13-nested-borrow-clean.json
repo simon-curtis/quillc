@@ -1,0 +1,2533 @@
+{
+  "toolchain": "nightly-2026-08-23",
+  "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "quillc": "/home/simon/.cache/quillc-proj-compat-target/debug/quillc",
+  "quillc_source_revision": "4d4140e15c616b04c3042d93feda70904ec0c5ee",
+  "quillc_source_dirty": false,
+  "quillc_source_dirty_paths": [],
+  "quillc_artifact_mtime": "2026-10-13T20:12:10.718420+00:00",
+  "quillc_sha256": "cf7f23738339d6ddb60854d1173a52748e4763752eb2c5ae6b1abf24627b7501",
+  "passed": 116,
+  "total": 116,
+  "percent": 100.0,
+  "results": [
+    {
+      "case": "hello-world",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "scalar-calls-and-arithmetic",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "recursive-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "integer-match",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "while-loop",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "integer-range-for-loop",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "struct-field-and-inherent-method",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-array-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-array-runtime-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-array-runtime-index-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-i32-array-runtime-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-i32-array-runtime-index-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "inline-module-import",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-copy-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "string-slice-helper",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-local-workspace-library",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-features-and-target-cfg",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-multiple-binary-targets",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-type-mismatch",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0308",
+        "rustc_message": "mismatched types",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 30
+        },
+        "quill_code": "E0308",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 30
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+      }
+    },
+    {
+      "case": "if-let-fieldless-enum",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "option-status-check",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "owned-string-format-capture",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-expansion",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-use-after-move",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "borrow of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 78
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 78
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+      }
+    },
+    {
+      "case": "diagnostic-use-after-move-from-if-expression",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "use of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 122
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 122
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-use-after-move-from-if-expression/main.rs:1:122: error[E0382]: use of moved value: `value`"
+      }
+    },
+    {
+      "case": "diagnostic-use-after-move-from-loop",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "use of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 101
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 101
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-use-after-move-from-loop/main.rs:1:101: error[E0382]: use of moved value: `value`"
+      }
+    },
+    {
+      "case": "diagnostic-use-after-move-from-match-binding",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "use of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 106
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 106
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-use-after-move-from-match-binding/main.rs:1:106: error[E0382]: use of moved value: `value`"
+      }
+    },
+    {
+      "case": "match-wildcard-after-move-remains-accepted",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-use-after-move-from-match-arm-merge",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "use of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 178
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 178
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-use-after-move-from-match-arm-merge/main.rs:1:178: error[E0382]: use of moved value: `value`"
+      }
+    },
+    {
+      "case": "match-arm-moves-do-not-leak",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-overlapping-mutable-borrows",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0499",
+        "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 89
+        },
+        "quill_code": "E0499",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 89
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-overlapping-mutable-borrows/main.rs:1:89: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+      }
+    },
+    {
+      "case": "mutable-borrow-ends-at-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-shared-then-mutable-borrow",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 85
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 85
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-shared-then-mutable-borrow/main.rs:1:85: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+      }
+    },
+    {
+      "case": "diagnostic-mutable-then-shared-borrow",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 89
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 89
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-mutable-then-shared-borrow/main.rs:1:89: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
+      }
+    },
+    {
+      "case": "shared-borrows-may-overlap",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "rust-syntax-async-lifetimes-macros",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "derive-clone-debug-equality",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-trait-dispatch",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-push-and-iteration",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-u64-growth-index-and-iteration",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-i32-local-index",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-u64-index-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-inside-arithmetic-and-call",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-call-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-selected-if-branches",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-selected-if-branch-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-explicit-return",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-explicit-return-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-mutable-assignment",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-index-in-mutable-assignment-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "builtin-env-macro",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "panic-runtime",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-feature-selection-no-default",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-feature-selection-all",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-check-feature-selection",
+      "kind": "cargo-check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "Cargo check acceptance matches",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-build-script-cfg",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "rustc-host-links-quill-rust-abi-object",
+      "kind": "abi-link",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "object interop matches",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "rustc-extern-quill-library-artifact",
+      "kind": "extern-artifact",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "extern artifact behavior matches",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "signed-i32-arithmetic-and-branching",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "loop-break-and-continue",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "two-scalar-tuple-return-and-fields",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-integer-slice-iteration",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-integer-slice-runtime-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-integer-slice-runtime-index-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-i32-slice-runtime-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-mut-slice-runtime-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-mut-slice-runtime-index-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-index-in-while-condition",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-index-while-condition-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-index-in-if-condition",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-index-if-condition-out-of-bounds",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-if-short-circuit-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-if-short-circuit-index-panics-when-reached",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-if-expression-short-circuit-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-if-expression-short-circuit-index-panics-when-reached",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-slice-while-short-circuit-index-guard",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "result-status-check",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-string-growth-and-index",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-string-second-element-index",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "btreemap-string-insert-and-get",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-asref-string",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-repetition-expansion",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-semicolon-repetition",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-zero-or-more-repetition",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2015-async-identifier",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-function-syntax",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-identifier-rejected",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2021-format-capture",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2015-await-and-dyn-identifiers",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2021-gen-identifier",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-gen-identifier-rejected",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-gen-raw-identifier",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-unsafe-extern-required",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-unsafe-extern-accepted",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-unsafe-attribute-required",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-if-let-chain",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "builtin-stringify-macro",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-future-async-parse",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-reborrow-conflicts-with-origin",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0499",
+        "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 94
+        },
+        "quill_code": "E0499",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 94
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-reborrow-conflicts-with-origin/main.rs:1:94: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+      }
+    },
+    {
+      "case": "shared-reborrow-ends-before-parent-reuse",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-assign-while-shared-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0506",
+        "rustc_message": "cannot assign to `value` because it is borrowed",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_code": "E0506",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-assign-while-shared-borrowed/main.rs:4:5: error[E0506]: cannot assign to `value` because it is borrowed"
+      }
+    },
+    {
+      "case": "diagnostic-read-while-mutably-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0503",
+        "rustc_message": "cannot use `value` because it was mutably borrowed",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 20
+        },
+        "quill_code": "E0503",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 20
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-read-while-mutably-borrowed/main.rs:4:20: error[E0503]: cannot use `value` because it was mutably borrowed"
+      }
+    },
+    {
+      "case": "assignment-after-mutable-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-move-while-shared-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0505",
+        "rustc_message": "cannot move out of `value` because it is borrowed",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 17
+        },
+        "quill_code": "E0505",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 17
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-move-while-shared-borrowed/main.rs:4:17: error[E0505]: cannot move out of `value` because it is borrowed"
+      }
+    },
+    {
+      "case": "move-after-shared-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-move-into-call-while-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0505",
+        "rustc_message": "cannot move out of `value` because it is borrowed",
+        "rustc_primary_span": {
+          "line": 5,
+          "column": 13
+        },
+        "quill_code": "E0505",
+        "quill_primary_location": {
+          "line": 5,
+          "column": 13
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-move-into-call-while-borrowed/main.rs:5:13: error[E0505]: cannot move out of `value` because it is borrowed"
+      }
+    },
+    {
+      "case": "move-into-call-after-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-mutate-vec-while-shared-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `values` as mutable because it is also borrowed as immutable",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-mutate-vec-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `values` as mutable because it is also borrowed as immutable"
+      }
+    },
+    {
+      "case": "diagnostic-read-method-while-mutably-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 18
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 18
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-read-method-while-mutably-borrowed/main.rs:4:18: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
+      }
+    },
+    {
+      "case": "diagnostic-mut-method-while-shared-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 5
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-mut-method-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+      }
+    },
+    {
+      "case": "mut-method-after-shared-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-move-parameter-into-call-while-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0505",
+        "rustc_message": "cannot move out of `value` because it is borrowed",
+        "rustc_primary_span": {
+          "line": 4,
+          "column": 13
+        },
+        "quill_code": "E0505",
+        "quill_primary_location": {
+          "line": 4,
+          "column": 13
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-move-parameter-into-call-while-borrowed/main.rs:4:13: error[E0505]: cannot move out of `value` because it is borrowed"
+      }
+    },
+    {
+      "case": "diagnostic-mut-method-on-parameter-while-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0502",
+        "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+        "rustc_primary_span": {
+          "line": 3,
+          "column": 5
+        },
+        "quill_code": "E0502",
+        "quill_primary_location": {
+          "line": 3,
+          "column": 5
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-mut-method-on-parameter-while-borrowed/main.rs:3:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+      }
+    },
+    {
+      "case": "mut-method-on-parameter-after-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-move-in-nested-block-while-borrowed",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0505",
+        "rustc_message": "cannot move out of `value` because it is borrowed",
+        "rustc_primary_span": {
+          "line": 5,
+          "column": 17
+        },
+        "quill_code": "E0505",
+        "quill_primary_location": {
+          "line": 5,
+          "column": 17
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-dpc0p5pn/diagnostic-move-in-nested-block-while-borrowed/main.rs:5:17: error[E0505]: cannot move out of `value` because it is borrowed"
+      }
+    },
+    {
+      "case": "move-in-nested-block-after-borrow-last-use",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    }
+  ],
+  "feature_coverage": [
+    {
+      "id": "associated-types-and-constants",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "async-await-and-futures",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "attributes-and-lints",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "auto-traits-and-coherence",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "borrow-checking-and-lifetimes",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 30,
+      "passed": 30,
+      "failed": []
+    },
+    {
+      "id": "built-in-macros",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "cargo-artifacts-and-rust-abi",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "cargo-build-configuration",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-build-script-protocol",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-dependency-resolution",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-target-kinds",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-test-and-doctest",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "closures-and-capture",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "collections-beyond-vec-map",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "collections-complete-api",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "const-generics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "const-items-and-evaluation",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "control-flow",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 18,
+      "passed": 18,
+      "failed": []
+    },
+    {
+      "id": "core-and-alloc",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cross-compilation",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "derive-implementations",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "destructuring-patterns",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "diagnostics-parity",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 20,
+      "passed": 20,
+      "failed": []
+    },
+    {
+      "id": "drop-and-unwinding",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "edition-semantics",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "enums-and-match",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "external-dependencies-and-build-scripts",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "features-and-cfg",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 4,
+      "passed": 4,
+      "failed": []
+    },
+    {
+      "id": "floating-point-semantics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "foreign-items-and-ffi",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "function-types-and-abi",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "functions-and-scalar-arithmetic",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 16,
+      "passed": 16,
+      "failed": []
+    },
+    {
+      "id": "general-macro-expansion",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 5,
+      "passed": 5,
+      "failed": []
+    },
+    {
+      "id": "generators-and-coroutines",
+      "tracker_status": "unassessed",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "generics",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 3,
+      "passed": 3,
+      "failed": []
+    },
+    {
+      "id": "if-let",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "impl-trait-and-projections",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "inline-assembly",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "io-filesystem-process",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "iterators-and-traits",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "let-else-and-pattern-conditions",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "lifetimes-and-higher-ranked-bounds",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "linux-x86-64-executables",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 73,
+      "passed": 73,
+      "failed": []
+    },
+    {
+      "id": "macro-rules-expansion",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "modules-and-imports",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "multiple-binary-targets",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "networking-and-time",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "no-std-and-custom-runtime",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "operators-casts-and-overflow",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "option--result--and",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "owned-strings",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 4,
+      "passed": 4,
+      "failed": []
+    },
+    {
+      "id": "primitive-types-and-literals",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "println--and-format",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 30,
+      "passed": 30,
+      "failed": []
+    },
+    {
+      "id": "procedural-macros",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "references-and-raw-pointers",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rust-library-artifacts",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rust-source-parsing",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 13,
+      "passed": 13,
+      "failed": []
+    },
+    {
+      "id": "rustc-diagnostics-and-lints",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rustdoc-and-documentation-tests",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "single-binary-with-workspace-libraries",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "standard-library--drop--and-panic",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 14,
+      "passed": 14,
+      "failed": []
+    },
+    {
+      "id": "static-items-and-mutability",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "structs-and-inherent-methods",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "targets-beyond-linux-x86-64",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "threads-sync-and-atomics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "trait-implementations-and-method-resolution",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "trait-objects-and-dynamic-dispatch",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "trait-solving",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "tuples--arrays--and-slices",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 21,
+      "passed": 21,
+      "failed": []
+    },
+    {
+      "id": "type-checking",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "unions-and-layout",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "unsafe-rust",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "utf-8-string-literal-helper-calls",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "vec-and-btreemap",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 15,
+      "passed": 15,
+      "failed": []
+    },
+    {
+      "id": "windows-msvc-and-gnu",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "windows-output",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    }
+  ]
+}

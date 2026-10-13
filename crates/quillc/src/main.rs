@@ -3,13 +3,15 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 type ImportAliasMap = HashMap<String, HashMap<String, String>>;
 type CallResolutionCache = HashMap<(String, String), Option<String>>;
 static BUILD_SCRIPT_ID: AtomicU64 = AtomicU64::new(0);
+static LIBRARY_RLIB_ID: AtomicU64 = AtomicU64::new(0);
+const RUST_TOOLCHAIN_TOML: &str = include_str!("../../../rust-toolchain.toml");
 
 struct HasherWriter<'a>(&'a mut blake3::Hasher);
 
@@ -95,6 +97,7 @@ fn main() -> ExitCode {
         Some("check-subset") => check_subset_files(args.collect()),
         Some("build-subset") => build_subset_command(args.collect()),
         Some("build-lib-object") => build_library_object_command(args.collect()),
+        Some("build-lib-rlib") => build_library_rlib_command(args.collect()),
         Some("cargo-build-subset") => cargo_build_subset_command(args.collect()),
         Some("cargo-plan") => cargo_plan_command(args.collect()),
         Some("cargo-parse") => cargo_parse_command(args.collect()),
@@ -112,7 +115,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: quillc lsp | quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program> | quillc --version"
+                "usage: quillc lsp | quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc build-lib-rlib <lib.rs> --crate-name <name> -o <lib.rlib> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program> | quillc --version"
             );
             ExitCode::from(2)
         }
@@ -706,6 +709,323 @@ fn build_library_object_command(arguments: Vec<String>) -> ExitCode {
             eprintln!("quillc: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+fn build_library_rlib_command(arguments: Vec<String>) -> ExitCode {
+    if arguments.len() != 5 || arguments[1] != "--crate-name" || arguments[3] != "-o" {
+        eprintln!("usage: quillc build-lib-rlib <lib.rs> --crate-name <name> -o <lib.rlib>");
+        return ExitCode::from(2);
+    }
+    match compile_library_rlib(&arguments[0], &arguments[2], &arguments[4]) {
+        Ok(()) => {
+            println!("built {}", arguments[4]);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("quillc: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn compile_library_rlib(
+    source_path: &str,
+    crate_name: &str,
+    output_path: &str,
+) -> Result<(), String> {
+    if !valid_crate_name(crate_name) {
+        return Err(format!("invalid Rust crate name `{crate_name}`"));
+    }
+    if cfg!(not(all(target_arch = "x86_64", target_os = "linux"))) {
+        return Err("rustc-compatible Quill rlibs are currently supported on Linux x86-64".into());
+    }
+    let source = quill_source::SourceFile::load(source_path)
+        .map_err(|error| format!("could not read library source `{source_path}`: {error}"))?;
+    let parsed = quill_syntax::parse(&source);
+    if parsed.had_error {
+        return Err(parsed
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let (line, column) = source.line_column(diagnostic.span.start);
+                format!(
+                    "{}:{line}:{column}: {}",
+                    source.path().display(),
+                    diagnostic.message
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"));
+    }
+    let parsed_source = ParsedSource {
+        source: source.clone(),
+        module_path: Vec::new(),
+        parse: parsed,
+        owner: None,
+    };
+    if parsed_source.parse.unsupported_item_count != 0
+        || !parsed_source.parse.modules.is_empty()
+        || !parsed_source.parse.imports.is_empty()
+    {
+        return Err("rlib export currently supports top-level functions only".into());
+    }
+    let diagnostics = quill_typeck::check_functions_strict_with_structs(
+        &parsed_source.parse.functions,
+        &typeck_struct_signatures(&parsed_source),
+    );
+    if !diagnostics.is_empty() {
+        return Err(diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let (line, column) = source.line_column(diagnostic.span.start);
+                format!(
+                    "{}:{line}:{column}: {}",
+                    source.path().display(),
+                    diagnostic.message
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"));
+    }
+
+    let mut wrappers = Vec::new();
+    for function in parsed_source
+        .parse
+        .functions
+        .iter()
+        .filter(|function| function.is_public)
+    {
+        if !function.scope.is_empty()
+            || function.is_generic
+            || function.is_async
+            || function.is_const
+            || function.is_unsafe
+            || function.has_abi
+            || function.body.is_none()
+        {
+            return Err(format!(
+                "cannot emit a rustc rlib wrapper for `{}`: only safe, synchronous, non-generic top-level functions are supported",
+                function.name
+            ));
+        }
+        for parameter in &function.parameters {
+            if !rlib_scalar_type(&parameter.type_text) {
+                return Err(format!(
+                    "cannot emit a rustc rlib wrapper for `{}`: parameter type `{}` is outside the scalar ABI subset",
+                    function.name, parameter.type_text
+                ));
+            }
+        }
+        let return_type = function.return_type.as_deref().unwrap_or("()").trim();
+        if return_type != "()" && !rlib_scalar_type(return_type) {
+            return Err(format!(
+                "cannot emit a rustc rlib wrapper for `{}`: return type `{return_type}` is outside the scalar ABI subset",
+                function.name
+            ));
+        }
+        wrappers.push(function);
+    }
+    if wrappers.is_empty() {
+        return Err("library has no public function to export".into());
+    }
+
+    let object = quill_codegen::emit_subset_library_object(&parsed_source.parse)
+        .map_err(|error| error.to_string())?;
+    let output = PathBuf::from(output_path);
+    let requested_name = output
+        .file_name()
+        .ok_or_else(|| format!("invalid rlib output path `{output_path}`"))?;
+    let output_parent = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(output_parent)
+        .map_err(|error| format!("could not create rlib output directory: {error}"))?;
+    let parent = output_parent
+        .canonicalize()
+        .map_err(|error| format!("could not resolve rlib output directory: {error}"))?;
+    let id = LIBRARY_RLIB_ID.fetch_add(1, Ordering::Relaxed);
+    let staging = parent.join(format!(".quill-rlib-{}-{id}", std::process::id()));
+    std::fs::create_dir(&staging)
+        .map_err(|error| format!("could not create rlib staging directory: {error}"))?;
+    let _staging = LibraryRlibStaging(staging.clone());
+
+    let object_path = staging.join("quill-native.o");
+    std::fs::write(&object_path, object.as_slice())
+        .map_err(|error| format!("could not write Quill object: {error}"))?;
+
+    let wrapper_path = staging.join("wrapper.rs");
+    let internal_module = format!("__quill_native_{}", &blake3::hash(&object).to_hex()[..16]);
+    let wrapper = render_rlib_wrapper(crate_name, &internal_module, &wrappers)?;
+    std::fs::write(&wrapper_path, wrapper)
+        .map_err(|error| format!("could not write rlib wrapper: {error}"))?;
+    let toolchain = std::env::var("QUILL_RUSTC_TOOLCHAIN")
+        .unwrap_or_else(|_| pinned_rustc_toolchain().to_owned());
+    let rustc = Command::new("rustc")
+        .arg(format!("+{toolchain}"))
+        .arg("--edition=2024")
+        .arg("--crate-name")
+        .arg(crate_name)
+        .arg("--crate-type=rlib")
+        .arg("--out-dir")
+        .arg(&staging)
+        .arg(&wrapper_path)
+        .current_dir(&parent)
+        .output()
+        .map_err(|error| format!("could not start pinned `rustc` for rlib metadata: {error}"))?;
+    if !rustc.status.success() {
+        return Err(format!(
+            "rustc could not emit the rlib metadata wrapper: {}{}",
+            String::from_utf8_lossy(&rustc.stderr),
+            String::from_utf8_lossy(&rustc.stdout)
+        ));
+    }
+    let staged_rlib = staging.join(format!("lib{crate_name}.rlib"));
+    if !staged_rlib.is_file() {
+        return Err("rustc succeeded but did not produce the expected rlib".into());
+    }
+    let append_object = Command::new("ar")
+        .arg("q")
+        .arg(&staged_rlib)
+        .arg(&object_path)
+        .output()
+        .map_err(|error| format!("could not start `ar` to add Quill object to rlib: {error}"))?;
+    if !append_object.status.success() {
+        return Err(format!(
+            "`ar` could not add Quill object to rlib: {}",
+            String::from_utf8_lossy(&append_object.stderr).trim()
+        ));
+    }
+    let index_archive = Command::new("ar")
+        .arg("s")
+        .arg(&staged_rlib)
+        .output()
+        .map_err(|error| format!("could not start `ar` to index Quill rlib: {error}"))?;
+    if !index_archive.status.success() {
+        return Err(format!(
+            "`ar` could not index Quill rlib: {}",
+            String::from_utf8_lossy(&index_archive.stderr).trim()
+        ));
+    }
+    let final_output = parent.join(requested_name);
+    std::fs::copy(&staged_rlib, &final_output).map_err(|error| {
+        format!(
+            "could not install rlib `{}`: {error}",
+            final_output.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn render_rlib_wrapper(
+    crate_name: &str,
+    internal_module: &str,
+    functions: &[&quill_syntax::FunctionItem],
+) -> Result<String, String> {
+    let mut source = format!("mod {internal_module} {{\nunsafe extern \"C\" {{\n");
+    for (index, function) in functions.iter().enumerate() {
+        let symbol = quill_codegen::quill_export_symbol(&function.name);
+        let parameters = function
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(parameter_index, parameter)| {
+                format!("__quill_arg_{parameter_index}: {}", parameter.type_text)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let return_type = function.return_type.as_deref().unwrap_or("()").trim();
+        let result = if return_type == "()" {
+            String::new()
+        } else {
+            format!(" -> {return_type}")
+        };
+        source.push_str(&format!(
+            "    #[link_name = {symbol:?}]\n    pub(super) fn __quill_native_{index}({parameters}){result};\n"
+        ));
+    }
+    source.push_str("}\n}\n");
+    for (index, function) in functions.iter().enumerate() {
+        let public_name = rust_export_identifier(&function.name)?;
+        let parameters = function
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(parameter_index, parameter)| {
+                format!("__quill_arg_{parameter_index}: {}", parameter.type_text)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let arguments = function
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(parameter_index, _)| format!("__quill_arg_{parameter_index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let return_type = function.return_type.as_deref().unwrap_or("()").trim();
+        let result = if return_type == "()" {
+            String::new()
+        } else {
+            format!(" -> {return_type}")
+        };
+        source.push_str(&format!(
+            "pub fn {public_name}({parameters}){result} {{ unsafe {{ {internal_module}::__quill_native_{index}({arguments}) }} }}\n"
+        ));
+    }
+    if crate_name.contains('-') {
+        return Err(
+            "Rust crate names passed to `build-lib-rlib` must use underscores, not hyphens".into(),
+        );
+    }
+    Ok(source)
+}
+
+fn valid_crate_name(crate_name: &str) -> bool {
+    let mut bytes = crate_name.bytes();
+    bytes
+        .next()
+        .is_some_and(|byte| byte == b'_' || byte.is_ascii_alphabetic())
+        && bytes.all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+}
+
+fn rlib_scalar_type(type_text: &str) -> bool {
+    matches!(type_text.trim(), "i32" | "u64" | "usize")
+}
+
+fn rust_export_identifier(name: &str) -> Result<String, String> {
+    const KEYWORDS: &[&str] = &[
+        "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
+        "extern", "false", "fn", "for", "gen", "if", "impl", "in", "let", "loop", "match", "mod",
+        "move", "mut", "pub", "ref", "return", "static", "struct", "trait", "true", "type",
+        "unsafe", "use", "where", "while",
+    ];
+    if matches!(name, "self" | "Self" | "super" | "crate") {
+        return Err(format!("cannot export special Rust identifier `{name}`"));
+    }
+    if KEYWORDS.contains(&name) {
+        Ok(format!("r#{name}"))
+    } else {
+        Ok(name.to_owned())
+    }
+}
+
+fn pinned_rustc_toolchain() -> &'static str {
+    RUST_TOOLCHAIN_TOML
+        .lines()
+        .find_map(|line| {
+            let value = line.trim().strip_prefix("channel = \"")?;
+            value.strip_suffix('\"')
+        })
+        .unwrap_or("stable")
+}
+
+struct LibraryRlibStaging(PathBuf);
+
+impl Drop for LibraryRlibStaging {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -3812,7 +4132,7 @@ fn function_call_targets(functions: &[quill_syntax::FunctionItem]) -> HashSet<St
             | BodyExprKind::Not(expression)
             | BodyExprKind::Try(expression)
             | BodyExprKind::Parenthesized(expression) => walk!(expression),
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 walk!(base);
                 walk!(index);
             }

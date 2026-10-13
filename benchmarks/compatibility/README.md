@@ -45,6 +45,7 @@ and feature IDs.
 | --- | --- |
 | `run`, `cargo-run` | Compile with both compilers; compare executable exit status, stdout, and stderr. Cargo cases may list multiple `binaries`, all of which are compared. |
 | `parse` | Syntax acceptance. |
+| `check` | Compiler type-check acceptance without requiring code generation. |
 | `syntax-reject` | Both compilers reject the source. |
 | `diagnostic` | Expected rustc error code, primary message, and primary source location. |
 
@@ -68,6 +69,213 @@ version but ran outside the repository without explicitly pinning the toolchain.
 Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
+
+The [nested-scope borrow run](results/2026-10-13-nested-scope-borrow-clean.json)
+passes 120/120 curated cases at clean revision `d0b111c`. It catches E0499
+when an inner mutable borrow overlaps a still-live outer mutable borrow,
+accepts the inner borrow after the outer reference's last use, and does not
+extend a borrow through a shadowing local. Quill matches rustc's checked
+diagnostic code, message, and primary location. This 100% corpus result does
+not establish overall Rust compatibility.
+
+The [nested-borrow run](results/2026-10-13-nested-borrow-clean.json) passes
+116/116 curated cases at clean revision `4d4140e`. It catches E0505 when a
+borrowed function parameter is moved into a call inside a nested block and
+accepts the move when the borrow's last use precedes that block. Quill matches
+rustc's checked diagnostic code, message, and primary location. This 100%
+corpus result does not establish overall Rust compatibility.
+
+The [parameter-borrow run](results/2026-10-13-parameter-borrow-clean.json)
+passes 114/114 curated cases at clean revision `71059d2`. Borrow checking now
+uses function parameter types, catching E0505 when a borrowed non-`Copy`
+parameter is moved into a call and E0502 when a live shared borrow conflicts
+with a mutable method call. It accepts those operations after the borrow's last
+use. This 100% corpus result does not establish overall Rust compatibility.
+
+The [method-borrow run](results/2026-10-13-method-borrow-clean.json) passes
+111/111 curated cases at clean revision `62a806e`. It catches E0502 when a
+shared or mutable borrow conflicts with supported String and Vec method
+receivers, and accepts mutation after a shared borrow's last use. Quill matches
+rustc's checked diagnostic codes, messages, and primary locations. This 100%
+corpus result does not establish overall Rust compatibility.
+
+The [call-move run](results/2026-10-13-call-move-clean.json) passes 107/107
+curated cases at clean revision `0b32025`. It detects E0505 when a non-`Copy`
+local is moved into a function call while a borrow remains live, and accepts
+the call after the borrow's last use. Quill matches rustc's checked diagnostic
+code, message, and primary location. This 100% corpus result does not establish
+overall Rust compatibility.
+
+The [borrowed-move run](results/2026-10-13-borrowed-move-clean.json) passes
+105/105 curated cases at clean revision `8985c9f`. It detects E0505 when moving
+a non-`Copy` local with a live shared borrow and accepts the move after that
+borrow's last use. Quill matches rustc's checked diagnostic code, message, and
+primary location. This 100% corpus result does not establish overall Rust
+compatibility.
+
+The [live-access run](results/2026-10-13-live-access-clean.json) passes
+103/103 curated cases at clean revision `7a0b586`. It catches E0506 for
+assigning through a local while a shared borrow remains live, E0503 for
+reading through a local while a mutable borrow remains live, and accepts the
+assignment after the reference's last use. Quill matches rustc's checked
+diagnostic codes, messages, and primary locations. This 100% corpus result does
+not establish overall Rust compatibility.
+
+The [reborrow run](results/2026-10-13-reborrow-clean.json) passes 100/100
+curated cases at clean revision `741cbf4`. It detects a live shared reborrow
+that conflicts with a new borrow of its origin, matching rustc's E0499 code,
+message, and primary location; it also accepts reuse of the parent reference
+after the reborrow's last use. This 100% corpus result does not establish
+overall Rust compatibility.
+
+The [shared/mutable borrow run](results/2026-10-13-shared-mut-borrow-clean.json)
+passes 98/98 curated cases at clean revision `9a710b9`. It checks E0499 for
+overlapping named mutable references, E0502 for overlapping shared/mutable
+references in both borrow orders, and accepts overlapping shared references.
+Quill matches rustc's checked diagnostic codes, messages, and primary
+locations. This 100% corpus result does not establish overall Rust compatibility.
+
+The [borrow-conflict run](results/2026-10-13-borrow-conflict-clean.json)
+passes 95/95 curated cases at clean revision `a0657a6`. It checks E0499 when
+two named mutable references to the same local are simultaneously live, and
+checks that a second borrow is accepted after the first reference's last use.
+Quill matches rustc's diagnostic code, message, and primary location. This
+100% corpus result does not establish overall Rust compatibility.
+
+The [match-flow run](results/2026-10-13-match-flow-clean.json) passes 93/93
+curated cases at clean revision `c544cb4`. It checks E0382 for moving a
+non-`Copy` match scrutinee through a binding and later arm use, verifies that
+wildcard matches and moves in sibling arms are tracked independently, and
+compares positive semantic acceptance without code generation. This 100%
+corpus result does not establish overall Rust compatibility.
+
+The [match-move run](results/2026-10-13-match-move-clean.json) passes 91/91
+curated cases at clean revision `714f984`. It checks E0382 for a by-value
+match binding used after the match and checks that a wildcard match still
+accepts an already-moved value. The runner's `check` case compares semantic
+acceptance without requiring code generation. This 100% corpus result does not
+establish overall Rust compatibility.
+
+The [move-flow run](results/2026-10-13-move-flow-clean.json) passes 89/89
+curated cases at clean revision `f392c5f`. In addition to the conditional move
+diagnostic, it checks a use after moving a non-`Copy` value in a `while` body;
+Quill matches rustc's E0382 code, message, and primary location. This 100%
+corpus result does not establish overall Rust compatibility.
+
+The [conditional-move run](results/2026-10-13-if-move-clean.json) passes
+88/88 curated cases at clean revision `95b2509`. Its new diagnostic probe
+checks a use after moving a non-`Copy` value through one arm of an `if`
+expression; Quill matches rustc's E0382 code, message, and primary location.
+This 100% corpus result does not establish overall Rust compatibility.
+
+The [if-expression short-circuit run](results/2026-10-13-ifexpr-short-circuit-clean.json)
+passes 87/87 curated cases at clean revision `fc2049f`. It adds value-producing
+`if` initializers whose skipped borrowed-slice index reads stay lazy and whose
+reached out-of-bounds read matches rustc's panic output. This 100% corpus result
+does not establish overall Rust compatibility.
+
+The [slice short-circuit run](results/2026-10-13-slice-short-circuit-clean.json)
+passes 85/85 cases at clean revision `ee8d02d`. It verifies skipped indexed
+operands do not panic under `false &&` or `true ||`, reached operands do panic,
+and a `while` length guard avoids indexing past the slice. This curated pass
+rate is not an overall Rust compatibility percentage.
+
+The [mutable-slice indexing run](results/2026-10-13-mut-slice-index-clean.json)
+passes 82/82 cases at clean revision `fc69255`. It checks runtime indexing
+through `&mut [u64]` and an out-of-bounds access with matching rustc panic
+output. Other mutable-slice operations remain incomplete. This curated pass
+rate is not an overall Rust compatibility percentage.
+
+The [indexed-slice if-condition run](results/2026-10-13-slice-if-index-clean.json)
+passes 80/80 cases at clean revision `8df05ff`. It checks both outcomes of an
+`if` whose condition indexes a borrowed slice, plus a matching runtime
+bounds-panic case. This curated pass rate is not an overall Rust compatibility
+percentage.
+
+The [indexed-slice while-condition run](results/2026-10-13-slice-while-index-clean.json)
+passes 78/78 cases at clean revision `3ed33bb`. Its loop traverses a borrowed
+slice by reevaluating a runtime index on each iteration; a second case runs
+past the slice and matches rustc's bounds panic. This curated pass rate is not
+an overall Rust compatibility percentage.
+
+The [fixed-i32-array runtime-index run](results/2026-10-13-fixed-i32-array-index-clean.json)
+passes 76/76 cases at clean revision `cac1ddc`. It adds in-range and
+out-of-range runtime indexing for immutable `[i32; N]` arrays, matching
+rustc's output and bounds-panic location. Other array element types and
+mutation remain incomplete. This curated pass rate is not an overall Rust
+compatibility percentage.
+
+The [borrowed-slice runtime-index run](results/2026-10-13-borrowed-slice-index-clean.json)
+passes 74/74 cases at clean revision `746950b`. It checks runtime `u64` and
+`i32` indexing through borrowed slices plus an out-of-bounds `u64` access with
+matching panic text and source location. Other slice element layouts and
+indexing contexts remain incomplete. This curated pass rate is not an overall
+Rust compatibility percentage.
+
+The [fixed-array runtime-index run](results/2026-10-13-fixed-array-runtime-index-clean.json)
+passes 71/71 cases at clean revision `39f0b91`. It adds runtime `u64`/`usize`
+subscripts for selected immutable integer arrays and checks both a successful
+lookup and rustc-matching bounds-panic text and location. Other array types,
+mutation, and indexing contexts remain incomplete. This curated pass rate is
+not an overall Rust compatibility percentage.
+
+The [Vec mutable-assignment run](results/2026-10-13-vec-index-assignment-clean.json)
+passes 69/69 cases at clean revision `5ad3860`. It adds in-range and
+out-of-range scalar Vec indexing in mutable assignment expressions; the latter
+matches rustc's bounds-panic output. This curated pass rate is not an overall
+Rust compatibility percentage.
+
+The [Vec explicit-return run](results/2026-10-13-vec-index-returns-clean.json)
+passes 67/67 cases at clean revision `99b3c77`. It adds in-range and
+out-of-range scalar Vec indexing in explicit return expressions; the latter
+matches rustc's bounds-panic output. This is curated regression coverage, not
+an overall Rust compatibility percentage.
+
+The [Vec scalar-index run](results/2026-10-13-vec-u64-index.json) adds
+rustc differential cases for `Vec<u64>` growth beyond its initial capacity,
+`Vec<i32>` and `Vec<u64>` local indexing, and integer iteration. Quill passes
+these behaviors for an in-range index used to initialize a local; the report
+does not cover bounds panics or other indexing forms. The full pinned corpus
+passes 60/60 cases (100.0%) at its recorded source revision. This is regression
+coverage, not an overall Rust compatibility percentage.
+
+The [Vec bounds-panic run](results/2026-10-13-vec-index-bounds-clean.json)
+adds an out-of-range `Vec<u64>` access and matches rustc's exit status, stderr,
+panic location, index, and length. It tests the supported local-initializer
+indexing path; general `Index` compatibility remains incomplete. The combined
+pinned corpus passes 61/61 cases (100.0%) at the report's recorded source
+revision; this remains regression coverage rather than an overall compatibility
+percentage.
+
+The [Vec expression-index run](results/2026-10-13-vec-index-expressions-clean.json)
+adds indexing inside binary arithmetic and function arguments, including an
+out-of-range index nested in a call. It checks both successful values and the
+same bounds-panic output. The combined pinned corpus passes 63/63 cases
+(100.0%) at its recorded source revision; general indexing contexts remain
+incomplete.
+
+The [Vec if-branch run](results/2026-10-13-vec-index-if-branches-clean.json)
+adds scalar indexing inside selected conditional-expression branches. It
+checks that an unchosen out-of-range branch does not panic and that a chosen
+out-of-range branch matches rustc's panic output. The combined pinned corpus
+passes 65/65 cases (100.0%) at its recorded source revision; this remains
+curated regression evidence rather than an overall compatibility percentage.
+
+The [self-contained rlib interoperability run](results/2026-10-13-rlib-extern-clean.json)
+passes all 58/58 curated cases at clean revision `e3f5db6`. Its artifact case
+builds a Quill object, packages it with rustc-generated metadata, and verifies
+that pinned rustc accepts the `.rlib` through `--extern` and produces matching
+runtime output for `i32`, `u64`, and `usize` public functions. The rlib path is
+limited to safe, synchronous, non-generic, top-level scalar signatures on Linux
+x86-64. This 100% corpus result does not establish overall Rust compatibility.
+
+The [C string literal stringify run](results/2026-10-13-stringify-c-literals-clean.json)
+passes 57/58 cases (98.3%) at clean revision `10d029e`. The runtime
+`stringify!` comparison now includes a C string literal and matches rustc;
+source spans preserve token spelling without re-lexing literal forms. The one
+remaining failure is rustc rejecting Quill's `.o` library artifact through
+`--extern`. This corpus result is a regression measurement, not an overall
+compatibility percentage.
 
 The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
 at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and

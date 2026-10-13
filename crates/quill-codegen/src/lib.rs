@@ -386,6 +386,8 @@ enum Statement {
 enum PrintPart {
     Text(String),
     Panic(String),
+    PanicText(String),
+    PanicDecimal(Value),
     Slice(Value),
     Decimal(Value),
     Hex16(Value),
@@ -777,6 +779,7 @@ fn emit_subset_object(
     let mut static_arrays = HashMap::new();
     collect_static_arrays(&exit_value, &mut static_arrays);
     let mut needs_decimal = has_print_kind(&exit_value, PrintKind::Decimal);
+    let mut needs_panic_decimal = has_print_kind(&exit_value, PrintKind::PanicDecimal);
     let mut needs_hex16 = has_print_kind(&exit_value, PrintKind::Hex16);
     let mut needs_format_decimal = contains_format_decimal(&exit_value);
     let mut needs_utf8_chars = value_uses_character_iteration(&exit_value);
@@ -785,6 +788,7 @@ fn emit_subset_object(
         collect_value_text(value, &mut print_text);
         collect_static_arrays(value, &mut static_arrays);
         needs_decimal |= has_print_kind(value, PrintKind::Decimal);
+        needs_panic_decimal |= has_print_kind(value, PrintKind::PanicDecimal);
         needs_hex16 |= has_print_kind(value, PrintKind::Hex16);
         needs_format_decimal |= contains_format_decimal(value);
         needs_utf8_chars |= value_uses_character_iteration(value);
@@ -792,6 +796,10 @@ fn emit_subset_object(
     if needs_decimal {
         let symbol = add_internal_function_symbol(&mut object, "__quill_print_decimal");
         helper_symbols.insert("__quill_print_decimal".to_owned(), symbol);
+    }
+    if needs_panic_decimal {
+        let symbol = add_internal_function_symbol(&mut object, "__quill_print_decimal_stderr");
+        helper_symbols.insert("__quill_print_decimal_stderr".to_owned(), symbol);
     }
     if needs_hex16 {
         let symbol = add_internal_function_symbol(&mut object, "__quill_print_hex16");
@@ -927,7 +935,12 @@ fn emit_subset_object(
 
     if needs_decimal {
         let symbol = helper_symbols["__quill_print_decimal"];
-        let code = print_decimal_helper();
+        let code = print_decimal_helper(1);
+        object.add_symbol_data(symbol, text, &code, 1);
+    }
+    if needs_panic_decimal {
+        let symbol = helper_symbols["__quill_print_decimal_stderr"];
+        let code = print_decimal_helper(2);
         object.add_symbol_data(symbol, text, &code, 1);
     }
     if needs_hex16 {
@@ -1090,7 +1103,7 @@ fn validate_struct_expr(
         | BodyExprKind::Cast {
             expression: base, ..
         } => validate_struct_expr(base, structs, functions)?,
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             validate_struct_expr(base, structs, functions)?;
             validate_struct_expr(index, structs, functions)?;
         }
@@ -1379,7 +1392,7 @@ fn validate_call_targets(
             }
         }
         BodyExprKind::FieldAccess { base, .. } => validate_call_targets(base, functions)?,
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             validate_call_targets(base, functions)?;
             validate_call_targets(index, functions)?;
         }
@@ -1722,7 +1735,7 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
             | BodyExprKind::Not(base)
             | BodyExprKind::Parenthesized(base)
             | BodyExprKind::Try(base) => visit(base, substitutions),
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 visit(base, substitutions);
                 visit(index, substitutions);
             }
@@ -2073,8 +2086,9 @@ fn collect_generic_statement(statement: &Statement, output: &mut BTreeSet<String
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => collect_generic_instances(value, output),
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => collect_generic_instances(value, output),
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -2470,29 +2484,50 @@ fn aggregate_field_width(type_text: &str) -> Option<usize> {
 
 fn is_slice_type(type_text: &str) -> bool {
     let type_text = type_text.trim();
-    (type_text.starts_with("&[") && type_text.ends_with(']'))
+    slice_element_type(type_text).is_some()
         || matches!(type_text, "&str" | "String")
         || type_text.starts_with("impl Into<String>")
 }
 
-fn slice_element_widths(type_text: &str) -> Vec<usize> {
+fn slice_element_type(type_text: &str) -> Option<&str> {
     let type_text = type_text.trim();
-    let element = type_text
-        .strip_prefix("&[")
+    type_text
+        .strip_prefix("&mut [")
+        .or_else(|| type_text.strip_prefix("&["))
         .and_then(|inner| inner.strip_suffix(']'))
-        .unwrap_or("");
+        .map(str::trim)
+}
+
+fn slice_element_widths(type_text: &str) -> Vec<usize> {
+    let element = slice_element_type(type_text).unwrap_or("");
     if let Some([first, second]) = pair_type_fields(element) {
         return [first, second].into_iter().map(slice_field_width).collect();
     }
     vec![slice_field_width(element)]
 }
 
+fn scalar_slice_layout(value: &Value) -> Option<(usize, usize, usize)> {
+    let (pointer_slot, length_slot, element_widths) = match value {
+        Value::SliceParameter {
+            pointer_slot,
+            length_slot,
+            element_widths,
+        }
+        | Value::SliceLocal {
+            pointer_slot,
+            length_slot,
+            element_widths,
+        } => (*pointer_slot, *length_slot, element_widths),
+        _ => return None,
+    };
+    let [element_width @ (4 | 8)] = element_widths.as_slice() else {
+        return None;
+    };
+    Some((pointer_slot, length_slot, *element_width))
+}
+
 fn slice_record_type(type_text: &str, structs: &[StructItem]) -> Option<String> {
-    let element_type = type_text
-        .trim()
-        .strip_prefix("&[")?
-        .strip_suffix(']')?
-        .trim();
+    let element_type = slice_element_type(type_text)?;
     find_struct_type(element_type, structs).map(|record| record.name.clone())
 }
 
@@ -2530,6 +2565,22 @@ fn static_array_element_widths(elements: &[Value]) -> Vec<usize> {
     match first {
         Value::Tuple(fields) => fields.iter().map(static_array_field_width).collect(),
         scalar => vec![static_array_field_width(scalar)],
+    }
+}
+
+fn scalar_static_array_width(elements: &[Value]) -> Option<usize> {
+    if elements.is_empty() {
+        return None;
+    }
+    if elements.iter().all(is_word_value) {
+        Some(8)
+    } else if elements
+        .iter()
+        .all(|element| matches!(element, Value::Integer(_)))
+    {
+        Some(4)
+    } else {
+        None
     }
 }
 
@@ -3916,15 +3967,26 @@ fn lower_statements(
                 &mut receiver_temporaries,
                 *next_slot,
             );
-            if !receiver_temporaries.is_empty() {
-                lowered.extend(lower_statements(
-                    &receiver_temporaries,
+            if !name.starts_with("__quill_vec_index_") {
+                materialize_index_reads(
+                    &mut rewritten_initializer,
                     environment,
-                    mutable_names,
-                    next_slot,
-                    functions,
-                    structs,
-                )?);
+                    &mut receiver_temporaries,
+                    *next_slot,
+                    name,
+                );
+            }
+            if !receiver_temporaries.is_empty() || rewritten_initializer != *initializer {
+                if !receiver_temporaries.is_empty() {
+                    lowered.extend(lower_statements(
+                        &receiver_temporaries,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                }
                 let rewritten = BodyStatement::Let {
                     name: Some(name.clone()),
                     type_text: None,
@@ -3951,6 +4013,93 @@ fn lower_statements(
                 initializer: Some(initializer),
                 ..
             } => {
+                if let BodyExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch: Some(else_branch),
+                } = &initializer.kind
+                    && let BodyExprKind::Block {
+                        statements: then_statements,
+                        tail: Some(then_tail),
+                    } = &then_branch.kind
+                    && let BodyExprKind::Block {
+                        statements: else_statements,
+                        tail: Some(else_tail),
+                    } = &else_branch.kind
+                    && (!then_statements.is_empty()
+                        || !else_statements.is_empty()
+                        || has_short_circuit_index_rhs(condition))
+                {
+                    let lower_value_branch =
+                        |statements: &[BodyStatement],
+                         tail: &BodyExpr,
+                         next_slot: &mut usize|
+                         -> Result<(Vec<Statement>, Value), CodegenError> {
+                            let mut branch_environment = environment.clone();
+                            let mut branch_mutable = mutable_names.clone();
+                            let body = lower_statements(
+                                statements,
+                                &mut branch_environment,
+                                &mut branch_mutable,
+                                next_slot,
+                                functions,
+                                structs,
+                            )?;
+                            let mut value =
+                                value_from_expression(tail, &branch_environment, functions)?;
+                            if let Some(type_text) = type_text.as_deref() {
+                                coerce_annotated_integer_values(&mut value, type_text);
+                            }
+                            Ok((body, value))
+                        };
+                    let (mut then_body, then_value) =
+                        lower_value_branch(then_statements, then_tail, next_slot)?;
+                    let (mut else_body, else_value) =
+                        lower_value_branch(else_statements, else_tail, next_slot)?;
+                    if is_word_value(&then_value) != is_word_value(&else_value)
+                        || is_slice_value(&then_value)
+                        || is_slice_value(&else_value)
+                    {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "conditional local initializer requires matching scalar branch values",
+                        ));
+                    }
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    then_body.push(Statement::Assign {
+                        slot,
+                        value: then_value.clone(),
+                    });
+                    else_body.push(Statement::Assign {
+                        slot,
+                        value: else_value.clone(),
+                    });
+                    lowered.extend(lower_condition_if(
+                        condition,
+                        then_body,
+                        else_body,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                    let local_value = if is_word_value(&then_value) {
+                        generic_argument_type(&then_value).map_or(
+                            Value::WordLocal(slot),
+                            |type_name| Value::TypedWordLocal { slot, type_name },
+                        )
+                    } else {
+                        Value::Local(slot)
+                    };
+                    environment.insert(name.clone(), local_value);
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    continue;
+                }
                 if let BodyExprKind::MethodCall {
                     receiver,
                     method,
@@ -4010,7 +4159,7 @@ fn lower_statements(
                 } = &initializer.kind
                     && method == "clone"
                     && arguments.is_empty()
-                    && let BodyExprKind::Index { base, index } = &receiver.kind
+                    && let BodyExprKind::Index { base, index, .. } = &receiver.kind
                     && let BodyExprKind::Path(collection_name) = &base.kind
                     && let Some(Value::CollectionLocal {
                         pointer_slot,
@@ -4149,6 +4298,251 @@ fn lower_statements(
                     }
                     lowered.push(Statement::LetTupleCall {
                         fields: call_fields,
+                        initializer: value,
+                    });
+                    continue;
+                }
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
+                    base_line,
+                    base_column,
+                    ..
+                } = &initializer.kind
+                    && let BodyExprKind::Path(slice_name) = &base.kind
+                    && let Some((pointer_slot, length_slot, element_width)) =
+                        environment.get(slice_name).and_then(scalar_slice_layout)
+                {
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native slice indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{base_line}:{base_column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::WordLocal(length_slot)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::WordLocal(length_slot)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
+                    });
+                    let value = Value::SliceElement {
+                        pointer_slot,
+                        index_slot,
+                        element_size: element_width,
+                        element_offset: 0,
+                        element_stride: element_width,
+                    };
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    environment.insert(
+                        name.clone(),
+                        if element_width == 8 {
+                            Value::WordLocal(slot)
+                        } else {
+                            Value::Local(slot)
+                        },
+                    );
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
+                        initializer: value,
+                    });
+                    continue;
+                }
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
+                    base_line,
+                    base_column,
+                    ..
+                } = &initializer.kind
+                    && let BodyExprKind::Path(array_name) = &base.kind
+                    && let Some(Value::StaticArray(elements)) = environment.get(array_name)
+                    && let Some(element_width) = scalar_static_array_width(elements)
+                {
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native array indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let length = elements.len();
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{base_line}:{base_column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::Word(length as u64)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::Word(length as u64)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
+                    });
+                    let mut selected = elements.last().cloned().ok_or(
+                        CodegenError::UnsupportedProgram("cannot index an empty static array"),
+                    )?;
+                    for (element_index, element) in elements.iter().enumerate().rev().skip(1) {
+                        selected = Value::If {
+                            condition: Condition::Compare {
+                                operator: BinaryOperator::Equal,
+                                left: Box::new(Value::WordLocal(index_slot)),
+                                right: Box::new(Value::Word(element_index as u64)),
+                            },
+                            then_value: Box::new(element.clone()),
+                            else_value: Box::new(selected),
+                        };
+                    }
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    let local_value = if element_width == 8 {
+                        generic_argument_type(&selected).map_or(Value::WordLocal(slot), |type_name| {
+                            Value::TypedWordLocal { slot, type_name }
+                        })
+                    } else {
+                        Value::Local(slot)
+                    };
+                    environment.insert(name.clone(), local_value);
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
+                        initializer: selected,
+                    });
+                    continue;
+                }
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
+                    line,
+                    column,
+                    ..
+                } = &initializer.kind
+                    && let BodyExprKind::Path(collection_name) = &base.kind
+                    && let Some(Value::CollectionLocal {
+                        pointer_slot,
+                        length_slot,
+                        kind: CollectionKind::Vector,
+                        element_type: Some(element_type),
+                        ..
+                    }) = environment.get(collection_name)
+                    && (is_word_type(element_type) || element_type == "i32")
+                {
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native vector indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{line}:{column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::WordLocal(*length_slot)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::WordLocal(*length_slot)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
+                    });
+                    let value = Value::SliceElement {
+                        pointer_slot: *pointer_slot,
+                        index_slot,
+                        element_size: if is_word_type(element_type) { 8 } else { 4 },
+                        element_offset: 0,
+                        element_stride: 8,
+                    };
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    environment.insert(
+                        name.clone(),
+                        if is_word_type(element_type) {
+                            Value::TypedWordLocal {
+                                slot,
+                                type_name: element_type.clone(),
+                            }
+                        } else {
+                            Value::Local(slot)
+                        },
+                    );
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
                         initializer: value,
                     });
                     continue;
@@ -4584,6 +4978,25 @@ fn lower_statements(
                 }
             }
             BodyStatement::Assign { name, value, .. } => {
+                let mut rewritten_value = value.clone();
+                let mut index_temporaries = Vec::new();
+                materialize_index_reads(
+                    &mut rewritten_value,
+                    environment,
+                    &mut index_temporaries,
+                    *next_slot,
+                    name,
+                );
+                if !index_temporaries.is_empty() {
+                    lowered.extend(lower_statements(
+                        &index_temporaries,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                }
                 if let Some((base, field_name)) = name.split_once('.') {
                     let field = match environment.get(base) {
                         Some(Value::StructLocal { fields, .. }) => fields.get(field_name),
@@ -4592,7 +5005,8 @@ fn lower_statements(
                     .ok_or(CodegenError::UnsupportedProgram(
                         "field assignment target must be a supported local struct field",
                     ))?;
-                    let lowered_value = value_from_expression(value, environment, functions)?;
+                    let lowered_value =
+                        value_from_expression(&rewritten_value, environment, functions)?;
                     match field {
                         StructLocalField::IndirectScalar {
                             pointer_slot,
@@ -4629,7 +5043,7 @@ fn lower_statements(
                 }
                 lowered.push(Statement::Assign {
                     slot,
-                    value: value_from_expression(value, environment, functions)?,
+                    value: value_from_expression(&rewritten_value, environment, functions)?,
                 });
             }
             BodyStatement::Expression {
@@ -4652,7 +5066,26 @@ fn lower_statements(
                     continue;
                 }
                 if let BodyExprKind::Return(Some(value)) = &expression.kind {
-                    let value = value_from_expression(value, environment, functions)?;
+                    let mut rewritten_value = (**value).clone();
+                    let mut index_temporaries = Vec::new();
+                    materialize_index_reads(
+                        &mut rewritten_value,
+                        environment,
+                        &mut index_temporaries,
+                        *next_slot,
+                        "__quill_return",
+                    );
+                    if !index_temporaries.is_empty() {
+                        lowered.extend(lower_statements(
+                            &index_temporaries,
+                            environment,
+                            mutable_names,
+                            next_slot,
+                            functions,
+                            structs,
+                        )?);
+                    }
+                    let value = value_from_expression(&rewritten_value, environment, functions)?;
                     if matches!(&value, Value::Tuple(_)) {
                         return Err(CodegenError::UnsupportedProgram(
                             "explicit pair returns are outside the current codegen slice",
@@ -4917,12 +5350,6 @@ fn lower_statements(
                         continue;
                     }
                 };
-                let condition = condition_from_expression_with_structs(
-                    condition,
-                    environment,
-                    functions,
-                    structs,
-                )?;
                 let lower_branch = |branch: &BodyExpr,
                                     next_slot: &mut usize|
                  -> Result<Vec<Statement>, CodegenError> {
@@ -4953,21 +5380,20 @@ fn lower_statements(
                 } else {
                     Vec::new()
                 };
-                lowered.push(Statement::If {
+                lowered.extend(lower_condition_if(
                     condition,
                     then_body,
                     else_body,
-                });
+                    environment,
+                    mutable_names,
+                    next_slot,
+                    functions,
+                    structs,
+                )?);
             }
             BodyStatement::While {
                 condition, body, ..
             } => {
-                let condition = condition_from_expression_with_structs(
-                    condition,
-                    environment,
-                    functions,
-                    structs,
-                )?;
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
                     return Err(CodegenError::UnsupportedProgram(
                         "while body must be a block",
@@ -4988,7 +5414,20 @@ fn lower_statements(
                     functions,
                     structs,
                 )?;
-                lowered.push(Statement::While { condition, body });
+                let body = lower_condition_if(
+                    condition,
+                    body,
+                    vec![Statement::Break],
+                    environment,
+                    mutable_names,
+                    next_slot,
+                    functions,
+                    structs,
+                )?;
+                lowered.push(Statement::While {
+                    condition: Condition::Boolean(true),
+                    body,
+                });
             }
             BodyStatement::Loop { body, .. } => {
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
@@ -5568,6 +6007,215 @@ fn materialize_method_receivers(
         kind: BodyExprKind::Path(name),
         span: receiver.span.clone(),
     };
+}
+
+fn materialize_index_reads(
+    expression: &mut BodyExpr,
+    environment: &HashMap<String, Value>,
+    temporaries: &mut Vec<BodyStatement>,
+    slot_seed: usize,
+    reserved_name: &str,
+) {
+    match &mut expression.kind {
+        BodyExprKind::Index { base, index, .. } => {
+            materialize_index_reads(base, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(index, environment, temporaries, slot_seed, reserved_name);
+            let BodyExprKind::Path(collection_name) = &base.kind else {
+                return;
+            };
+            let supported = match environment.get(collection_name) {
+                Some(Value::CollectionLocal {
+                    kind: CollectionKind::Vector,
+                    element_type: Some(element_type),
+                    ..
+                }) => is_word_type(element_type) || element_type == "i32",
+                Some(Value::StaticArray(elements)) => {
+                    scalar_static_array_width(elements).is_some()
+                }
+                Some(value) => scalar_slice_layout(value).is_some(),
+                None => false,
+            };
+            if !supported {
+                return;
+            }
+            let mut suffix = temporaries.len();
+            let name = loop {
+                let candidate = format!("__quill_vec_index_{slot_seed}_{suffix}");
+                suffix += 1;
+                let used_in_source = candidate == reserved_name
+                    || environment.contains_key(&candidate)
+                    || temporaries.iter().any(|statement| {
+                        matches!(
+                            statement,
+                            BodyStatement::Let {
+                                name: Some(name),
+                                ..
+                            } if name == &candidate
+                        )
+                    });
+                if !used_in_source {
+                    break candidate;
+                }
+            };
+            let initializer = expression.clone();
+            temporaries.push(BodyStatement::Let {
+                name: Some(name.clone()),
+                type_text: None,
+                mutable: false,
+                initializer: Some(initializer),
+                span: expression.span.clone(),
+            });
+            expression.kind = BodyExprKind::Path(name);
+        }
+        BodyExprKind::Binary {
+            operator,
+            left,
+            right,
+        } => {
+            materialize_index_reads(left, environment, temporaries, slot_seed, reserved_name);
+            if !matches!(operator, BinaryOperator::And | BinaryOperator::Or) {
+                materialize_index_reads(
+                    right,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => {
+            for argument in arguments {
+                materialize_index_reads(
+                    argument,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            materialize_index_reads(receiver, environment, temporaries, slot_seed, reserved_name);
+            for argument in arguments {
+                materialize_index_reads(
+                    argument,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::FieldAccess {
+            base: expression, ..
+        } => materialize_index_reads(
+            expression,
+            environment,
+            temporaries,
+            slot_seed,
+            reserved_name,
+        ),
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            materialize_index_reads(
+                condition,
+                environment,
+                temporaries,
+                slot_seed,
+                reserved_name,
+            );
+            materialize_index_reads_in_branch(
+                then_branch,
+                environment,
+                slot_seed,
+                reserved_name,
+            );
+            if let Some(else_branch) = else_branch {
+                materialize_index_reads_in_branch(
+                    else_branch,
+                    environment,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::StructLiteral { fields, .. } => {
+            for (_, value) in fields {
+                materialize_index_reads(value, environment, temporaries, slot_seed, reserved_name);
+            }
+        }
+        BodyExprKind::Match { scrutinee, .. } => {
+            materialize_index_reads(
+                scrutinee,
+                environment,
+                temporaries,
+                slot_seed,
+                reserved_name,
+            );
+        }
+        BodyExprKind::Return(Some(value)) => {
+            materialize_index_reads(value, environment, temporaries, slot_seed, reserved_name);
+        }
+        BodyExprKind::Unit
+        | BodyExprKind::Literal(_)
+        | BodyExprKind::EmptySliceReference
+        | BodyExprKind::MacroInvocation(_)
+        | BodyExprKind::Closure { .. }
+        | BodyExprKind::Path(_)
+        | BodyExprKind::Return(None)
+        | BodyExprKind::Reference { .. }
+        | BodyExprKind::Dereference(_)
+        | BodyExprKind::Block { .. }
+        | BodyExprKind::Unsupported => {}
+    }
+}
+
+fn materialize_index_reads_in_branch(
+    branch: &mut BodyExpr,
+    environment: &HashMap<String, Value>,
+    slot_seed: usize,
+    reserved_name: &str,
+) {
+    if let BodyExprKind::Block {
+        statements,
+        tail: Some(tail),
+    } = &mut branch.kind
+    {
+        let mut temporaries = Vec::new();
+        materialize_index_reads(tail, environment, &mut temporaries, slot_seed, reserved_name);
+        statements.extend(temporaries);
+        return;
+    }
+    let mut temporaries = Vec::new();
+    materialize_index_reads(
+        branch,
+        environment,
+        &mut temporaries,
+        slot_seed,
+        reserved_name,
+    );
+    if !temporaries.is_empty() {
+        let tail = branch.clone();
+        branch.kind = BodyExprKind::Block {
+            statements: temporaries,
+            tail: Some(Box::new(tail)),
+        };
+    }
 }
 
 fn lower_println_parts(
@@ -6317,7 +6965,7 @@ fn value_from_expression(
                 CodegenError::UnsupportedProgram("struct field does not exist"),
             )
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             let array = value_from_expression(base, environment, functions)?;
             let index = value_from_expression(index, environment, functions)?;
             let index = match index {
@@ -6525,13 +7173,8 @@ fn value_from_expression(
                         ..
                     }) = environment.get(name)
                 {
-                    let expected_element = parameter
-                        .type_text
-                        .trim()
-                        .strip_prefix("&[")
-                        .and_then(|inner| inner.strip_suffix(']'))
-                        .unwrap_or("")
-                        .trim();
+                    let expected_element =
+                        slice_element_type(&parameter.type_text).unwrap_or("");
                     let width = scalar_element_width(expected_element);
                     if width != 0 || expected_element == "String" || expected_element == "&str" {
                         args.push(Value::SliceLocal {
@@ -7432,6 +8075,201 @@ fn condition_from_expression_with_structs(
     }
 }
 
+fn lower_condition_if(
+    expression: &BodyExpr,
+    then_body: Vec<Statement>,
+    else_body: Vec<Statement>,
+    environment: &HashMap<String, Value>,
+    mutable_names: &HashSet<String>,
+    next_slot: &mut usize,
+    functions: &[FunctionItem],
+    structs: &[StructItem],
+) -> Result<Vec<Statement>, CodegenError> {
+    match &expression.kind {
+        BodyExprKind::Parenthesized(inner) => lower_condition_if(
+            inner,
+            then_body,
+            else_body,
+            environment,
+            mutable_names,
+            next_slot,
+            functions,
+            structs,
+        ),
+        BodyExprKind::Not(inner) => lower_condition_if(
+            inner,
+            else_body,
+            then_body,
+            environment,
+            mutable_names,
+            next_slot,
+            functions,
+            structs,
+        ),
+        BodyExprKind::Binary {
+            operator: BinaryOperator::And,
+            left,
+            right,
+        } => {
+            let right = lower_condition_if(
+                right,
+                then_body.clone(),
+                else_body.clone(),
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            lower_condition_if(
+                left,
+                right,
+                else_body,
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )
+        }
+        BodyExprKind::Binary {
+            operator: BinaryOperator::Or,
+            left,
+            right,
+        } => {
+            let right = lower_condition_if(
+                right,
+                then_body.clone(),
+                else_body.clone(),
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            lower_condition_if(
+                left,
+                then_body,
+                right,
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )
+        }
+        _ => {
+            let mut rewritten = expression.clone();
+            let mut temporaries = Vec::new();
+            materialize_index_reads(
+                &mut rewritten,
+                environment,
+                &mut temporaries,
+                *next_slot,
+                "__quill_condition",
+            );
+            let mut branch_environment = environment.clone();
+            let mut branch_mutable_names = mutable_names.clone();
+            let mut lowered = lower_statements(
+                &temporaries,
+                &mut branch_environment,
+                &mut branch_mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            let condition = condition_from_expression_with_structs(
+                &rewritten,
+                &branch_environment,
+                functions,
+                structs,
+            )?;
+            lowered.push(Statement::If {
+                condition,
+                then_body,
+                else_body,
+            });
+            Ok(lowered)
+        }
+    }
+}
+
+fn has_short_circuit_index_rhs(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Parenthesized(inner) | BodyExprKind::Not(inner) => {
+            has_short_circuit_index_rhs(inner)
+        }
+        BodyExprKind::Binary {
+            operator: BinaryOperator::And | BinaryOperator::Or,
+            left,
+            right,
+        } => {
+            expression_contains_index(right)
+                || has_short_circuit_index_rhs(left)
+                || has_short_circuit_index_rhs(right)
+        }
+        _ => false,
+    }
+}
+
+fn expression_contains_index(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Index { .. } => true,
+        BodyExprKind::Binary { left, right, .. } => {
+            expression_contains_index(left) || expression_contains_index(right)
+        }
+        BodyExprKind::Call { arguments, .. } | BodyExprKind::Tuple(arguments) => {
+            arguments.iter().any(expression_contains_index)
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            expression_contains_index(receiver)
+                || arguments.iter().any(expression_contains_index)
+        }
+        BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::Reference { expression, .. }
+        | BodyExprKind::Dereference(expression) => expression_contains_index(expression),
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expression_contains_index(condition)
+                || expression_contains_index(then_branch)
+                || else_branch
+                    .as_deref()
+                    .is_some_and(expression_contains_index)
+        }
+        BodyExprKind::Block { statements, tail } => {
+            statements.iter().any(|statement| match statement {
+                BodyStatement::Let {
+                    initializer: Some(initializer),
+                    ..
+                }
+                | BodyStatement::Assign {
+                    value: initializer,
+                    ..
+                }
+                | BodyStatement::Expression {
+                    expression: initializer,
+                    ..
+                } => expression_contains_index(initializer),
+                _ => false,
+            }) || tail
+                .as_deref()
+                .is_some_and(expression_contains_index)
+        }
+        _ => false,
+    }
+}
+
 fn derived_struct_equality_condition(
     left: &BodyExpr,
     right: &BodyExpr,
@@ -7757,10 +8595,11 @@ fn validate_statement_targets_at_depth(
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         validate_value_target(value, functions, items, parameter_count)?;
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
             Ok(())
@@ -9322,6 +10161,30 @@ fn encode_statement_into(
                             0x0f, 0x05, // syscall
                         ]);
                     }
+                    PrintPart::PanicText(text) => {
+                        code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + panic text]
+                        let offset = code.len() as u64;
+                        code.extend_from_slice(&[0; 4]);
+                        relocations.push(PendingRelocation {
+                            offset,
+                            target: text_symbol_name(text),
+                        });
+                        code.extend_from_slice(&[0xbf, 2, 0, 0, 0]); // mov edi, stderr
+                        code.push(0xba); // mov edx, byte length
+                        code.extend_from_slice(&(text.len() as u32).to_le_bytes());
+                        code.extend_from_slice(&[0xb8, 1, 0, 0, 0, 0x0f, 0x05]); // write syscall
+                    }
+                    PrintPart::PanicDecimal(value) => {
+                        append_encoded_value(code, value, in_function, relocations);
+                        code.extend_from_slice(&[0x48, 0x89, 0xc7]); // mov rdi, rax
+                        code.push(0xe8);
+                        let offset = code.len() as u64;
+                        code.extend_from_slice(&[0; 4]);
+                        relocations.push(PendingRelocation {
+                            offset,
+                            target: "__quill_print_decimal_stderr".to_owned(),
+                        });
+                    }
                     PrintPart::Text(text) if !text.is_empty() => {
                         code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + disp32]
                         let offset = code.len() as u64;
@@ -10039,6 +10902,7 @@ fn required_frame_slots(value: &Value, parameter_count: usize) -> usize {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PrintKind {
     Decimal,
+    PanicDecimal,
     Hex16,
 }
 
@@ -10077,7 +10941,7 @@ fn print_parts(value: &Value, visit: &mut impl FnMut(&PrintPart)) {
 
 fn collect_print_text(value: &Value, output: &mut HashSet<String>) {
     print_parts(value, &mut |part| {
-        if let PrintPart::Text(text) | PrintPart::Panic(text) = part {
+        if let PrintPart::Text(text) | PrintPart::Panic(text) | PrintPart::PanicText(text) = part {
             output.insert(text.clone());
         }
     });
@@ -10129,8 +10993,10 @@ fn collect_value_text(value: &Value, output: &mut HashSet<String>) {
                     Statement::Println(parts) => {
                         for part in parts {
                             match part {
-                                PrintPart::Slice(value) => collect_value_text(value, output),
-                                PrintPart::Panic(text) => {
+                                PrintPart::Slice(value) | PrintPart::PanicDecimal(value) => {
+                                    collect_value_text(value, output)
+                                }
+                                PrintPart::Panic(text) | PrintPart::PanicText(text) => {
                                     output.insert(text.clone());
                                 }
                                 _ => {}
@@ -10466,10 +11332,11 @@ fn collect_static_array_statement(statement: &Statement, output: &mut HashMap<St
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         collect_static_arrays(value, output);
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -10569,7 +11436,9 @@ fn has_print_kind(value: &Value, kind: PrintKind) -> bool {
     print_parts(value, &mut |part| {
         found |= matches!(
             (kind, part),
-            (PrintKind::Decimal, PrintPart::Decimal(_)) | (PrintKind::Hex16, PrintPart::Hex16(_))
+            (PrintKind::Decimal, PrintPart::Decimal(_))
+                | (PrintKind::Hex16, PrintPart::Hex16(_))
+                | (PrintKind::PanicDecimal, PrintPart::PanicDecimal(_))
         );
     });
     found
@@ -11302,10 +12171,11 @@ fn visit_statement(statement: &Statement, max_slot: &mut usize) {
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         visit_value(value, max_slot);
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -11489,7 +12359,7 @@ fn visit_condition(condition: &Condition, max_slot: &mut usize) {
     }
 }
 
-fn print_decimal_helper() -> Vec<u8> {
+fn print_decimal_helper(file_descriptor: u8) -> Vec<u8> {
     let mut code = vec![
         0x55, // push rbp
         0x48, 0x89, 0xe5, // mov rbp, rsp
@@ -11513,14 +12383,16 @@ fn print_decimal_helper() -> Vec<u8> {
     let loop_displacement = code.len();
     code.extend_from_slice(&[0; 4]);
     patch_rel32(&mut code, loop_displacement, loop_start);
+    let file_descriptor_offset = code.len() + 6;
     code.extend_from_slice(&[
         0x48, 0xff, 0xc6, // inc rsi
         0x89, 0xca, // mov edx, ecx
-        0xbf, 1, 0, 0, 0, // mov edi, 1
+        0xbf, 1, 0, 0, 0, // mov edi, file descriptor
         0xb8, 1, 0, 0, 0, // mov eax, 1
         0x0f, 0x05, // syscall
         0xc9, 0xc3, // leave; ret
     ]);
+    code[file_descriptor_offset] = file_descriptor;
     code
 }
 
