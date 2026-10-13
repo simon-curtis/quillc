@@ -12,7 +12,7 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 ## Paired build measurements
 
 Five runs were collected on 2026-10-13 from a clean release build at revision
-`aca28b5` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+`13849a3` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
 logical CPUs. Both commands selected the same binary and eight-crate source
 dependency graph. The table reports medians. Cold runs cleared the Rust target
 and Quill parse/type-check/artifact caches, but retained the OS file cache.
@@ -27,19 +27,19 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.666 s | 5.605 s | 568.5 MiB |
-| `quillc cargo-build-subset` | Cold | 0.357 s | 1.964 s | 133.1 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.018837 s | 0.019186 s | 21.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001345 s | 0.001113 s | 21.7 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.405 s | 227.6 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.083 s | 35.7 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.301 s | 0.428 s | 227.7 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.177 s | 57.9 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.681 s | 5.648 s | 567.3 MiB |
+| `quillc cargo-build-subset` | Cold | 0.362 s | 1.956 s | 133.5 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018759 s | 0.019225 s | 21.9 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001290 s | 0.001111 s | 21.9 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.285 s | 0.406 s | 227.4 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.025 s | 0.088 s | 35.7 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.305 s | 0.433 s | 233.5 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.178 s | 51.9 MiB |
 
-Quill's median wall-time ratios were 7.47× cold, 14.01× warm, 10.75× for the
-comment edit, and 3.49× for the semantic edit. Peak RSS was lower in three
-states and equal in the warm state. CPU-time ratios were 2.85× cold, 17.24×
-warm, 4.86× for the comment edit, and 2.42× for the semantic edit. This run
+Quill's median wall-time ratios were 7.41× cold, 14.54× warm, 11.23× for the
+comment edit, and 3.62× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. CPU-time ratios were 2.89× cold, 17.31×
+warm, 4.61× for the comment edit, and 2.43× for the semantic edit. This run
 clears the 3× wall-time gate in all four states on this fixture, but cold and
 semantic CPU-time ratios remain below 3×. These results do not establish
 general Rust compiler performance.
@@ -61,34 +61,20 @@ and the earlier `3f16b03` run is retained in
 
 ## Generated binary runtime
 
-A separate 2026-10-13 run at compiler revision `56eeb4c` timed the resulting
+A separate 2026-10-13 run at compiler revision `13849a3` timed the resulting
 executables: five warmups followed by 25 alternating launches per binary.
 Every invocation produced the same output. Wall time includes process startup.
-The compiler working tree had changes in `Cargo.lock` and the LSP crate; the
-full state is recorded in `results.json`.
 
 | Binary | Median wall time | Range | Median CPU time |
 |---|---:|---:|---:|
-| `rustc` | 1.001 ms | 0.865–1.153 ms | 0.841 ms |
-| Quill | 16.954 ms | 16.592–17.239 ms | 16.742 ms |
+| `rustc` | 1.018 ms | 0.831–1.271 ms | 0.844 ms |
+| Quill | 17.165 ms | 16.662–17.530 ms | 16.964 ms |
 
 For this workload, the Quill binary's median wall time was 16.9× the `rustc`
 binary's. These are debug-profile executables for one small synthetic fixture;
 the measurements include launch overhead and do not establish runtime
-performance for other programs. The raw per-launch samples and compiler state
-are in [results.json](results.json).
-
-The implementation work behind the latest run includes restricting the
-cross-target function index to exports, memoizing repeated call resolution,
-sharing a compile-wide type-check interface digest, parallel package-object
-preparation, and reusing source-derived package objects. On an incremental
-semantic edit, cached package objects now skip type-checking and HIR assembly;
-only exported interfaces and generic bodies are retained for dependent crates.
-A nested body-parallelism trial increased cold RSS without improving wall time
-and was reverted. Moving parsed function bodies into the qualified-function
-index instead of deep-cloning them reduced the semantic-edit median from
-0.103 s to 0.086 s. The raw JSON records the compiler revision, source-dirty
-paths, and binary hash for this clean run.
+performance for other programs. The raw per-launch samples are in
+[results.json](results.json).
 
 ## Scope
 
