@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 use std::time::Instant;
 
 type ImportAliasMap = HashMap<String, HashMap<String, String>>;
@@ -709,6 +709,7 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
     }
     profile_checkpoint("warm Cargo build cache miss", &mut profile_timer);
     let workspace = load_cargo_workspace(manifest)?;
+    let workspace = prepare_build_script_cfg(&workspace, None)?;
     profile_checkpoint("load Cargo workspace", &mut profile_timer);
     let binary_names: Vec<_> = workspace
         .packages
@@ -750,6 +751,7 @@ fn compile_cargo_subset_for_target(
     selected_bin: Option<&str>,
 ) -> Result<(), String> {
     let workspace = load_cargo_workspace(manifest)?;
+    let workspace = prepare_build_script_cfg(&workspace, selected_bin)?;
     compile_cargo_subset_for_target_with_workspace(manifest, output, selected_bin, &workspace)
 }
 
@@ -806,12 +808,9 @@ fn compile_cargo_subset_for_target_with_workspace(
         .filter(|target| target.kinds.iter().any(|kind| kind == "lib"))
         .copied()
         .collect();
-    let has_unsupported_target = package_build_targets.iter().any(|target| {
-        target
-            .kinds
-            .iter()
-            .any(|kind| matches!(kind.as_str(), "proc-macro" | "custom-build"))
-    });
+    let has_unsupported_target = package_build_targets
+        .iter()
+        .any(|target| target.kinds.iter().any(|kind| kind == "proc-macro"));
     if has_unsupported_target || package_libraries.len() > 1 {
         return Err(
             "cargo-build-subset accepts selected binary targets and at most one library target per package"
@@ -949,6 +948,146 @@ fn compile_cargo_subset_for_target_with_workspace(
         let _ = write_build_artifact_index(&workspace.root, manifest, &cache_path, external_inputs);
     }
     Ok(())
+}
+
+fn prepare_build_script_cfg(
+    workspace: &quill_cargo::CargoWorkspace,
+    selected_bin: Option<&str>,
+) -> Result<quill_cargo::CargoWorkspace, String> {
+    let selected_packages = workspace
+        .packages
+        .iter()
+        .filter(|package| package.is_default_member)
+        .filter(|package| {
+            package.targets.iter().any(|target| {
+                target.kinds.iter().any(|kind| kind == "bin")
+                    && selected_bin.is_none_or(|name| target.name == name)
+            })
+        })
+        .map(|package| package.id.clone())
+        .collect::<HashSet<_>>();
+    let mut workspace = workspace.clone();
+    for package in &mut workspace.packages {
+        if !selected_packages.contains(&package.id) {
+            continue;
+        }
+        let Some(build_script) = package
+            .targets
+            .iter()
+            .find(|candidate| candidate.kinds.iter().any(|kind| kind == "custom-build"))
+        else {
+            continue;
+        };
+        for (key, value) in run_cargo_build_script(&workspace.root, package, build_script)? {
+            if let Some(value) = value {
+                package.cfg.insert_value(key, value);
+            } else {
+                package.cfg.insert_flag(key);
+            }
+        }
+    }
+    Ok(workspace)
+}
+
+fn run_cargo_build_script(
+    workspace_root: &Path,
+    package: &quill_cargo::CargoPackage,
+    target: &quill_cargo::CargoTarget,
+) -> Result<Vec<(String, Option<String>)>, String> {
+    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let version = Command::new(&rustc)
+        .arg("-vV")
+        .output()
+        .map_err(|error| format!("could not query build-script host compiler: {error}"))?;
+    if !version.status.success() {
+        return Err(format!(
+            "build-script host compiler query failed: {}",
+            String::from_utf8_lossy(&version.stderr).trim()
+        ));
+    }
+    let host = String::from_utf8_lossy(&version.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .ok_or_else(|| "build-script host compiler did not report its host target".to_owned())?
+        .to_owned();
+
+    let build_root = workspace_root
+        .join("target/quill-build-scripts")
+        .join(format!("{}-{}", package.name, target.name));
+    let out_dir = build_root.join("out");
+    std::fs::create_dir_all(&out_dir).map_err(|error| {
+        format!(
+            "could not create build-script output directory `{}`: {error}",
+            out_dir.display()
+        )
+    })?;
+    let executable = build_root.join("build-script");
+    let manifest_dir = package
+        .manifest_path
+        .parent()
+        .ok_or_else(|| "Cargo package manifest has no parent directory".to_owned())?;
+    let compile = Command::new(&rustc)
+        .arg("--edition")
+        .arg(&target.edition)
+        .arg(&target.source_path)
+        .arg("-o")
+        .arg(&executable)
+        .current_dir(manifest_dir)
+        .env("CARGO_MANIFEST_DIR", manifest_dir)
+        .env("CARGO_PKG_NAME", &package.name)
+        .env("CARGO_PKG_VERSION", &package.version)
+        .env("OUT_DIR", &out_dir)
+        .output()
+        .map_err(|error| format!("could not compile Cargo build script: {error}"))?;
+    if !compile.status.success() {
+        return Err(format!(
+            "Cargo build script compilation failed:\n{}",
+            String::from_utf8_lossy(&compile.stderr).trim()
+        ));
+    }
+    let run = Command::new(&executable)
+        .current_dir(manifest_dir)
+        .env("CARGO_MANIFEST_DIR", manifest_dir)
+        .env("CARGO_PKG_NAME", &package.name)
+        .env("CARGO_PKG_VERSION", &package.version)
+        .env("OUT_DIR", &out_dir)
+        .env("HOST", &host)
+        .env("TARGET", &host)
+        .output()
+        .map_err(|error| format!("could not run Cargo build script: {error}"))?;
+    if !run.status.success() {
+        return Err(format!(
+            "Cargo build script failed:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        ));
+    }
+    parse_build_script_cfg(&String::from_utf8_lossy(&run.stdout))
+}
+
+fn parse_build_script_cfg(output: &str) -> Result<Vec<(String, Option<String>)>, String> {
+    let mut cfg = Vec::new();
+    for line in output.lines().map(str::trim) {
+        let directive = line
+            .strip_prefix("cargo::")
+            .or_else(|| line.strip_prefix("cargo:"));
+        let Some(value) = directive.and_then(|directive| directive.strip_prefix("rustc-cfg="))
+        else {
+            continue;
+        };
+        let (key, value) = match value.split_once('=') {
+            Some((key, value)) => (
+                key.trim().to_owned(),
+                Some(value.trim().trim_matches('"').to_owned()),
+            ),
+            None => (value.trim().to_owned(), None),
+        };
+        if key.is_empty() {
+            return Err("Cargo build script emitted an empty rustc-cfg key".to_owned());
+        }
+        cfg.push((key, value));
+    }
+    Ok(cfg)
 }
 
 fn restore_cached_cargo_build(manifest: &str, output: &str) -> bool {
@@ -4165,6 +4304,20 @@ fn discover_module_requests(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_legacy_and_modern_build_script_cfg_directives() {
+        assert_eq!(
+            parse_build_script_cfg(
+                "cargo:rustc-check-cfg=cfg(build_flag)\ncargo:rustc-cfg=build_flag\ncargo::rustc-cfg=backend=\"native\"\n"
+            )
+            .unwrap(),
+            vec![
+                ("build_flag".to_owned(), None),
+                ("backend".to_owned(), Some("native".to_owned())),
+            ]
+        );
+    }
 
     #[test]
     fn rewrites_self_struct_literals_to_their_canonical_module_type() {
