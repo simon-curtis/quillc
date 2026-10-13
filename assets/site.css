@@ -62,17 +62,39 @@ h2{font-size:clamp(46px,4.75vw,72px);line-height:1.075;font-weight:460;letter-sp
   .metric-switch button:active{transform:translateY(0)}
 }
 
-.inspiration{border-top:1px solid var(--line);padding-block:103px 110px}
-.inspiration-intro{display:grid;grid-template-columns:1fr 1fr;gap:11%;margin-bottom:58px}
-.inspiration-intro>div{max-width:495px;padding-top:4px}
-.inspiration-intro .section-lead{font-size:28px;line-height:1.25;letter-spacing:-.035em;color:var(--ink);margin:0 0 24px}
-.inspiration-intro p{font-size:17px;line-height:1.7;color:#5c655e;margin:0}
-.inspiration-list{margin:0}.inspiration-list>div{display:grid;grid-template-columns:1fr 1fr;gap:11%;padding:32px 0 35px;border-top:1px solid var(--line)}
-.inspiration-list dt{font-size:clamp(38px,4vw,58px);line-height:1.2;letter-spacing:-.06em;color:var(--rust);font-weight:450}
-.inspiration-list dd{margin:0;max-width:495px}.inspiration-list h3{font-size:21px;font-weight:500;letter-spacing:-.035em;line-height:1.3;margin:3px 0 12px}.inspiration-list p{font-size:15px;line-height:1.75;color:#5c655e;margin:0}
-.inspiration-footnote{border-top:1px solid var(--line);padding-top:26px;display:flex;align-items:baseline;justify-content:space-between;gap:32px}.inspiration-footnote p{font-size:13px;line-height:1.7;max-width:400px;color:var(--muted);margin:0}.inspiration-footnote .text-link{flex-shrink:0;font-size:13px}
-@media(max-width:900px){.inspiration{padding-block:67px 75px}.inspiration-intro{grid-template-columns:1fr;gap:32px;margin-bottom:36px}.inspiration-intro>div{max-width:100%}.inspiration-intro .section-lead{font-size:26px}.inspiration-intro p{font-size:16px}.inspiration-list>div{grid-template-columns:110px 1fr;gap:25px;padding-block:27px}.inspiration-footnote{flex-direction:column;gap:19px}.inspiration-footnote p{max-width:100%}}
-@media(max-width:540px){.inspiration-list>div{grid-template-columns:1fr;gap:15px}.inspiration-list dt{font-size:38px}.inspiration-list h3{font-size:20px}.footer nav{flex-wrap:wrap;row-gap:16px}}
+/* A typographic print and its marginal notes form one compact composition. */
+.inspiration{padding-block:44px 68px}
+.inspiration-intro{margin-bottom:34px}
+.inspiration-intro h2{font-size:28px;letter-spacing:-.04em;line-height:1.25}
+.inspiration-composition{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:9%;align-items:start}
+.inspiration-print{min-width:0;padding-top:7px}
+.inspiration-type{font-size:clamp(64px,7.8vw,116px);font-weight:550;letter-spacing:-.075em;line-height:1.1;margin:0 0 30px;color:var(--rust)}
+.inspiration-type>span{display:block;white-space:nowrap}
+@supports (background-clip:text){
+  .inspiration-type{background-image:radial-gradient(circle,var(--paper) .7px,transparent .95px),linear-gradient(135deg,#b32d26 12%,#d55736 48%,#762c25 100%);background-size:3px 3px,100% 100%;background-clip:text;-webkit-background-clip:text;color:transparent}
+}
+.inspiration-caption{font-size:14px;line-height:1.8;color:var(--muted);max-width:440px;margin:0}
+.inspiration-list{margin:0;display:grid;gap:24px}
+.inspiration-list dt{display:flex;align-items:baseline;gap:14px;font-size:14px;line-height:1.6;color:var(--rust);font-weight:550}
+.inspiration-list dt>span{font-size:17px;font-weight:450;letter-spacing:-.025em;color:var(--ink)}
+.inspiration-list dd{margin:7px 0 0;font-size:13px;line-height:1.8;color:var(--muted);max-width:430px}
+.inspiration-reading>.text-link{font-size:12px;margin-top:28px}
+@media(max-width:900px){
+  .inspiration-intro{margin-bottom:26px}
+  .inspiration-intro h2{font-size:25px}
+  .inspiration-composition{grid-template-columns:1fr;gap:34px}
+  .inspiration-type{font-size:clamp(64px,12vw,108px);margin-bottom:22px}
+  .inspiration-caption{max-width:520px}
+  .inspiration-list{grid-template-columns:1fr 1fr;gap:24px 30px}
+  .inspiration-list dt{flex-wrap:wrap;gap:0 12px}
+}
+@media(max-width:540px){
+  .inspiration-type{font-size:clamp(49px,15vw,76px)}
+  .inspiration-list{grid-template-columns:1fr;gap:22px}
+  .inspiration-list dt>span{font-size:16px}
+  .inspiration-caption{font-size:13px}
+  .footer nav{flex-wrap:wrap;row-gap:16px}
+}
 
 .quickstart{display:grid;grid-template-columns:1fr 1fr;gap:11%;align-items:center;padding-block:38px 40px;border-bottom:1px solid var(--line)}
 .quickstart h2{font-size:29px;letter-spacing:-.045em;line-height:1.2}

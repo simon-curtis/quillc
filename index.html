@@ -170,17 +170,22 @@
     <section class="inspiration shell" id="inspiration" aria-labelledby="inspiration-title">
       <div class="inspiration-intro">
         <h2 id="inspiration-title">Inspiration.</h2>
-        <div><p class="section-lead">Learning from the compilers<br>that came before.</p>
-          <p>Quill draws on ideas from Go, Zig, Odin, and Rust. Each offers a different way to organize the work of compilation. Our task is to find what helps Rust builds, and measure it.</p>
+      </div>
+      <div class="inspiration-composition">
+        <div class="inspiration-print">
+          <p class="inspiration-type" aria-hidden="true"><span>Go. Zig.</span><span>Odin. Rust.</span></p>
+          <p class="inspiration-caption">Quill draws on ideas from other compilers. Rust’s behavior is the reference; correctness and build measurements decide which ideas work here.</p>
+        </div>
+        <div class="inspiration-reading">
+          <dl class="inspiration-list">
+            <div><dt>Go <span>Small interfaces.</span></dt><dd>Keep package information compact. Explore loading function bodies only when they’re needed.</dd></div>
+            <div><dt>Zig <span>Work that survives an edit.</span></dt><dd>Revisit what changed, reuse what didn’t. Keep all the checks that Rust requires.</dd></div>
+            <div><dt>Odin <span>Independent work, in parallel.</span></dt><dd>Explore concurrent checking, with deterministic diagnostics and memory use under control.</dd></div>
+            <div><dt>Rust <span>The compatibility reference.</span></dt><dd>Study rustc’s queries, intermediate representations, and crate metadata. Match its behavior.</dd></div>
+          </dl>
+          <a class="text-link" href="docs/architecture.md#research-references">Read the research references <span aria-hidden="true">↗</span></a>
         </div>
       </div>
-      <dl class="inspiration-list">
-        <div><dt>Go</dt><dd><h3>Keep interfaces compact.</h3><p>Explore small package interfaces and load function bodies only when needed. Test how those boundaries work with Cargo.</p></dd></div>
-        <div><dt>Zig</dt><dd><h3>Revisit only what changed.</h3><p>Use fine-grained invalidation as a model for incremental work. Preserve the checks Rust requires, even for code that never runs.</p></dd></div>
-        <div><dt>Odin</dt><dd><h3>Check independent work in parallel.</h3><p>Explore concurrent semantic checking while keeping diagnostics deterministic and memory use under control.</p></dd></div>
-        <div><dt>Rust</dt><dd><h3>Learn from the language’s own compiler.</h3><p>Study rustc’s query system, intermediate representations, and crate metadata. Its behavior is the reference for compatibility.</p></dd></div>
-      </dl>
-      <div class="inspiration-footnote"><p>These are ideas to investigate, with correctness and measurements deciding what stays.</p><a class="text-link" href="docs/architecture.md#research-references">Read the research references <span aria-hidden="true">↗</span></a></div>
     </section>
 
   </main>
