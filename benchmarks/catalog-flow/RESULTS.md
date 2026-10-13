@@ -12,7 +12,7 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 ## Paired build measurements
 
 Five runs were collected on 2026-10-13 from a clean release build at revision
-`56eeb4c` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+`aca28b5` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
 logical CPUs. Both commands selected the same binary and eight-crate source
 dependency graph. The table reports medians. Cold runs cleared the Rust target
 and Quill parse/type-check/artifact caches, but retained the OS file cache.
@@ -27,33 +27,35 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.698 s | 5.657 s | 568.3 MiB |
-| `quillc cargo-build-subset` | Cold | 0.357 s | 1.901 s | 134.1 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.019 s | 21.6 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001 s | 0.001 s | 21.6 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.287 s | 0.410 s | 228.2 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.085 s | 35.6 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.428 s | 227.8 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.178 s | 51.6 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.666 s | 5.605 s | 568.5 MiB |
+| `quillc cargo-build-subset` | Cold | 0.357 s | 1.964 s | 133.1 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018837 s | 0.019186 s | 21.7 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001345 s | 0.001113 s | 21.7 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.405 s | 227.6 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.083 s | 35.7 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.301 s | 0.428 s | 227.7 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.177 s | 57.9 MiB |
 
-Quill's median wall-time ratios were 7.56× cold, 19.00× warm, 10.63× for the
-comment edit, and 3.64× for the semantic edit. Peak RSS was lower in three
-states and equal in the warm state. CPU-time ratios were 2.98× cold, 19.00×
-warm, 4.82× for the comment edit, and 2.40× for the semantic edit. This run
+Quill's median wall-time ratios were 7.47× cold, 14.01× warm, 10.75× for the
+comment edit, and 3.49× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. CPU-time ratios were 2.85× cold, 17.24×
+warm, 4.86× for the comment edit, and 2.42× for the semantic edit. This run
 clears the 3× wall-time gate in all four states on this fixture, but cold and
 semantic CPU-time ratios remain below 3×. These results do not establish
 general Rust compiler performance.
 
-The warm cache-hit processes finish in roughly 1 ms. The former 2 ms psutil
-polling loop perturbed those short runs; direct alternating samples measured a
-1.24 ms Quill median, while the polling harness reported 6 ms. Warm runs now
+The warm cache-hit processes finish in about 1.35 ms for Quill. The former
+2 ms psutil polling loop perturbed those short runs; direct alternating samples
+measured a 1.24 ms Quill median, while the polling harness reported 6 ms. Warm runs now
 use `wait4` directly for wall time and root-process peak RSS. The warm cache
 path launches no compiler child processes; a separate observation saw no
 children in 10 warmed Cargo invocations. Other build states retain sampled
-process-tree RSS. The clean compiler source revision is `56eeb4c`; its binary
+process-tree RSS. The clean compiler source revision is `aca28b5`; its binary
 hash and all raw samples are in `results.json`. The previous sampler-based
 run is retained in
-[`results-20261013-010a3b9-polled.json`](results-20261013-010a3b9-polled.json),
+[`results-20261013-010a3b9-polled.json`](results-20261013-010a3b9-polled.json)
+and the intermediate millisecond-rounded run is in
+[`results-20261013-56eeb4c-ms.json`](results-20261013-56eeb4c-ms.json),
 and the earlier `3f16b03` run is retained in
 [`results-20261013-3f16b03.json`](results-20261013-3f16b03.json).
 

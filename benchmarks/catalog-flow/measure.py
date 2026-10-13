@@ -90,10 +90,10 @@ def measure(
         raise RuntimeError(f"{label} failed ({return_code}): {command}")
     return {
         "label": label,
-        "wall_seconds": round(wall, 3),
-        "user_seconds": round(user, 3),
-        "system_seconds": round(system, 3),
-        "cpu_seconds": round(user + system, 3),
+        "wall_seconds": round(wall, 6),
+        "user_seconds": round(user, 6),
+        "system_seconds": round(system, 6),
+        "cpu_seconds": round(user + system, 6),
         "peak_process_tree_rss_mib": round(peak_rss / (1024 * 1024), 1),
         "command": " ".join(command),
     }
@@ -269,7 +269,7 @@ def main() -> None:
                         for result in results
                         if result["label"] == label
                     ),
-                    3,
+                    6,
                 )
                 for metric in [
                     "wall_seconds",
