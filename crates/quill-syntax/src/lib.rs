@@ -740,7 +740,16 @@ struct AstCollector<'a> {
 struct LocalMacroExpansion {
     name: String,
     scope: Vec<String>,
-    expression: syn::Expr,
+    rule: LocalMacroRule,
+}
+
+#[derive(Clone)]
+enum LocalMacroRule {
+    ZeroArgLiteral(syn::Expr),
+    RepeatCommaExpr {
+        capture: String,
+        transcriber: proc_macro2::TokenStream,
+    },
 }
 
 impl<'a> AstCollector<'a> {
@@ -876,7 +885,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
         let supported_literal_macro = matches!(item, syn::Item::Macro(macro_item)
             if macro_item.mac.path.is_ident("macro_rules")
                 && macro_item.ident.is_some()
-                && zero_arg_literal_macro(macro_item).is_some());
+                && supported_macro_rule(macro_item).is_some());
         if !matches!(
             item,
             syn::Item::Fn(_) | syn::Item::Struct(_) | syn::Item::Enum(_) | syn::Item::Impl(_)
@@ -916,12 +925,12 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
         self.unsupported_item_count += unsupported_attribute_count(&item.attrs);
         if item.mac.path.is_ident("macro_rules")
             && let Some(name) = &item.ident
-            && let Some(expression) = zero_arg_literal_macro(item)
+            && let Some(rule) = supported_macro_rule(item)
         {
             self.macro_expansions.push(LocalMacroExpansion {
                 name: name.to_string(),
                 scope: self.scope.clone(),
-                expression,
+                rule,
             });
         }
     }
@@ -1165,12 +1174,12 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
     }
 }
 
-fn zero_arg_literal_macro(item: &syn::ItemMacro) -> Option<syn::Expr> {
+fn supported_macro_rule(item: &syn::ItemMacro) -> Option<LocalMacroRule> {
     let mut tokens = item.mac.tokens.clone().into_iter();
     let proc_macro2::TokenTree::Group(pattern) = tokens.next()? else {
         return None;
     };
-    if pattern.delimiter() != proc_macro2::Delimiter::Parenthesis || !pattern.stream().is_empty() {
+    if pattern.delimiter() != proc_macro2::Delimiter::Parenthesis {
         return None;
     }
     for expected in ['=', '>'] {
@@ -1195,8 +1204,57 @@ fn zero_arg_literal_macro(item: &syn::ItemMacro) -> Option<syn::Expr> {
     if tokens.next().is_some() {
         return None;
     }
-    let expression = syn::parse2::<syn::Expr>(body.stream()).ok()?;
-    matches!(expression, syn::Expr::Lit(_)).then_some(expression)
+    if pattern.stream().is_empty() {
+        let expression = syn::parse2::<syn::Expr>(body.stream()).ok()?;
+        return matches!(expression, syn::Expr::Lit(_))
+            .then_some(LocalMacroRule::ZeroArgLiteral(expression));
+    }
+
+    let pattern_tokens = pattern.stream().into_iter().collect::<Vec<_>>();
+    let [capture_dollar, capture_group, separator, plus, optional_dollar, optional_group, question] =
+        pattern_tokens.as_slice()
+    else {
+        return None;
+    };
+    if !is_macro_punct(capture_dollar, '$')
+        || !is_macro_punct(separator, ',')
+        || !is_macro_punct(plus, '+')
+        || !is_macro_punct(optional_dollar, '$')
+        || !is_macro_punct(question, '?')
+    {
+        return None;
+    }
+    let proc_macro2::TokenTree::Group(capture_group) = capture_group else {
+        return None;
+    };
+    let capture_tokens = capture_group.stream().into_iter().collect::<Vec<_>>();
+    let [dollar, ident, colon, expr] = capture_tokens.as_slice() else {
+        return None;
+    };
+    if !is_macro_punct(dollar, '$')
+        || !is_macro_punct(colon, ':')
+        || !matches!(expr, proc_macro2::TokenTree::Ident(kind) if kind == "expr")
+    {
+        return None;
+    }
+    let proc_macro2::TokenTree::Ident(capture) = ident else {
+        return None;
+    };
+    let proc_macro2::TokenTree::Group(optional_group) = optional_group else {
+        return None;
+    };
+    let optional_tokens = optional_group.stream().into_iter().collect::<Vec<_>>();
+    if optional_tokens.len() != 1 || !is_macro_punct(&optional_tokens[0], ',') {
+        return None;
+    }
+    Some(LocalMacroRule::RepeatCommaExpr {
+        capture: capture.to_string(),
+        transcriber: body.stream(),
+    })
+}
+
+fn is_macro_punct(token: &proc_macro2::TokenTree, expected: char) -> bool {
+    matches!(token, proc_macro2::TokenTree::Punct(punctuation) if punctuation.as_char() == expected)
 }
 
 fn expand_syn_macros(
@@ -1215,7 +1273,6 @@ fn expand_syn_macros(
                 let path = &invocation.mac.path;
                 let name = if path.segments.len() == 1
                     && matches!(path.segments[0].arguments, syn::PathArguments::None)
-                    && invocation.mac.tokens.is_empty()
                 {
                     Some(path.segments[0].ident.to_string())
                 } else {
@@ -1228,7 +1285,7 @@ fn expand_syn_macros(
                         .find(|definition| {
                             definition.name == name && definition.scope == self.scope
                         })
-                        .map(|definition| definition.expression.clone())
+                        .and_then(|definition| expand_local_macro(&definition.rule, &invocation.mac.tokens))
                 })
             } else {
                 None
@@ -1241,6 +1298,102 @@ fn expand_syn_macros(
     }
 
     Expander { definitions, scope }.visit_block_mut(block);
+}
+
+fn expand_local_macro(
+    rule: &LocalMacroRule,
+    arguments: &proc_macro2::TokenStream,
+) -> Option<syn::Expr> {
+    match rule {
+        LocalMacroRule::ZeroArgLiteral(expression) if arguments.is_empty() => {
+            Some(expression.clone())
+        }
+        LocalMacroRule::RepeatCommaExpr { capture, transcriber } => {
+            let mut groups = Vec::<proc_macro2::TokenStream>::new();
+            let mut current = proc_macro2::TokenStream::new();
+            for token in arguments.clone() {
+                if is_macro_punct(&token, ',') {
+                    if current.is_empty() {
+                        return None;
+                    }
+                    syn::parse2::<syn::Expr>(current.clone()).ok()?;
+                    groups.push(std::mem::take(&mut current));
+                } else {
+                    current.extend([token]);
+                }
+            }
+            if !current.is_empty() {
+                syn::parse2::<syn::Expr>(current.clone()).ok()?;
+                groups.push(current);
+            }
+            if groups.is_empty() {
+                return None;
+            }
+
+            let expanded = expand_macro_transcriber(transcriber, capture, &groups);
+            syn::parse2::<syn::Expr>(expanded).ok()
+        }
+        _ => None,
+    }
+}
+
+fn expand_macro_transcriber(
+    transcriber: &proc_macro2::TokenStream,
+    capture: &str,
+    values: &[proc_macro2::TokenStream],
+) -> proc_macro2::TokenStream {
+    use proc_macro2::{Group, TokenTree};
+
+    let tokens = transcriber.clone().into_iter().collect::<Vec<_>>();
+    let mut output = proc_macro2::TokenStream::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        if is_macro_punct(&tokens[index], '$')
+            && let Some(TokenTree::Group(repetition)) = tokens.get(index + 1)
+            && let Some(TokenTree::Punct(operator)) = tokens.get(index + 2)
+            && matches!(operator.as_char(), '+' | '*')
+        {
+            for value in values {
+                output.extend(substitute_macro_capture(&repetition.stream(), capture, value));
+            }
+            index += 3;
+            continue;
+        }
+        if let TokenTree::Group(group) = &tokens[index] {
+            let mut nested = Group::new(
+                group.delimiter(),
+                expand_macro_transcriber(&group.stream(), capture, values),
+            );
+            nested.set_span(group.span());
+            output.extend([TokenTree::Group(nested)]);
+        } else {
+            output.extend([tokens[index].clone()]);
+        }
+        index += 1;
+    }
+    output
+}
+
+fn substitute_macro_capture(
+    body: &proc_macro2::TokenStream,
+    capture: &str,
+    value: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let tokens = body.clone().into_iter().collect::<Vec<_>>();
+    let mut output = proc_macro2::TokenStream::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        if is_macro_punct(&tokens[index], '$')
+            && matches!(tokens.get(index + 1), Some(proc_macro2::TokenTree::Ident(name)) if name == capture)
+        {
+            output.extend(value.clone());
+            index += 2;
+        } else {
+            output.extend([tokens[index].clone()]);
+            index += 1;
+        }
+    }
+    output
 }
 
 fn unsupported_attribute_count(attributes: &[syn::Attribute]) -> usize {
@@ -3431,6 +3584,34 @@ mod tests {
                 suffix: "u64".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn expands_comma_separated_expression_macro_repetitions() {
+        let source = SourceFile::from_text(
+            "repetition-macro.rs",
+            "macro_rules! sum { ($($value:expr),+ $(,)?) => {{ let mut total: u64 = 0; $(total = total + $value;)+ total }}; } fn main() { let result = sum!(7, 11, 24,); }",
+        );
+        let parsed = parse_ast(&source);
+        assert!(!parsed.had_error);
+        assert_eq!(parsed.unsupported_item_count, 0);
+        let BodyExprKind::Block { statements, .. } =
+            &parsed.functions[0].body.as_ref().unwrap().kind
+        else {
+            panic!("expected the main function body");
+        };
+        let BodyStatement::Let {
+            initializer: Some(expression),
+            ..
+        } = &statements[0]
+        else {
+            panic!("expected the macro-expanded local");
+        };
+        let BodyExprKind::Block { statements, tail } = &expression.kind else {
+            panic!("expected the expression block transcribed by the macro");
+        };
+        assert_eq!(statements.len(), 4);
+        assert!(matches!(tail.as_deref().map(|expr| &expr.kind), Some(BodyExprKind::Path(name)) if name == "total"));
     }
 
     #[test]

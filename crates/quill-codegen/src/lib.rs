@@ -3793,6 +3793,53 @@ fn lower_statements(
     for statement in statements {
         if let BodyStatement::Let {
             name: Some(name),
+            type_text,
+            mutable,
+            initializer: Some(initializer),
+            span,
+        } = statement
+            && let BodyExprKind::Block {
+                statements: block_statements,
+                tail: Some(tail),
+            } = &initializer.kind
+        {
+            let mut block_environment = environment.clone();
+            let mut block_mutable_names = mutable_names.clone();
+            lowered.extend(lower_statements(
+                block_statements,
+                &mut block_environment,
+                &mut block_mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?);
+            let result_binding = BodyStatement::Let {
+                name: Some(name.clone()),
+                type_text: type_text.clone(),
+                mutable: *mutable,
+                initializer: Some((**tail).clone()),
+                span: span.clone(),
+            };
+            lowered.extend(lower_statements(
+                std::slice::from_ref(&result_binding),
+                &mut block_environment,
+                &mut block_mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?);
+            if let Some(value) = block_environment.get(name) {
+                environment.insert(name.clone(), value.clone());
+            }
+            if *mutable {
+                mutable_names.insert(name.clone());
+            } else {
+                mutable_names.remove(name);
+            }
+            continue;
+        }
+        if let BodyStatement::Let {
+            name: Some(name),
             mutable,
             initializer: Some(initializer),
             span,
