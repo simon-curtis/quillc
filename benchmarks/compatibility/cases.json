@@ -1309,5 +1309,26 @@
     ],
     "edition": "2024",
     "source": "fn check(mut value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-in-nested-block-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    {\n        consume(value);\n    }\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "move-in-nested-block-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    {\n        consume(value);\n    }\n}"
   }
 ]

@@ -1882,6 +1882,53 @@ fn check_consumed_local_against_borrows(
                 );
             }
         }
+        BodyExprKind::Block {
+            statements,
+            tail: block_tail,
+        } => {
+            for statement in statements {
+                let consumed_expression = match statement {
+                    BodyStatement::Let {
+                        initializer: Some(value),
+                        ..
+                    }
+                    | BodyStatement::LetTuple { initializer: value, .. }
+                    | BodyStatement::Assign { value, .. }
+                    | BodyStatement::Expression {
+                        expression: value,
+                        ..
+                    } => Some((value, true)),
+                    BodyStatement::While { condition, .. } => Some((condition, false)),
+                    BodyStatement::ForRange { start, .. } => Some((start, false)),
+                    BodyStatement::ForEach { iterator, .. } => Some((iterator, true)),
+                    _ => None,
+                };
+                if let Some((value, consumes)) = consumed_expression {
+                    check_consumed_local_against_borrows(
+                        value,
+                        consumes,
+                        local_types,
+                        struct_signatures,
+                        borrows,
+                        statements_after,
+                        tail,
+                        diagnostics,
+                    );
+                }
+            }
+            if let Some(block_tail) = block_tail {
+                check_consumed_local_against_borrows(
+                    block_tail,
+                    consume,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
         BodyExprKind::Return(Some(value)) => check_consumed_local_against_borrows(
             value,
             true,
