@@ -88,6 +88,10 @@ The [clean HIR-copy run](results/2026-10-13-clean-a364f73.json) also passes
 56/57 cases at `a364f73`; the only failure remains `.o`/`--extern`
 interoperability.
 
+The [streamed-fingerprint run](results/2026-10-13-clean-44120ba.json) passes
+57/58 cases at clean revision `44120ba`, including the compile-time
+`stringify!` case. Only `.o`/`--extern` interoperability remains failing.
+
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
 through a generic bound to a concrete named struct. It records a modified
