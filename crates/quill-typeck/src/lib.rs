@@ -1451,7 +1451,7 @@ fn check_move_expression(
             } else {
                 None
             };
-            if binds_scrutinee || !matches!(&scrutinee.kind, BodyExprKind::Path(_)) {
+            if !matches!(&scrutinee.kind, BodyExprKind::Path(_)) {
                 check_move_expression(
                     scrutinee,
                     binds_scrutinee,
@@ -1466,6 +1466,19 @@ fn check_move_expression(
             for arm in arms {
                 let mut arm_locals = locals.clone();
                 let mut arm_moved = moved.clone();
+                if match_pattern_binds_by_value(&arm.pattern)
+                    && matches!(&scrutinee.kind, BodyExprKind::Path(_))
+                {
+                    check_move_expression(
+                        scrutinee,
+                        true,
+                        signatures,
+                        struct_signatures,
+                        &mut arm_locals,
+                        &mut arm_moved,
+                        diagnostics,
+                    );
+                }
                 if let Some(scrutinee_type) = &scrutinee_type {
                     let mut bindings = Vec::new();
                     collect_match_pattern_bindings(&arm.pattern, &mut bindings);

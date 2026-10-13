@@ -348,6 +348,10 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                       quill_accepted, reason, rustc_result.returncode,
                       quill_result.returncode, passed)
     if case["kind"] == "check":
+        quill_diagnostics = quill_result.stdout + quill_result.stderr
+        quill_accepted = quill_accepted and not re.search(
+            rb"\berror\[E\d{4}\]:", quill_diagnostics
+        )
         passed = rustc_accepted and quill_accepted
         reason = "both accept semantic check" if passed else "semantic acceptance differs"
         return Result(case["id"], case["kind"], passed, rustc_accepted,
