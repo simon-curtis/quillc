@@ -44,15 +44,16 @@ pub(crate) fn collect(
     let text = source.text();
     let ra = ra_edition(edition);
     let parse = ra_ap_syntax::SourceFile::parse(&parser_text(text), ra);
+    let file = parse.tree();
     if let Some(error) = parse
         .errors()
         .iter()
+        .filter(|error| !inside_token_tree(file.syntax(), error.range()))
         .min_by_key(|error| error.range().start())
     {
         let offset = usize::from(error.range().start()).min(text.len());
         return Err(syntax_diagnostic(source, offset, &error.to_string()));
     }
-    let file = parse.tree();
     if validate_edition
         && ra == Edition::Edition2024
         && let Some((offset, message)) = edition_2024_error(file.syntax())
@@ -91,6 +92,18 @@ pub(crate) fn collect(
         modules: collector.modules,
         imports: collector.imports,
         unsupported_item_count: collector.unsupported_item_count + file_attributes,
+    })
+}
+
+/// Macro bodies are token streams, not Rust expressions. Ignore grammar
+/// recovery diagnostics wholly contained by a balanced token-tree node; the
+/// parser still reports an unclosed delimiter outside that node.
+fn inside_token_tree(root: &SyntaxNode, range: ra_ap_syntax::TextRange) -> bool {
+    root.descendants().any(|node| {
+        node.kind() == SyntaxKind::TOKEN_TREE && {
+            let tree = node.text_range();
+            tree.start() <= range.start() && range.end() <= tree.end()
+        }
     })
 }
 
@@ -1097,6 +1110,13 @@ impl Collector<'_> {
         if let Some(trait_path) = &trait_path {
             self.scope.push(format!("traitimpl:{trait_path}"));
         }
+        // Syn's default visitor also reached items nested in the impl header
+        // (const blocks in generic arguments or where clauses).
+        for child in item.syntax().children() {
+            if child.kind() != SyntaxKind::ASSOC_ITEM_LIST {
+                self.visit_nested_items(&child);
+            }
+        }
         for assoc in item
             .assoc_item_list()
             .into_iter()
@@ -1136,6 +1156,11 @@ impl Collector<'_> {
             self.unsupported_item_count += 1;
         }
         self.scope.push(format!("trait:{}", name_text(item.name())));
+        for child in item.syntax().children() {
+            if child.kind() != SyntaxKind::ASSOC_ITEM_LIST {
+                self.visit_nested_items(&child);
+            }
+        }
         for assoc in item
             .assoc_item_list()
             .into_iter()

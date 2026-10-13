@@ -209,8 +209,10 @@ const PARITY_FIXTURES: &[&str] = &[
     "fn f() { println!(\"{} {x}\", a, x = 1); let s = format!(\"v\"); vec![1; 3]; m! { a } concat!(\"a\", 1, 'c', 2.0, true); write!(f, \"x\")?; assert_eq!(a, b,); let t = stringify!(a + b); }",
     // Local macro_rules expansion.
     "macro_rules! answer { () => { 42u64 }; } macro_rules! sum { ($($v:expr),+ $(,)?) => {{ let mut t = 0; $(t = t + $v;)+ t }}; } fn main() { let a = answer!(); let b = sum!(call(1), 2 * 3,); answer!(); }",
+    "unsafe impl X for Foo where (): Check<Self, { #[repr(C)] pub enum Tag { Bar } 1 }> { fn f() {} } trait T: Check<{ fn g() {} 1 }> { fn h(&self); }",
     "macro_rules! tag { () => { \"t\" }; } fn main() { assert_eq!(tag!().len(), 1); let x = tag!(); }",
     "macro_rules! twice { ($($v:expr);*) => { ($($v),*) }; } fn main() { let x = twice!(1; 2); } impl X { fn m() { let y = twice!(); } }",
+    "fn f() { quote!(#input_type#ty_generics); }",
     "/// é\nfn naïve(ünïcode: &str) -> &str { let ß = 'α'; let t = \"日本\"; ß }",
     "struct S; impl S { fn r<'a>(&'a mut self) {} fn s(&'static self) {} fn t(&'_ self) {} }",
     "fn f() -> bool { let a = -1f64; let b = 1f32; let c = 2.0f64; let d = 0x1F_u8; d == 1 }",
