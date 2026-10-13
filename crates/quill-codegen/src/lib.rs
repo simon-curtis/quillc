@@ -3903,15 +3903,17 @@ fn lower_statements(
                     name,
                 );
             }
-            if !receiver_temporaries.is_empty() {
-                lowered.extend(lower_statements(
-                    &receiver_temporaries,
-                    environment,
-                    mutable_names,
-                    next_slot,
-                    functions,
-                    structs,
-                )?);
+            if !receiver_temporaries.is_empty() || rewritten_initializer != *initializer {
+                if !receiver_temporaries.is_empty() {
+                    lowered.extend(lower_statements(
+                        &receiver_temporaries,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                }
                 let rewritten = BodyStatement::Let {
                     name: Some(name.clone()),
                     type_text: None,
@@ -3938,6 +3940,92 @@ fn lower_statements(
                 initializer: Some(initializer),
                 ..
             } => {
+                if let BodyExprKind::If {
+                    condition,
+                    then_branch,
+                    else_branch: Some(else_branch),
+                } = &initializer.kind
+                    && let BodyExprKind::Block {
+                        statements: then_statements,
+                        tail: Some(then_tail),
+                    } = &then_branch.kind
+                    && let BodyExprKind::Block {
+                        statements: else_statements,
+                        tail: Some(else_tail),
+                    } = &else_branch.kind
+                    && (!then_statements.is_empty() || !else_statements.is_empty())
+                {
+                    let condition = condition_from_expression_with_structs(
+                        condition,
+                        environment,
+                        functions,
+                        structs,
+                    )?;
+                    let lower_value_branch =
+                        |statements: &[BodyStatement],
+                         tail: &BodyExpr,
+                         next_slot: &mut usize|
+                         -> Result<(Vec<Statement>, Value), CodegenError> {
+                            let mut branch_environment = environment.clone();
+                            let mut branch_mutable = mutable_names.clone();
+                            let body = lower_statements(
+                                statements,
+                                &mut branch_environment,
+                                &mut branch_mutable,
+                                next_slot,
+                                functions,
+                                structs,
+                            )?;
+                            let mut value =
+                                value_from_expression(tail, &branch_environment, functions)?;
+                            if let Some(type_text) = type_text.as_deref() {
+                                coerce_annotated_integer_values(&mut value, type_text);
+                            }
+                            Ok((body, value))
+                        };
+                    let (mut then_body, then_value) =
+                        lower_value_branch(then_statements, then_tail, next_slot)?;
+                    let (mut else_body, else_value) =
+                        lower_value_branch(else_statements, else_tail, next_slot)?;
+                    if is_word_value(&then_value) != is_word_value(&else_value)
+                        || is_slice_value(&then_value)
+                        || is_slice_value(&else_value)
+                    {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "conditional local initializer requires matching scalar branch values",
+                        ));
+                    }
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    then_body.push(Statement::Assign {
+                        slot,
+                        value: then_value.clone(),
+                    });
+                    else_body.push(Statement::Assign {
+                        slot,
+                        value: else_value.clone(),
+                    });
+                    lowered.push(Statement::If {
+                        condition,
+                        then_body,
+                        else_body,
+                    });
+                    let local_value = if is_word_value(&then_value) {
+                        generic_argument_type(&then_value).map_or(
+                            Value::WordLocal(slot),
+                            |type_name| Value::TypedWordLocal { slot, type_name },
+                        )
+                    } else {
+                        Value::Local(slot)
+                    };
+                    environment.insert(name.clone(), local_value);
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    continue;
+                }
                 if let BodyExprKind::MethodCall {
                     receiver,
                     method,
@@ -5755,7 +5843,11 @@ fn materialize_vector_indices(
             slot_seed,
             reserved_name,
         ),
-        BodyExprKind::If { condition, .. } => {
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             materialize_vector_indices(
                 condition,
                 environment,
@@ -5763,6 +5855,20 @@ fn materialize_vector_indices(
                 slot_seed,
                 reserved_name,
             );
+            materialize_vector_indices_in_branch(
+                then_branch,
+                environment,
+                slot_seed,
+                reserved_name,
+            );
+            if let Some(else_branch) = else_branch {
+                materialize_vector_indices_in_branch(
+                    else_branch,
+                    environment,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
@@ -5792,6 +5898,39 @@ fn materialize_vector_indices(
         | BodyExprKind::Dereference(_)
         | BodyExprKind::Block { .. }
         | BodyExprKind::Unsupported => {}
+    }
+}
+
+fn materialize_vector_indices_in_branch(
+    branch: &mut BodyExpr,
+    environment: &HashMap<String, Value>,
+    slot_seed: usize,
+    reserved_name: &str,
+) {
+    if let BodyExprKind::Block {
+        statements,
+        tail: Some(tail),
+    } = &mut branch.kind
+    {
+        let mut temporaries = Vec::new();
+        materialize_vector_indices(tail, environment, &mut temporaries, slot_seed, reserved_name);
+        statements.extend(temporaries);
+        return;
+    }
+    let mut temporaries = Vec::new();
+    materialize_vector_indices(
+        branch,
+        environment,
+        &mut temporaries,
+        slot_seed,
+        reserved_name,
+    );
+    if !temporaries.is_empty() {
+        let tail = branch.clone();
+        branch.kind = BodyExprKind::Block {
+            statements: temporaries,
+            tail: Some(Box::new(tail)),
+        };
     }
 }
 

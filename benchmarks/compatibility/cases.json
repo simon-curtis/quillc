@@ -339,6 +339,30 @@
     "source": "fn identity(value: u64) -> u64 { value }\nfn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); let value = identity(values[1]); println!(\"{value}\"); }"
   },
   {
+    "id": "vec-index-in-selected-if-branches",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let first = if true { values[0] } else { values[1] }; let second = if false { values[1] } else { values[0] }; let total = first + second; println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-index-selected-if-branch-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let selected = if true { values[1] } else { values[0] }; println!(\"{selected}\"); }"
+  },
+  {
     "id": "builtin-env-macro",
     "kind": "run",
     "features": [

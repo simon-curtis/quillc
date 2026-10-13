@@ -80,6 +80,13 @@ same bounds-panic output. The combined pinned corpus passes 63/63 cases
 (100.0%) at its recorded source revision; general indexing contexts remain
 incomplete.
 
+The [Vec if-branch run](results/2026-10-13-vec-index-if-branches-clean.json)
+adds scalar indexing inside selected conditional-expression branches. It
+checks that an unchosen out-of-range branch does not panic and that a chosen
+out-of-range branch matches rustc's panic output. The combined pinned corpus
+passes 65/65 cases (100.0%) at its recorded source revision; this remains
+curated regression evidence rather than an overall compatibility percentage.
+
 The [self-contained rlib interoperability run](results/2026-10-13-rlib-extern-clean.json)
 passes all 58/58 curated cases at clean revision `e3f5db6`. Its artifact case
 builds a Quill object, packages it with rustc-generated metadata, and verifies
