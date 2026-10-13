@@ -61,13 +61,16 @@ The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
 at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
 clean source status. It is the earlier baseline snapshot, not the current count.
 
-The [clean stringify run](results/2026-10-13-stringify-clean.json) passes
-57/58 cases (98.3%) at clean revision `ae21997`. It adds a `stringify!`
-runtime comparison and retains checks for Cargo features, selected `cfg`,
-`env!`, and other implemented forms. The one failure is rustc consuming a
-Quill object through `--extern`. `stringify!` currently matches the tested
-arithmetic-token form; token punctuation spacing can still differ for other
-forms. The report includes the toolchain, binary hash, and exact case outcomes.
+The [clean stringify spacing run](results/2026-10-13-stringify-spacing-clean.json)
+passes 57/58 cases (98.3%) at clean revision `429971b`. Its `stringify!`
+comparison covers nested delimiters, punctuation spacing, comments, and paths;
+the implementation uses original token spans to preserve Rust's spacing rules.
+The one failure is rustc consuming a Quill object through `--extern`. The report
+includes the toolchain, binary hash, and exact case outcomes.
+
+The earlier [clean stringify run](results/2026-10-13-stringify-clean.json) at
+`ae21997` tested a simple arithmetic-token form. It also passed 57/58 cases,
+with the same `.o`/`--extern` mismatch.
 
 The earlier [Cargo feature selection run](results/2026-10-13-cargo-feature-selection.json)
 passes 56/57 cases (98.2%). It verifies selected features through both
