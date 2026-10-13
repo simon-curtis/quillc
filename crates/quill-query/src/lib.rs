@@ -249,6 +249,52 @@ impl ParseCache {
         parsed
     }
 
+    /// Parse a file using a compact cache entry that omits non-generic
+    /// function bodies. Generic bodies remain available for monomorphization.
+    /// A missing compact entry is populated from the ordinary parse cache.
+    pub fn parse_file_summary_with_cfg_and_edition(
+        &self,
+        source: &SourceFile,
+        cfg: &quill_cfg::CfgSet,
+        edition: &str,
+    ) -> Parse {
+        let source_digest = *blake3::hash(source.text().as_bytes()).as_bytes();
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&cfg.fingerprint());
+        hasher.update(edition.as_bytes());
+        let cfg_digest = *hasher.finalize().as_bytes();
+        let full_path = self.cache_path(source.path(), &cfg_digest);
+        let summary_path = self.summary_cache_path(source.path(), &cfg_digest);
+        if let Some(parsed) = self.read_cache(&summary_path, &source_digest, &cfg_digest) {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+            return parsed;
+        }
+
+        let parsed = if let Some(parsed) = self.read_cache(&full_path, &source_digest, &cfg_digest)
+        {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+            parsed
+        } else {
+            self.misses.fetch_add(1, Ordering::Relaxed);
+            let parsed = quill_syntax::parse_ast_with_cfg_and_edition(source, cfg, edition);
+            if self
+                .write_cache(&full_path, source_digest, cfg_digest, &parsed)
+                .is_err()
+            {
+                self.write_failures.fetch_add(1, Ordering::Relaxed);
+            }
+            parsed
+        };
+        let summary = CachedParse::from_parse_summary(&parsed).into_parse();
+        if self
+            .write_cache(&summary_path, source_digest, cfg_digest, &summary)
+            .is_err()
+        {
+            self.write_failures.fetch_add(1, Ordering::Relaxed);
+        }
+        summary
+    }
+
     pub fn stats(&self) -> ParseCacheStats {
         ParseCacheStats {
             hits: self.hits.load(Ordering::Relaxed),
@@ -260,6 +306,11 @@ impl ParseCache {
 
     fn cache_path(&self, source_path: &Path, cfg_digest: &[u8; 32]) -> PathBuf {
         let namespace = format!("parse-{}", hex_digest(cfg_digest));
+        cache_path(&self.root, source_path, &namespace)
+    }
+
+    fn summary_cache_path(&self, source_path: &Path, cfg_digest: &[u8; 32]) -> PathBuf {
+        let namespace = format!("parse-summary-{}", hex_digest(cfg_digest));
         cache_path(&self.root, source_path, &namespace)
     }
 
@@ -814,6 +865,49 @@ impl CachedParse {
     fn from_parse(parse: &Parse) -> Self {
         Self {
             functions: parse.functions.clone(),
+            structs: parse.structs.clone(),
+            enums: parse.enums.clone(),
+            modules: parse.modules.clone(),
+            imports: parse.imports.clone(),
+            unsupported_item_count: parse.unsupported_item_count,
+            diagnostics: parse.diagnostics.clone(),
+            had_error: parse.had_error,
+        }
+    }
+
+    fn from_parse_summary(parse: &Parse) -> Self {
+        Self {
+            functions: parse
+                .functions
+                .iter()
+                .map(|function| FunctionItem {
+                    name: function.name.clone(),
+                    scope: function.scope.clone(),
+                    calls: function.calls.clone(),
+                    qualified_calls: function.qualified_calls.clone(),
+                    name_span: function.name_span.clone(),
+                    span: function.span.clone(),
+                    body_span: function
+                        .is_generic
+                        .then(|| function.body_span.clone())
+                        .flatten(),
+                    parameters: function.parameters.clone(),
+                    return_type: function.return_type.clone(),
+                    body: function.is_generic.then(|| function.body.clone()).flatten(),
+                    is_public: function.is_public,
+                    is_generic: function.is_generic,
+                    generic_parameters: function.generic_parameters.clone(),
+                    generic_copy_parameters: function.generic_copy_parameters.clone(),
+                    generic_as_ref_str_parameters: function.generic_as_ref_str_parameters.clone(),
+                    generic_add_parameters: function.generic_add_parameters.clone(),
+                    generic_trait_bounds: function.generic_trait_bounds.clone(),
+                    generic_has_bounds: function.generic_has_bounds,
+                    is_async: function.is_async,
+                    is_const: function.is_const,
+                    is_unsafe: function.is_unsafe,
+                    has_abi: function.has_abi,
+                })
+                .collect(),
             structs: parse.structs.clone(),
             enums: parse.enums.clone(),
             modules: parse.modules.clone(),
