@@ -161,6 +161,7 @@ enum Value {
     SliceIsEmpty(Box<Value>),
     SliceLength(Box<Value>),
     ZeroExtend(Box<Value>),
+    SignExtend(Box<Value>),
     SliceFold {
         source: Box<Value>,
         initial: Box<Value>,
@@ -1759,6 +1760,7 @@ fn generic_argument_type(value: &Value) -> Option<String> {
         | Value::TypedWordLocal { type_name, .. } => Some(type_name.clone()),
         Value::Word(_) | Value::WordLocal(_) => Some("usize".to_owned()),
         Value::WrappingBinary { .. }
+        | Value::SignExtend(_)
         | Value::SliceElement {
             element_size: 8, ..
         } => Some("u64".to_owned()),
@@ -1840,6 +1842,7 @@ fn collect_generic_instances(value: &Value, output: &mut BTreeSet<String>) {
         | Value::SliceIsEmpty(aggregate)
         | Value::SliceLength(aggregate)
         | Value::ZeroExtend(aggregate)
+        | Value::SignExtend(aggregate)
         | Value::CharIsAsciiAlphanumeric(aggregate) => collect_generic_instances(aggregate, output),
         Value::SliceFold {
             source,
@@ -5595,11 +5598,17 @@ fn value_from_expression(
             type_name,
         } => {
             let value = value_from_expression(expression, environment, functions)?;
-            if matches!(type_name.trim(), "u64" | "usize") && is_word_value(&value) {
-                Ok(value)
-            } else {
+            if !matches!(type_name.trim(), "u64" | "usize") {
                 Err(CodegenError::UnsupportedProgram(
                     "native casts currently support u64/usize values that already use word representation",
+                ))
+            } else if is_word_value(&value) {
+                Ok(value)
+            } else if generic_argument_type(&value).as_deref() == Some("i32") {
+                Ok(Value::SignExtend(Box::new(value)))
+            } else {
+                Err(CodegenError::UnsupportedProgram(
+                    "native casts currently support u64/usize targets from word or i32 values",
                 ))
             }
         }
@@ -7168,7 +7177,9 @@ fn validate_value_target(
         Value::SliceIsEmpty(value) | Value::SliceLength(value) => {
             validate_value_target(value, functions, items, parameter_count)
         }
-        Value::ZeroExtend(value) => validate_value_target(value, functions, items, parameter_count),
+        Value::ZeroExtend(value) | Value::SignExtend(value) => {
+            validate_value_target(value, functions, items, parameter_count)
+        }
         Value::SliceFold {
             source,
             initial,
@@ -7706,6 +7717,10 @@ fn encode_value(
         Value::ZeroExtend(value) => {
             append_encoded_value(&mut code, value, in_function, relocations);
             code.extend_from_slice(&[0x89, 0xc0]); // mov eax, eax: zero-extend to rax
+        }
+        Value::SignExtend(value) => {
+            append_encoded_value(&mut code, value, in_function, relocations);
+            code.extend_from_slice(&[0x48, 0x63, 0xc0]); // movsxd rax, eax
         }
         Value::SliceFold {
             source,
@@ -9332,6 +9347,7 @@ fn is_word_value(value: &Value) -> bool {
             | Value::PairField { .. }
             | Value::SliceLength(_)
             | Value::ZeroExtend(_)
+            | Value::SignExtend(_)
             | Value::SliceFold { .. }
             | Value::WrappingBinary { .. }
             | Value::Call {
@@ -9621,6 +9637,7 @@ fn collect_value_text(value: &Value, output: &mut HashSet<String>) {
         | Value::OptionIsSome(aggregate)
         | Value::SliceLength(aggregate)
         | Value::ZeroExtend(aggregate)
+        | Value::SignExtend(aggregate)
         | Value::CharIsAsciiAlphanumeric(aggregate) => {
             collect_value_text(aggregate, output);
         }
@@ -9762,6 +9779,7 @@ fn collect_static_arrays(value: &Value, output: &mut HashMap<String, Vec<Value>>
         | Value::OptionIsSome(aggregate)
         | Value::SliceLength(aggregate)
         | Value::ZeroExtend(aggregate)
+        | Value::SignExtend(aggregate)
         | Value::CharIsAsciiAlphanumeric(aggregate) => {
             collect_static_arrays(aggregate, output);
         }
@@ -10031,6 +10049,7 @@ fn contains_format_decimal(value: &Value) -> bool {
         | Value::OptionIsSome(value)
         | Value::SliceLength(value)
         | Value::ZeroExtend(value)
+        | Value::SignExtend(value)
         | Value::CharIsAsciiAlphanumeric(value) => contains_format_decimal(value),
         Value::OptionUnwrapOr {
             option, fallback, ..
@@ -10559,6 +10578,7 @@ fn visit_value(value: &Value, max_slot: &mut usize) {
         | Value::SliceIsEmpty(result)
         | Value::SliceLength(result)
         | Value::ZeroExtend(result)
+        | Value::SignExtend(result)
         | Value::CharIsAsciiAlphanumeric(result) => visit_value(result, max_slot),
         Value::SliceFold {
             source,
@@ -11529,6 +11549,18 @@ mod tests {
         let object = emit("fn main() { std::process::exit(37); }").unwrap();
         assert!(object.starts_with(b"\x7fELF"));
         assert!(object.windows(2).any(|bytes| bytes == [0x0f, 0x05]));
+    }
+
+    #[test]
+    fn signed_i32_cast_to_u64_sign_extends_before_unsigned_formatting() {
+        let object =
+            emit("fn main() { let value = -2i32 as u64; println!(\"{value}\"); }").unwrap();
+        let output = std::env::temp_dir().join(format!("quill-sign-extend-{}", std::process::id()));
+        quill_link::link_elf_executable(&object, &output, "_start").unwrap();
+        let result = std::process::Command::new(&output).output().unwrap();
+        let _ = std::fs::remove_file(&output);
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"18446744073709551614\n");
     }
 
     #[test]
