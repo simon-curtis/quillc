@@ -104,6 +104,10 @@ impl State {
         }));
     }
 
+    fn remove_held_at(&mut self, root: &str, projection: &[String]) {
+        self.replace_held_at(root, projection, Vec::new());
+    }
+
     fn replace_holder(&mut self, name: &str, loans: Vec<Loan>) {
         self.loans
             .retain(|loan| loan.holder.as_deref() != Some(name));
@@ -634,7 +638,7 @@ impl Checker<'_, '_> {
             }
             BodyExprKind::Parenthesized(inner) => self.expression(inner, state),
             BodyExprKind::Dereference(inner) => {
-                let aliases = self.expression_place_alias(inner, state);
+                let mut aliases = self.expression_place_alias(inner, state);
                 if let Some(name) = simple_path(inner) {
                     self.access(
                         &Place {
@@ -648,7 +652,7 @@ impl Checker<'_, '_> {
                     );
                 }
                 if aliases.is_empty() {
-                    self.expression(inner, state);
+                    aliases = self.expression(inner, state);
                 }
                 for loan in &aliases {
                     self.access(
@@ -1243,8 +1247,7 @@ impl Checker<'_, '_> {
                 }
                 let moved_reference = initializer
                     .as_ref()
-                    .and_then(simple_path)
-                    .filter(|source| state.for_holder(source).any(|loan| loan.mutable));
+                    .and_then(|initializer| self.moved_reference_source(initializer, state));
                 if let Some(initializer) = initializer {
                     self.check_move_access(initializer, state);
                 }
@@ -1256,12 +1259,10 @@ impl Checker<'_, '_> {
                     state.replace_holder(name, loans);
                     self.mutable_locals.insert(name.clone(), *mutable);
                     self.local_types.insert(name.clone(), binding_type);
-                    if let Some(source) = moved_reference {
-                        if source != *name {
-                            state
-                                .loans
-                                .retain(|loan| loan.holder.as_deref() != Some(&source));
-                        }
+                    if let Some((source, projection)) = moved_reference
+                        && source != *name
+                    {
+                        state.remove_held_at(&source, &projection);
                     }
                 }
             }
@@ -1269,11 +1270,27 @@ impl Checker<'_, '_> {
                 names, initializer, ..
             } => {
                 let initializer_type = self.infer_local_type(initializer);
+                let moved_reference = self.moved_reference_source(initializer, state);
                 self.check_move_access(initializer, state);
-                self.expression(initializer, state);
+                let aliases = self.expression(initializer, state);
+                if let Some((source, projection)) = moved_reference {
+                    state.remove_held_at(&source, &projection);
+                }
                 for (index, name) in names.iter().enumerate() {
                     declarations.insert(name.clone());
-                    state.replace_holder(name, Vec::new());
+                    let field = index.to_string();
+                    let field_loans = aliases
+                        .iter()
+                        .filter(|loan| {
+                            loan.holder_projection.first() == Some(&field)
+                        })
+                        .cloned()
+                        .map(|mut loan| {
+                            loan.holder_projection.remove(0);
+                            loan
+                        })
+                        .collect();
+                    state.replace_holder(name, field_loans);
                     self.mutable_locals.insert(name.clone(), false);
                     let binding_type = match &initializer_type {
                         Ty::Tuple(types) => types.get(index).cloned().unwrap_or(Ty::Unknown),
@@ -1283,12 +1300,7 @@ impl Checker<'_, '_> {
                 }
             }
             BodyStatement::Assign { name, value, span } => {
-                let moved_reference = if is_direct_binding(name) {
-                    simple_path(value)
-                        .filter(|source| state.for_holder(source).any(|loan| loan.mutable))
-                } else {
-                    None
-                };
+                let moved_reference = self.moved_reference_source(value, state);
                 if is_direct_binding(name) {
                     let mut rhs_names = HashSet::new();
                     expression_names(value, &mut rhs_names);
@@ -1322,18 +1334,18 @@ impl Checker<'_, '_> {
                 }
                 if is_direct_binding(name) {
                     state.replace_holder(name, aliases);
-                    if let Some(source) = moved_reference {
-                        if source != *name {
-                            state
-                                .loans
-                                .retain(|loan| loan.holder.as_deref() != Some(&source));
-                        }
-                    }
                 } else if let Some((place, _)) = assignment
                     && !place.projection.is_empty()
                     && !matches!(self.local_types.get(&place.root), Some(Ty::Reference(_, _)))
                 {
                     state.replace_held_at(&place.root, &place.projection, aliases);
+                }
+                if let Some((source, source_projection)) = moved_reference
+                    && let Some((destination, destination_projection)) =
+                        place_from_text(name).map(|(place, _)| (place.root, place.projection))
+                    && (source != destination || source_projection != destination_projection)
+                {
+                    state.remove_held_at(&source, &source_projection);
                 }
             }
             BodyStatement::Expression { expression, .. } => {
@@ -1504,6 +1516,33 @@ impl Checker<'_, '_> {
         }
     }
 
+    fn moved_reference_source(
+        &self,
+        expression: &BodyExpr,
+        state: &State,
+    ) -> Option<(String, Vec<String>)> {
+        let (root, projection, loans) = match &expression.kind {
+            BodyExprKind::Path(name) => (
+                name.clone(),
+                Vec::new(),
+                state.held_at(name, &[]),
+            ),
+            BodyExprKind::Parenthesized(inner) => {
+                return self.moved_reference_source(inner, state);
+            }
+            BodyExprKind::FieldAccess { .. } | BodyExprKind::Index { .. } => {
+                let (place, _) = self.place(expression, state)?;
+                let loans = state.held_at(&place.root, &place.projection);
+                (place.root, place.projection, loans)
+            }
+            _ => return None,
+        };
+        loans
+            .iter()
+            .any(|loan| loan.mutable)
+            .then_some((root, projection))
+    }
+
     fn place_for_borrow(
         &self,
         expression: &BodyExpr,
@@ -1526,6 +1565,10 @@ impl Checker<'_, '_> {
         match &expression.kind {
             BodyExprKind::Path(name) => state.for_holder(name).cloned().collect(),
             BodyExprKind::Parenthesized(inner) => self.expression_place_alias(inner, state),
+            BodyExprKind::FieldAccess { .. } | BodyExprKind::Index { .. } => self
+                .place(expression, state)
+                .map(|(place, _)| state.held_at(&place.root, &place.projection))
+                .unwrap_or_default(),
             _ => Vec::new(),
         }
     }

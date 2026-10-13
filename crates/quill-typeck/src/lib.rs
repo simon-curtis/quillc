@@ -296,7 +296,6 @@ fn function_has_trait_owner(function: &FunctionItem, owner: &str) -> bool {
     function.scope.iter().any(|scope| {
         scope
             .strip_prefix("trait:")
-            .or_else(|| scope.strip_prefix("traitimpl:"))
             .is_some_and(|candidate| {
                 candidate == owner
                     || candidate.rsplit("::").next() == Some(owner.rsplit("::").next().unwrap_or(owner))
@@ -567,10 +566,11 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
         .strip_prefix('[')
         .and_then(|value| value.strip_suffix(']'))
     {
-        if let Some((element, length)) = element.split_once(';')
-            && let Ok(length) = length.trim().parse::<usize>()
-        {
-            return Ty::Array(Box::new(type_from_syntax(element, structs)), length);
+        if let Some((element, length)) = element.split_once(';') {
+            return Ty::Array(
+                Box::new(type_from_syntax(element, structs)),
+                length.trim().parse::<usize>().unwrap_or(0),
+            );
         }
         return Ty::Slice(Box::new(type_from_syntax(element, structs)));
     }
@@ -2049,6 +2049,7 @@ fn check_move_expression(
                             diagnostics,
                         );
                         clear_move_state(name, moved);
+                        mark_assigned_place(name, locals, struct_signatures, moved);
                     }
                     BodyStatement::Expression { expression, .. } => check_move_expression(
                         expression,
@@ -2522,12 +2523,12 @@ fn check_move_expression(
                 if !locals.contains_key(root) {
                     return;
                 }
-                if is_uninitialized(move_place_root(&place), moved) {
+                if is_uninitialized(&place, moved) {
                     diagnostics.push(TypeDiagnostic {
                         span: expression.span.clone(),
                         message: format!(
                             "error[E0381]: use of possibly-uninitialized variable: `{}`",
-                            move_place_root(&place)
+                            place
                         ),
                     });
                 } else if move_state_contains(&place, moved) {
@@ -2677,27 +2678,127 @@ fn check_move_expression(
 
 fn move_state_contains(place: &str, moved: &HashSet<String>) -> bool {
     moved.iter().any(|moved_place| {
-        !is_uninitialized_marker(moved_place)
+        marker_place(moved_place).is_none()
             && (place == moved_place
             || place
                 .strip_prefix(moved_place)
-                .is_some_and(|suffix| suffix.starts_with('.'))
+                .is_some_and(|suffix| {
+                    (suffix.starts_with('.') || suffix.starts_with('['))
+                        && !is_initialized(place, moved)
+                })
             || moved_place
                 .strip_prefix(place)
-                .is_some_and(|suffix| suffix.starts_with('.')))
+                .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with('[')))
     })
+}
+
+fn aggregate_field_names(ty: &Ty, structs: &[StructSignature]) -> Option<Vec<String>> {
+    match ty {
+        Ty::Named(name) => find_struct_signature(structs, name)
+            .map(|structure| structure.fields.iter().map(|field| field.name.clone()).collect()),
+        Ty::Tuple(fields) => Some((0..fields.len()).map(|index| index.to_string()).collect()),
+        _ => None,
+    }
+}
+
+fn aggregate_field_type(ty: &Ty, field: &str, structs: &[StructSignature]) -> Option<Ty> {
+    match ty {
+        Ty::Named(name) => find_struct_signature(structs, name)
+            .and_then(|structure| structure.fields.iter().find(|item| item.name == field))
+            .map(|item| type_from_syntax(&item.type_text, structs)),
+        Ty::Tuple(fields) => field
+            .parse::<usize>()
+            .ok()
+            .and_then(|index| fields.get(index).cloned()),
+        _ => None,
+    }
+}
+
+fn mark_assigned_place(
+    place: &str,
+    locals: &HashMap<String, Ty>,
+    structs: &[StructSignature],
+    state: &mut HashSet<String>,
+) {
+    let root = move_place_root(place);
+    let Some(projection) = place.strip_prefix(root).and_then(|suffix| suffix.strip_prefix('.'))
+    else {
+        return;
+    };
+    if projection.contains('[') {
+        return;
+    }
+    state.insert(initialized_marker(place));
+    let Some(mut ty) = locals.get(root).cloned() else {
+        return;
+    };
+    let mut ancestors = vec![(root.to_owned(), ty.clone())];
+    let mut projected = root.to_owned();
+    for field in projection.split('.') {
+        let Some(field_type) = aggregate_field_type(&ty, field, structs) else {
+            return;
+        };
+        projected.push('.');
+        projected.push_str(field);
+        ty = field_type;
+        ancestors.push((projected.clone(), ty.clone()));
+    }
+    for (parent, parent_type) in ancestors.into_iter().rev().skip(1) {
+        let Some(fields) = aggregate_field_names(&parent_type, structs) else {
+            continue;
+        };
+        if fields.is_empty()
+            || !fields
+                .iter()
+                .all(|field| is_initialized(&format!("{parent}.{field}"), state))
+        {
+            continue;
+        }
+        state.remove(&uninitialized_marker(&parent));
+        state.remove(&parent);
+        state.insert(initialized_marker(&parent));
+    }
 }
 
 fn uninitialized_marker(place: &str) -> String {
     format!("{place}.\0uninitialized")
 }
 
-fn is_uninitialized(place: &str, state: &HashSet<String>) -> bool {
-    state.contains(&uninitialized_marker(place))
+fn initialized_marker(place: &str) -> String {
+    format!("{place}.\0initialized")
 }
 
-fn is_uninitialized_marker(place: &str) -> bool {
-    place.ends_with(".\0uninitialized")
+fn is_uninitialized(place: &str, state: &HashSet<String>) -> bool {
+    place_initialization(place, state) == Some(false)
+}
+
+fn is_initialized(place: &str, state: &HashSet<String>) -> bool {
+    place_initialization(place, state) == Some(true)
+}
+
+fn place_initialization(place: &str, state: &HashSet<String>) -> Option<bool> {
+    state
+        .iter()
+        .filter_map(|marker| marker_place(marker))
+        .filter(|(marked_place, _)| {
+            place == *marked_place
+                || place
+                    .strip_prefix(*marked_place)
+                    .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with('['))
+        })
+        .max_by_key(|(marked_place, _)| marked_place.len())
+        .map(|(_, initialized)| initialized)
+}
+
+fn marker_place(marker: &str) -> Option<(&str, bool)> {
+    marker
+        .strip_suffix(".\0uninitialized")
+        .map(|place| (place, false))
+        .or_else(|| {
+            marker
+                .strip_suffix(".\0initialized")
+                .map(|place| (place, true))
+        })
 }
 
 fn move_place_root(place: &str) -> &str {
@@ -2705,13 +2806,18 @@ fn move_place_root(place: &str) -> &str {
 }
 
 fn clear_move_state(place: &str, moved: &mut HashSet<String>) {
-    let uninitialized = uninitialized_marker(place);
     moved.retain(|moved_place| {
-        moved_place != &uninitialized
-            && moved_place != place
-            && !moved_place
-                .strip_prefix(place)
-                .is_some_and(|suffix| suffix.starts_with('.'))
+        if let Some((marked_place, _)) = marker_place(moved_place) {
+            marked_place != place
+                && !marked_place
+                    .strip_prefix(place)
+                    .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with('['))
+        } else {
+            moved_place != place
+                && !moved_place
+                    .strip_prefix(place)
+                    .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with('['))
+        }
     });
 }
 
@@ -2795,7 +2901,8 @@ fn check_call_targets(
                     | "String::with_capacity"
                     | "std::string::String::with_capacity"
                     | "u64::from"
-            ) && !is_option_some_path(callee)
+            ) && !callee.starts_with("Self::")
+                && !is_option_some_path(callee)
                 && !locals.contains(callee)
             {
                 let candidates = matching_signatures(signatures, callee);
@@ -6342,6 +6449,17 @@ fn mismatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolves_static_calls_in_trait_default_methods_to_trait_declarations() {
+        let source = SourceFile::from_text(
+            "trait-default-self.rs",
+            "trait Value { fn value() -> u64; fn copy_value() -> u64 { Self::value() } }",
+        );
+        let parsed = parse(&source);
+        let diagnostics = check_functions_strict(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
     use quill_source::SourceFile;
     use quill_syntax::parse;
 
