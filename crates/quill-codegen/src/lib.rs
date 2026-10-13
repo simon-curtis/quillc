@@ -4480,7 +4480,7 @@ fn lower_statements(
                             {
                                 Some("String".to_owned())
                             }
-                            _ => None,
+                            _ => generic_argument_type(&value),
                         };
                         if let BodyExprKind::Path(name) = &receiver.kind
                             && let Some(Value::CollectionLocal {
@@ -4496,7 +4496,20 @@ fn lower_statements(
                     }
                     match (element_type.as_deref(), value) {
                         (Some(element_type), value)
-                            if is_word_type(element_type) && is_word_value(&value) =>
+                            if (is_word_type(element_type) && is_word_value(&value))
+                                || (element_type == "i32"
+                                    && matches!(
+                                        &value,
+                                        Value::Integer(_)
+                                            | Value::Local(_)
+                                            | Value::Call {
+                                                returns_word: false,
+                                                returns_slice: false,
+                                                returns_pair: false,
+                                                returns_aggregate: false,
+                                                ..
+                                            }
+                                    )) =>
                         {
                             lowered.push(Statement::VecPushAggregate {
                                 pointer_slot,
@@ -4940,9 +4953,9 @@ fn lower_statements(
                     ..
                 } = &iterable
                 {
-                    if names.len() != 1 || !is_word_type(element_type) {
+                    if names.len() != 1 || (!is_word_type(element_type) && element_type != "i32") {
                         return Err(CodegenError::UnsupportedProgram(
-                            "native Vec iteration currently supports one unsigned integer binding",
+                            "native Vec iteration currently supports one integer binding",
                         ));
                     }
                     let index_slot = *next_slot;
@@ -4956,9 +4969,13 @@ fn lower_statements(
                     let mut loop_environment = environment.clone();
                     loop_environment.insert(
                         names[0].clone(),
-                        Value::TypedWordLocal {
-                            slot: item_slot,
-                            type_name: element_type.clone(),
+                        if is_word_type(element_type) {
+                            Value::TypedWordLocal {
+                                slot: item_slot,
+                                type_name: element_type.clone(),
+                            }
+                        } else {
+                            Value::Local(item_slot)
                         },
                     );
                     let mut loop_mutable_names = mutable_names.clone();
@@ -4978,7 +4995,7 @@ fn lower_statements(
                         initializer: Value::SliceElement {
                             pointer_slot: *pointer_slot,
                             index_slot,
-                            element_size: 8,
+                            element_size: if is_word_type(element_type) { 8 } else { 4 },
                             element_offset: 0,
                             element_stride: 8,
                         },

@@ -5015,6 +5015,14 @@ mod tests {
                 "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(19); values.push(23); values.push(17); values.push(29); values.push(12); let mut total = 0u64; for value in values { total = total + value; } std::process::exit(if total == 100u64 { 42 } else { 1 }); }",
                 42,
             ),
+            (
+                "fn main() { let mut values = Vec::new(); values.push(19u64); values.push(23u64); let mut total = 0u64; for value in values { total = total + value; } std::process::exit(if total == 42u64 { 42 } else { 1 }); }",
+                42,
+            ),
+            (
+                "fn main() { let mut values: Vec<i32> = Vec::new(); values.push(19); values.push(23); let mut total = 0; for value in values { total = total + value; } std::process::exit(if total == 42 { 42 } else { 1 }); }",
+                42,
+            ),
         ];
         for (program, expected) in cases {
             std::fs::write(&source, format!("{program}\n")).unwrap();
