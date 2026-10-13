@@ -219,7 +219,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         return Result(case["id"], case["kind"], same, True, True,
                       "extern artifact behavior matches" if same else "extern artifact behavior differs",
                       rustc_link.returncode, quill_link.returncode, same)
-    if case["kind"] == "cargo-run":
+    if case["kind"] in {"cargo-check", "cargo-run"}:
         for relative_path, contents in case["files"].items():
             path = (case_dir / relative_path).resolve()
             if case_dir.resolve() not in path.parents:
@@ -230,6 +230,21 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         if case_dir.resolve() not in manifest.parents:
             raise RuntimeError(f"case {case['id']} manifest is outside its directory")
         cargo_args = case.get("cargo_args", [])
+        if case["kind"] == "cargo-check":
+            rustc_result = invoke(
+                ["cargo", "check", "--quiet", "--manifest-path", str(manifest),
+                 *cargo_args], case_dir)
+            quill_result = invoke(
+                [str(quill), "cargo-check-subset", str(manifest), *cargo_args], case_dir)
+            same = (rustc_result.returncode == 0) == (quill_result.returncode == 0)
+            if same:
+                reason = "Cargo check acceptance matches"
+            else:
+                detail = quill_result.stderr.decode("utf-8", "replace").strip()
+                reason = f"Cargo check acceptance differs: {detail}"
+            return Result(case["id"], case["kind"], same,
+                          rustc_result.returncode == 0, quill_result.returncode == 0,
+                          reason, rustc_result.returncode, quill_result.returncode)
         rust_target = case_dir / "rust-target"
         rustc_result = invoke(
             ["cargo", "build", "--quiet", "--manifest-path", str(manifest),
@@ -387,7 +402,7 @@ def main() -> int:
             raise RuntimeError("no compatibility cases selected")
         if len({case["id"] for case in cases}) != len(cases):
             raise RuntimeError("case ids must be unique")
-        if any(case.get("kind") not in {"run", "cargo-run", "parse", "syntax-reject", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
+        if any(case.get("kind") not in {"run", "cargo-check", "cargo-run", "parse", "syntax-reject", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
             raise RuntimeError("unsupported case kind")
         tracker_html = (ROOT / "compatibility.html").read_text(encoding="utf-8")
         feature_rows = re.findall(

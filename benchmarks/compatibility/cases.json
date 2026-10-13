@@ -329,6 +329,22 @@
     }
   },
   {
+    "id": "cargo-check-feature-selection",
+    "kind": "cargo-check",
+    "features": [
+      "features-and-cfg"
+    ],
+    "manifest": "Cargo.toml",
+    "cargo_args": [
+      "--no-default-features",
+      "--features=slow"
+    ],
+    "files": {
+      "Cargo.toml": "[package]\nname = \"check-feature-selection\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\ndefault = [\"fast\"]\nfast = []\nslow = []\n",
+      "src/main.rs": "#[cfg(feature = \"fast\")] fn answer() -> i32 { 42 }\n#[cfg(feature = \"slow\")] fn answer() -> u64 { 77 }\nfn main() { let result: u64 = answer(); }\n"
+    }
+  },
+  {
     "id": "cargo-build-script-cfg",
     "kind": "cargo-run",
     "features": [

@@ -177,15 +177,53 @@ fn cargo_check_subset_command(arguments: Vec<String>) -> ExitCode {
 }
 
 fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCode {
-    if arguments.len() > 1 {
-        eprintln!("usage: quillc cargo-parse|cargo-check-subset [Cargo.toml]");
+    let mut manifest = None;
+    let mut selection = quill_cargo::CargoFeatureSelection::default();
+    let mut index = 0;
+    let mut invalid = false;
+    while index < arguments.len() {
+        if let Some(features) = arguments[index].strip_prefix("--features=") {
+            if features.is_empty() {
+                invalid = true;
+                break;
+            }
+            selection.features.push(features.to_owned());
+            index += 1;
+            continue;
+        }
+        match arguments[index].as_str() {
+            "--features" => {
+                index += 1;
+                if let Some(features) = arguments.get(index) {
+                    selection.features.push(features.clone());
+                } else {
+                    invalid = true;
+                    break;
+                }
+            }
+            "--no-default-features" if !selection.no_default_features => {
+                selection.no_default_features = true;
+            }
+            "--all-features" if !selection.all_features => {
+                selection.all_features = true;
+            }
+            option if option.starts_with('-') => invalid = true,
+            path if manifest.is_none() => manifest = Some(path.to_owned()),
+            _ => invalid = true,
+        }
+        if invalid {
+            break;
+        }
+        index += 1;
+    }
+    if invalid {
+        eprintln!(
+            "usage: quillc cargo-parse|cargo-check-subset [Cargo.toml] [--features <features>] [--no-default-features] [--all-features]"
+        );
         return ExitCode::from(2);
     }
-    let manifest = arguments
-        .first()
-        .map(String::as_str)
-        .unwrap_or("Cargo.toml");
-    let workspace = match quill_cargo::load_workspace(manifest) {
+    let manifest = manifest.unwrap_or_else(|| "Cargo.toml".to_owned());
+    let workspace = match quill_cargo::load_workspace_with_features(&manifest, &selection) {
         Ok(workspace) => workspace,
         Err(error) => {
             eprintln!("quillc: {error}");
