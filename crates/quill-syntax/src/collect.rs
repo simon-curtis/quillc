@@ -61,6 +61,22 @@ pub(crate) fn collect(
         parser_text = std::borrow::Cow::Owned(repaired);
         parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
     }
+    while let Some(keyword) = parse.errors().iter().find_map(|error| {
+        let candidate =
+            final_function_keyword(&parser_text, error.range(), &error.to_string());
+        (!inside_token_tree(parse.tree().syntax(), error.range()))
+            .then_some(candidate)
+            .flatten()
+    }) {
+        // `final fn` is accepted by rustc behind `final_associated_functions`,
+        // but the pinned RA parser treats `final` as an invalid item prefix.
+        // Erasing this modifier only in the parser input preserves byte offsets;
+        // Quill's item model does not currently encode method finality.
+        let mut repaired = parser_text.into_owned();
+        repaired.replace_range(keyword, "     ");
+        parser_text = std::borrow::Cow::Owned(repaired);
+        parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
+    }
     if let Some(error) = parse
         .errors()
         .iter()
@@ -154,6 +170,32 @@ fn const_closure_keyword(
     closure_start
         .starts_with('|')
         .then_some(start..start + "const".len())
+}
+
+fn final_function_keyword(
+    text: &str,
+    range: ra_ap_syntax::TextRange,
+    message: &str,
+) -> Option<Range<usize>> {
+    if message != "expected an item" {
+        return None;
+    }
+    let start = usize::from(range.start()).min(text.len());
+    let end = start.checked_add("final".len())?;
+    if text.get(start..end)? != "final"
+        || (start > 0
+            && (text.as_bytes()[start - 1].is_ascii_alphanumeric()
+                || text.as_bytes()[start - 1] == b'_'))
+    {
+        return None;
+    }
+    let remainder = text[end..].trim_start();
+    (remainder.starts_with("fn")
+        && remainder
+            .as_bytes()
+            .get(2)
+            .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_'))
+    .then_some(start..start + "final".len())
 }
 
 /// rust-analyzer intentionally diagnoses a few incomplete or semantically

@@ -427,6 +427,18 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
             "2024",
             "#![feature(const_closures)] impl S { const fn one(f: F) { const move |a| f(a) } const fn two(f: F) { const move |a, b| f(a, b) } }",
         ),
+        (
+            "2024",
+            "#![feature(final_associated_functions)] pub trait Share { final fn share(&self) -> Self { self.clone() } }",
+        ),
+        (
+            "2024",
+            "#![feature(final_associated_functions)] final fn top_level() {}",
+        ),
+        (
+            "2024",
+            "#![feature(min_specialization)] trait SizeHint { fn lower(&self) -> usize; } impl<T: ?Sized> SizeHint for T { default fn lower(&self) -> usize { 0 } }",
+        ),
         ("2021", "impl impl NotType {}"),
         ("2021", "impl Trait2 for impl NotType {}"),
         ("2021", "impl impl AnotherType {}"),
@@ -567,6 +579,64 @@ fn rustc_parser_fixture_corpus() {
         "checked {rustc_accepted} rustc-accepted fixtures of {} complete-source fixtures",
         fixtures.len()
     );
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// Run with `cargo test -p quill-syntax --lib rustc_core_source_corpus
+/// -- --ignored --nocapture` to compare rustc's accepted core sources with the
+/// syntax collector. Rustc's AST dump can reject sources during early AST
+/// validation, so rejected files are not treated as parser evidence.
+#[test]
+#[ignore]
+fn rustc_core_source_corpus() {
+    let sysroot = Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output()
+        .expect("rustc sysroot is available");
+    let root = PathBuf::from(String::from_utf8(sysroot.stdout).expect("sysroot is UTF-8").trim())
+        .join("lib/rustlib/src/rust/library/core/src");
+    if !root.is_dir() {
+        eprintln!("rust-src core sources are not installed; skipping {}", root.display());
+        return;
+    }
+
+    let mut files = Vec::new();
+    rust_files(&root, &mut files);
+    files.sort();
+    let mut rustc_accepted = 0;
+    let mut mismatches = Vec::new();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let edition = package_edition(&path);
+        if !rustc_parser_accepts(&text, &edition) {
+            continue;
+        }
+        rustc_accepted += 1;
+        let source = SourceFile::from_text(&path, text);
+        if let Err(diagnostic) = crate::collect::collect(
+            &source,
+            &quill_cfg::CfgSet::default(),
+            &edition,
+            true,
+        ) {
+            mismatches.push(format!(
+                "{} ({edition}): Quill rejected rustc-accepted syntax: {} at {:?}",
+                path.strip_prefix(&root).unwrap_or(&path).display(),
+                diagnostic.message,
+                diagnostic.span
+            ));
+            if mismatches.len() >= 100 {
+                break;
+            }
+        }
+    }
+    eprintln!(
+        "checked {rustc_accepted} rustc-accepted files in {}",
+        root.display()
+    );
+    assert!(rustc_accepted > 0, "no rustc-accepted core sources found");
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
