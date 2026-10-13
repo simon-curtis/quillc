@@ -2465,6 +2465,26 @@ fn slice_element_widths(type_text: &str) -> Vec<usize> {
     vec![slice_field_width(element)]
 }
 
+fn scalar_slice_layout(value: &Value) -> Option<(usize, usize, usize)> {
+    let (pointer_slot, length_slot, element_widths) = match value {
+        Value::SliceParameter {
+            pointer_slot,
+            length_slot,
+            element_widths,
+        }
+        | Value::SliceLocal {
+            pointer_slot,
+            length_slot,
+            element_widths,
+        } => (*pointer_slot, *length_slot, element_widths),
+        _ => return None,
+    };
+    let [element_width @ (4 | 8)] = element_widths.as_slice() else {
+        return None;
+    };
+    Some((pointer_slot, length_slot, *element_width))
+}
+
 fn slice_record_type(type_text: &str, structs: &[StructItem]) -> Option<String> {
     let element_type = type_text
         .trim()
@@ -4236,6 +4256,82 @@ fn lower_statements(
                     base_column,
                     ..
                 } = &initializer.kind
+                    && let BodyExprKind::Path(slice_name) = &base.kind
+                    && let Some((pointer_slot, length_slot, element_width)) =
+                        environment.get(slice_name).and_then(scalar_slice_layout)
+                {
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native slice indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{base_line}:{base_column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::WordLocal(length_slot)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::WordLocal(length_slot)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
+                    });
+                    let value = Value::SliceElement {
+                        pointer_slot,
+                        index_slot,
+                        element_size: element_width,
+                        element_offset: 0,
+                        element_stride: element_width,
+                    };
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    environment.insert(
+                        name.clone(),
+                        if element_width == 8 {
+                            Value::WordLocal(slot)
+                        } else {
+                            Value::Local(slot)
+                        },
+                    );
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
+                        initializer: value,
+                    });
+                    continue;
+                }
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
+                    base_line,
+                    base_column,
+                    ..
+                } = &initializer.kind
                     && let BodyExprKind::Path(array_name) = &base.kind
                     && let Some(Value::StaticArray(elements)) = environment.get(array_name)
                     && !elements.is_empty()
@@ -5874,7 +5970,8 @@ fn materialize_index_reads(
                 Some(Value::StaticArray(elements)) => {
                     !elements.is_empty() && elements.iter().all(is_word_value)
                 }
-                _ => false,
+                Some(value) => scalar_slice_layout(value).is_some(),
+                None => false,
             };
             if !supported {
                 return;

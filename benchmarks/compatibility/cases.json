@@ -598,6 +598,40 @@
     "source": "fn sum(values: &[u64]) -> u64 { let mut total: u64 = 0; for value in values { total = total + *value; } total }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = sum(&values); println!(\"{result}\"); }"
   },
   {
+    "id": "borrowed-integer-slice-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn at(values: &[u64], index: usize) -> u64 { return values[index]; }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = at(&values, 2); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-integer-slice-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(values: &[u64], index: usize) -> u64 { return values[index]; }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = at(&values, 3); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-i32-slice-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn at(values: &[i32], index: usize) -> i32 { return values[index]; }\nfn main() { let values: [i32; 3] = [7, 11, 24]; let result = at(&values, 1); let output = result as u64; println!(\"{output}\"); }"
+  },
+  {
     "id": "result-status-check",
     "kind": "run",
     "features": [
