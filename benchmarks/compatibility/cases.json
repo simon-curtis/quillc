@@ -1135,5 +1135,26 @@
     "edition": "future",
     "rustc_args": ["-Zunstable-options"],
     "source": "pub async fn answer() -> u64 { 42 }"
+  },
+  {
+    "id": "diagnostic-reborrow-conflicts-with-origin",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() { let mut value = 42u64; let first = &mut value; let second = &*first; let third = &mut value; println!(\"{second}\"); println!(\"{third}\"); }"
+  },
+  {
+    "id": "shared-reborrow-ends-before-parent-reuse",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut value = 42u64; let first = &mut value; let second = &*first; println!(\"{second}\"); println!(\"{first}\"); }"
   }
 ]

@@ -1107,33 +1107,53 @@ fn check_local_borrow_conflicts_in_expression(
 ) {
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
-            let mut borrows = Vec::<(String, String, bool)>::new();
+            let mut borrows = Vec::<(String, String, bool, Option<String>)>::new();
             for (index, statement) in statements.iter().enumerate() {
                 if let BodyStatement::Let {
                     name: Some(name),
                     initializer: Some(initializer),
                     ..
                 } = statement
-                    && let Some((place, is_mutable)) = borrowed_local_path(initializer)
+                    && let Some((source, is_mutable, parent)) = borrowed_local_path(initializer)
                 {
-                    for (borrower, borrowed_place, previous_is_mutable) in &borrows {
-                        if borrowed_place == place
+                    let borrowed_place = parent
+                        .and_then(|parent| {
+                            borrows
+                                .iter()
+                                .find(|(borrower, _, _, _)| borrower == parent)
+                                .map(|(_, place, _, _)| place.clone())
+                        })
+                        .unwrap_or_else(|| source.to_owned());
+                    for (borrow_index, (_, place, previous_is_mutable, _)) in
+                        borrows.iter().enumerate()
+                    {
+                        if parent.is_some_and(|parent| {
+                            local_borrow_is_ancestor(
+                                &borrows[borrow_index].0,
+                                parent,
+                                &borrows,
+                            )
+                        }) {
+                            continue;
+                        }
+                        if place == &borrowed_place
                             && (*previous_is_mutable || is_mutable)
-                            && local_used_after(
-                                borrower,
+                            && local_borrow_is_live_after(
+                                borrow_index,
+                                &borrows,
                                 &statements[index + 1..],
                                 tail.as_deref(),
                             )
                         {
                             let message = match (*previous_is_mutable, is_mutable) {
                                 (true, true) => format!(
-                                    "error[E0499]: cannot borrow `{place}` as mutable more than once at a time"
+                                    "error[E0499]: cannot borrow `{borrowed_place}` as mutable more than once at a time"
                                 ),
                                 (false, true) => format!(
-                                    "error[E0502]: cannot borrow `{place}` as mutable because it is also borrowed as immutable"
+                                    "error[E0502]: cannot borrow `{borrowed_place}` as mutable because it is also borrowed as immutable"
                                 ),
                                 (true, false) => format!(
-                                    "error[E0502]: cannot borrow `{place}` as immutable because it is also borrowed as mutable"
+                                    "error[E0502]: cannot borrow `{borrowed_place}` as immutable because it is also borrowed as mutable"
                                 ),
                                 (false, false) => unreachable!("shared borrows may overlap"),
                             };
@@ -1144,7 +1164,12 @@ fn check_local_borrow_conflicts_in_expression(
                             break;
                         }
                     }
-                    borrows.push((name.clone(), place.to_owned(), is_mutable));
+                    borrows.push((
+                        name.clone(),
+                        borrowed_place,
+                        is_mutable,
+                        parent.map(str::to_owned),
+                    ));
                 }
                 check_local_borrow_conflicts_in_statement(statement, diagnostics);
             }
@@ -1284,18 +1309,54 @@ fn check_local_borrow_conflicts_in_statement(
     }
 }
 
-fn borrowed_local_path(expression: &BodyExpr) -> Option<(&str, bool)> {
+fn borrowed_local_path(expression: &BodyExpr) -> Option<(&str, bool, Option<&str>)> {
     match &expression.kind {
         BodyExprKind::Reference {
             mutable,
             expression,
         } => match &expression.kind {
-            BodyExprKind::Path(name) => Some((name, *mutable)),
+            BodyExprKind::Path(name) => Some((name, *mutable, None)),
+            BodyExprKind::Dereference(inner) => match &inner.kind {
+                BodyExprKind::Path(name) => Some((name, *mutable, Some(name))),
+                _ => None,
+            },
             _ => None,
         },
         BodyExprKind::Parenthesized(inner) => borrowed_local_path(inner),
         _ => None,
     }
+}
+
+fn local_borrow_is_live_after(
+    borrow_index: usize,
+    borrows: &[(String, String, bool, Option<String>)],
+    statements: &[BodyStatement],
+    tail: Option<&BodyExpr>,
+) -> bool {
+    let (borrower, _, _, _) = &borrows[borrow_index];
+    local_used_after(borrower, statements, tail)
+        || borrows.iter().enumerate().any(|(child_index, child)| {
+            child.3.as_deref() == Some(borrower)
+                && local_borrow_is_live_after(child_index, borrows, statements, tail)
+        })
+}
+
+fn local_borrow_is_ancestor(
+    ancestor: &str,
+    borrower: &str,
+    borrows: &[(String, String, bool, Option<String>)],
+) -> bool {
+    let mut current = Some(borrower);
+    while let Some(name) = current {
+        if name == ancestor {
+            return true;
+        }
+        current = borrows
+            .iter()
+            .find(|(candidate, _, _, _)| candidate == name)
+            .and_then(|(_, _, _, parent)| parent.as_deref());
+    }
+    false
 }
 
 fn local_used_after(
