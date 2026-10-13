@@ -251,13 +251,14 @@ impl ParseCache {
 
     /// Parse a file using a compact cache entry that omits non-generic
     /// function bodies. Generic bodies remain available for monomorphization.
-    /// A missing compact entry is populated from the ordinary parse cache.
+    /// Returns whether the result is compact. A cache miss performs a full
+    /// parse and returns it once, while also populating both cache entries.
     pub fn parse_file_summary_with_cfg_and_edition(
         &self,
         source: &SourceFile,
         cfg: &quill_cfg::CfgSet,
         edition: &str,
-    ) -> Parse {
+    ) -> (Parse, bool) {
         let source_digest = *blake3::hash(source.text().as_bytes()).as_bytes();
         let mut hasher = blake3::Hasher::new();
         hasher.update(&cfg.fingerprint());
@@ -267,24 +268,24 @@ impl ParseCache {
         let summary_path = self.summary_cache_path(source.path(), &cfg_digest);
         if let Some(parsed) = self.read_cache(&summary_path, &source_digest, &cfg_digest) {
             self.hits.fetch_add(1, Ordering::Relaxed);
-            return parsed;
+            return (parsed, true);
         }
 
-        let parsed = if let Some(parsed) = self.read_cache(&full_path, &source_digest, &cfg_digest)
-        {
-            self.hits.fetch_add(1, Ordering::Relaxed);
-            parsed
-        } else {
-            self.misses.fetch_add(1, Ordering::Relaxed);
-            let parsed = quill_syntax::parse_ast_with_cfg_and_edition(source, cfg, edition);
-            if self
-                .write_cache(&full_path, source_digest, cfg_digest, &parsed)
-                .is_err()
-            {
-                self.write_failures.fetch_add(1, Ordering::Relaxed);
-            }
-            parsed
-        };
+        let (parsed, is_compact) =
+            if let Some(parsed) = self.read_cache(&full_path, &source_digest, &cfg_digest) {
+                self.hits.fetch_add(1, Ordering::Relaxed);
+                (parsed, true)
+            } else {
+                self.misses.fetch_add(1, Ordering::Relaxed);
+                let parsed = quill_syntax::parse_ast_with_cfg_and_edition(source, cfg, edition);
+                if self
+                    .write_cache(&full_path, source_digest, cfg_digest, &parsed)
+                    .is_err()
+                {
+                    self.write_failures.fetch_add(1, Ordering::Relaxed);
+                }
+                (parsed, false)
+            };
         let summary = CachedParse::from_parse_summary(&parsed).into_parse();
         if self
             .write_cache(&summary_path, source_digest, cfg_digest, &summary)
@@ -292,7 +293,11 @@ impl ParseCache {
         {
             self.write_failures.fetch_add(1, Ordering::Relaxed);
         }
-        summary
+        if is_compact {
+            (summary, true)
+        } else {
+            (parsed, false)
+        }
     }
 
     pub fn stats(&self) -> ParseCacheStats {
