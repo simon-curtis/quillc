@@ -27,7 +27,13 @@
         if (x < -pitch || x > w + pitch || y < -pitch || y > h + pitch) continue;
         const u = x / w, v = y / h;
         let tone;
-        if (kind === 'ribbon') {
+        if (kind === 'divider') {
+          const phase = Number(canvas.dataset.phase || 0);
+          const density = .08 + .26 * Math.pow(Math.sin(u * 3.2 + phase), 2);
+          const center = .5 + .045 * Math.sin(u * 11 + phase);
+          tone = density * Math.exp(-Math.pow((v - center) / .23, 2) * 2);
+          tone *= Math.pow(Math.sin(Math.PI * clamp(u)), .35);
+        } else if (kind === 'ribbon') {
           const center = .5 + .22 * Math.sin(u * 6.4 - .8);
           const width = .13 + .085 * Math.sin(u * 4 + .5);
           const distance = (v - center) / width;
