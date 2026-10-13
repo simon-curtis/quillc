@@ -1,0 +1,12 @@
+/packages/*
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+
+/packages/quillc.asc
+  Content-Type: application/pgp-keys
+
+/packages/PKGBUILD
+  Content-Type: text/plain; charset=utf-8
+
+/packages/.SRCINFO
+  Content-Type: text/plain; charset=utf-8

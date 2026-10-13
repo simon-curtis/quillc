@@ -1,0 +1,56 @@
+name: Arch package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'scripts/build-arch.sh'
+      - 'packaging/arch/**'
+      - '.github/workflows/arch-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arch-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and sign in Arch Linux
+        env:
+          ARCH_SIGNING_KEY: ${{ secrets.ARCH_SIGNING_KEY }}
+        run: |
+          test -n "$ARCH_SIGNING_KEY" || { echo 'ARCH_SIGNING_KEY is missing.' >&2; exit 1; }
+          docker run --rm -e ARCH_SIGNING_KEY \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace archlinux:base \
+            bash -euo pipefail -c '
+              pacman -Syu --noconfirm --needed base-devel git python rustup gnupg
+              useradd --create-home --uid "$(stat -c %u /workspace)" builder
+              install -d -m 700 -o builder -g builder /home/builder/.local/share/quillc/gnupg
+              su builder -s /bin/bash -c '\''
+                export GNUPGHOME=/home/builder/.local/share/quillc/gnupg
+                printf "%s" "$ARCH_SIGNING_KEY" | gpg --batch --import
+                unset ARCH_SIGNING_KEY
+                export PATH="$HOME/.cargo/bin:$PATH"
+                scripts/build-arch.sh
+              '\''
+            '
+      - name: Upload signed package and repository artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quillc-arch-${{ github.sha }}
+          path: target/arch-repository/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

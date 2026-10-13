@@ -179,7 +179,7 @@ dependencies = [
 
 [[package]]
 name = "quill-cargo"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "blake3",
  "quill-cfg",
@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "quill-cfg"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "blake3",
  "proc-macro2",
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "quill-codegen"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "object",
  "quill-hir",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "quill-hir"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "quill-source",
  "quill-syntax",
@@ -222,21 +222,21 @@ dependencies = [
 
 [[package]]
 name = "quill-link"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "object",
 ]
 
 [[package]]
 name = "quill-parallel"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "quill-query"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "bincode",
  "blake3",
@@ -250,11 +250,11 @@ dependencies = [
 
 [[package]]
 name = "quill-source"
-version = "0.1.0"
+version = "0.0.1"
 
 [[package]]
 name = "quill-syntax"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "blake3",
  "proc-macro2",
@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "quill-typeck"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "quill-parallel",
  "quill-source",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "quillc"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "bincode",
  "blake3",
