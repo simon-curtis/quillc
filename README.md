@@ -7,6 +7,12 @@ the results in the benchmark reports are measured.
 
 The workspace uses the pinned toolchain in `rust-toolchain.toml`.
 
+## Arch Linux
+
+Quill is available as the signed `quillc` pacman package, starting at version
+`0.0.1`. See [Arch installation and packaging](docs/arch-packaging.md) for the
+public signing key, repository configuration, and build commands.
+
 Quill owns its x86-64 code generator. LLVM and Cranelift are not dependencies
 or backends. The `object` crate serializes Quill's machine code and
 relocations, and the system linker links the resulting ELF objects.

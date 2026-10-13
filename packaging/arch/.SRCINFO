@@ -1,0 +1,21 @@
+pkgbase = quillc
+	pkgdesc = Experimental Rust compiler with a native x86-64 backend
+	pkgver = 0.0.1
+	pkgrel = 1
+	url = https://quill.simoncurtis.dev
+	arch = x86_64
+	license = MIT OR Apache-2.0
+	makedepends = rustup
+	depends = glibc
+	depends = gcc-libs
+	depends = binutils
+	depends = cargo
+	options = !lto
+	options = !debug
+	source = quillc-0.0.1.tar.gz::https://quill.simoncurtis.dev/packages/sources/quillc-0.0.1.tar.gz
+	source = quillc-0.0.1.tar.gz.sig::https://quill.simoncurtis.dev/packages/sources/quillc-0.0.1.tar.gz.sig
+	validpgpkeys = DE2F0B7A28E645AE83F87FB3353C9B63F060C5D8
+	sha256sums = f47be565b52e07e1a96ed7b4fa239be847ecae82e3fef77d3286f416746fec93
+	sha256sums = SKIP
+
+pkgname = quillc

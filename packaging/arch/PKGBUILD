@@ -1,0 +1,61 @@
+# Maintainer: Simon Curtis
+# scripts/build-arch.sh refreshes the source checksum for a checkout build.
+pkgname=quillc
+pkgver=0.0.1
+pkgrel=1
+pkgdesc='Experimental Rust compiler with a native x86-64 backend'
+arch=('x86_64')
+url='https://quill.simoncurtis.dev'
+license=('MIT OR Apache-2.0')
+depends=('glibc' 'gcc-libs' 'binutils' 'cargo')
+makedepends=('rustup')
+options=('!lto' '!debug')
+source=("quillc-${pkgver}.tar.gz::${url}/packages/sources/quillc-${pkgver}.tar.gz"
+        "quillc-${pkgver}.tar.gz.sig::${url}/packages/sources/quillc-${pkgver}.tar.gz.sig")
+sha256sums=('f47be565b52e07e1a96ed7b4fa239be847ecae82e3fef77d3286f416746fec93' 'SKIP')
+validpgpkeys=('DE2F0B7A28E645AE83F87FB3353C9B63F060C5D8')
+
+prepare() {
+    cd "quillc-${pkgver}"
+    local toolchain
+    toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+    if ! rustup run "$toolchain" rustc --version >/dev/null 2>&1; then
+        rustup toolchain install "$toolchain" --profile minimal
+    fi
+    cargo +"$toolchain" fetch --locked --target x86_64-unknown-linux-gnu
+}
+
+build() {
+    cd "quillc-${pkgver}"
+    local toolchain
+    toolchain=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+    # Keep packages portable when built on a machine with tuned distro flags.
+    export CFLAGS='-march=x86-64 -mtune=generic -O2 -pipe'
+    export CXXFLAGS="$CFLAGS"
+    export RUSTFLAGS='-C target-cpu=x86-64'
+    cargo +"$toolchain" build --frozen --release --target x86_64-unknown-linux-gnu -p quillc
+}
+
+check() {
+    cd "quillc-${pkgver}"
+    local binary="$PWD/target/x86_64-unknown-linux-gnu/release/quillc"
+    test "$("$binary" --version)" = "quillc ${pkgver}"
+    mkdir -p "$srcdir/smoke/src"
+    printf '[workspace]\n[package]\nname = "quill-package-smoke"\nversion = "0.0.1"\nedition = "2024"\n' > "$srcdir/smoke/Cargo.toml"
+    printf 'fn main() { println!("Quill package smoke test"); }\n' > "$srcdir/smoke/src/main.rs"
+    "$binary" check-subset "$srcdir/smoke/src/main.rs"
+    "$binary" build-subset "$srcdir/smoke/src/main.rs" -o "$srcdir/smoke/program"
+    test "$("$srcdir/smoke/program")" = 'Quill package smoke test'
+    "$binary" cargo-plan "$srcdir/smoke/Cargo.toml"
+    "$binary" cargo-build-subset "$srcdir/smoke/Cargo.toml" -o "$srcdir/smoke/cargo-program"
+    test "$("$srcdir/smoke/cargo-program")" = 'Quill package smoke test'
+}
+
+package() {
+    cd "quillc-${pkgver}"
+    install -Dm755 target/x86_64-unknown-linux-gnu/release/quillc "$pkgdir/usr/bin/quillc"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/quillc/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/quillc/README.md"
+    install -Dm644 docs/architecture.md "$pkgdir/usr/share/doc/quillc/architecture.md"
+    install -Dm644 BUILD-SOURCE.json "$pkgdir/usr/share/doc/quillc/BUILD-SOURCE.json"
+}
