@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [call-move run](results/2026-10-13-call-move-clean.json) passes 107/107
+curated cases at clean revision `0b32025`. It detects E0505 when a non-`Copy`
+local is moved into a function call while a borrow remains live, and accepts
+the call after the borrow's last use. Quill matches rustc's checked diagnostic
+code, message, and primary location. This 100% corpus result does not establish
+overall Rust compatibility.
+
 The [borrowed-move run](results/2026-10-13-borrowed-move-clean.json) passes
 105/105 curated cases at clean revision `8985c9f`. It detects E0505 when moving
 a non-`Copy` local with a live shared borrow and accepts the move after that
