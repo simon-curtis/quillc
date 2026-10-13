@@ -25,9 +25,9 @@
       ], { duration: 850, easing: ease, delay: Number(entry.target.dataset.entranceDelay || 0) });
     }
   }, { threshold: .08 });
-  const selectors = '.hero-copy > *, .quickstart-copy, .quickstart-commands, .project-overview > h2, .overview-columns > div, .approach > *, .performance-intro > *, .measurement-controls, .benchmark-table, .benchmark-context, .stack > div, .stack-list > div, .inspiration-intro > *, .inspiration-list > div, .inspiration-footnote, .development-heading, .development-copy, .footer';
+  const selectors = '.hero-copy > *, .quickstart-copy, .quickstart-commands, .project-overview > h2, .overview-columns > div, .approach > *, .performance-intro > *, .measurement-controls, .benchmark-table, .benchmark-context, .stack-heading, .compiler-pipeline, .pipeline-panels, .stack-footer, .inspiration-intro > *, .inspiration-list > div, .inspiration-footnote, .development-heading, .development-copy, .footer';
   document.querySelectorAll(selectors).forEach(element => entrances.observe(element));
-  document.querySelectorAll('.hero-copy > *, .stack-list > div').forEach((element, index) => {
+  document.querySelectorAll('.hero-copy > *').forEach((element, index) => {
     element.dataset.entranceDelay = String((index % 3) * 70);
   });
 

@@ -11,6 +11,7 @@
   <script src="assets/benchmarks.js" defer></script>
   <script src="assets/print-fields.js" defer></script>
   <script src="assets/project-status.js" defer></script>
+  <script src="assets/pipeline.js" defer></script>
   <script src="/assets/motion.js" defer></script>
   <script src="/assets/logo.js" defer></script>
   <link rel="icon" href="/assets/quill-feather.svg" type="image/svg+xml">
@@ -123,13 +124,38 @@
     </section>
 
     <section class="stack shell" id="stack" aria-labelledby="stack-title">
-      <div><h2 id="stack-title">Inside Quill.</h2><p class="stack-description">Written in Rust, with our own path from source to machine code.</p><a class="text-link" href="docs/architecture.md">Explore the architecture <span aria-hidden="true">↗</span></a></div>
-      <dl class="stack-list">
-        <div><dt>Rust <span>2024 edition</span></dt><dd>The compiler itself, organized into focused crates for syntax, checking, queries, code generation, and linking.</dd></div>
-        <div><dt>Syn</dt><dd>Rust syntax parsing, feeding Quill’s own intermediate representation and type checker.</dd></div>
-        <div><dt>Rayon</dt><dd>Parallel execution behind Quill’s scheduler. Cached queries reuse completed work between builds.</dd></div>
-        <div><dt>Native x86-64</dt><dd>Our own machine-code generator. The <code>object</code> crate writes ELF objects; the system linker produces Linux executables.</dd></div>
-      </dl>
+      <div class="stack-heading">
+        <h2 id="stack-title">From Rust to machine code.</h2>
+        <p>Written in Rust, 2024 edition. Here’s how the current native path fits together.</p>
+      </div>
+      <div class="compiler-pipeline" aria-label="Compiler stages">
+        <a class="pipeline-step" id="stage-parse" href="#pipeline-parse"><span>Parse</span><small>Syn</small></a>
+        <a class="pipeline-step" id="stage-check" href="#pipeline-check"><span>Check</span><small>Quill HIR &amp; type checker</small></a>
+        <a class="pipeline-step" id="stage-generate" href="#pipeline-generate"><span>Generate</span><small>Quill x86-64 backend</small></a>
+        <a class="pipeline-step" id="stage-link" href="#pipeline-link"><span>Link</span><small>object &amp; system ld</small></a>
+      </div>
+      <div class="pipeline-panels">
+        <section id="pipeline-parse" class="pipeline-panel" aria-labelledby="stage-parse">
+          <h3>Read the source.</h3>
+          <p>Syn parses Rust syntax. Quill retains source locations and module information, and caches parsed files so unchanged source can be reused.</p>
+        </section>
+        <section id="pipeline-check" class="pipeline-panel" aria-labelledby="stage-check">
+          <h3>Resolve and check.</h3>
+          <p>Quill’s intermediate representation connects names, functions, and types. Its own checker validates the supported subset, with cached body checks reused when their inputs stay the same.</p>
+        </section>
+        <section id="pipeline-generate" class="pipeline-panel" aria-labelledby="stage-generate">
+          <h3>Emit native instructions.</h3>
+          <p>Quill’s backend lowers supported functions into x86-64 machine code. It owns instruction selection, code emission, and relocations; LLVM and Cranelift are not dependencies.</p>
+        </section>
+        <section id="pipeline-link" class="pipeline-panel" aria-labelledby="stage-link">
+          <h3>Produce an executable.</h3>
+          <p>The object crate packages generated code into ELF objects. The system linker, ld, combines them into a Linux executable.</p>
+        </section>
+      </div>
+      <div class="stack-footer">
+        <p><span>Rayon</span> provides the worker pool for independent compiler tasks.</p>
+        <a class="text-link" href="docs/architecture.md">Explore the architecture <span aria-hidden="true">↗</span></a>
+      </div>
     </section>
 
     <section class="inspiration shell" id="inspiration" aria-labelledby="inspiration-title">
