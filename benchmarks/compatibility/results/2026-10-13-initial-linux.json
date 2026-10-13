@@ -1,0 +1,207 @@
+{
+  "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "quillc": "/home/simon/git/quillc/target/release/quillc",
+  "passed": 7,
+  "total": 11,
+  "percent": 63.6,
+  "results": [
+    {
+      "case": "hello-world",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "scalar-calls-and-arithmetic",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "recursive-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "integer-match",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "while-loop",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: `println!` captures must be strings or unsigned integers",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null
+    },
+    {
+      "case": "integer-range-for-loop",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: `println!` captures must be strings or unsigned integers",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null
+    },
+    {
+      "case": "struct-field-and-inherent-method",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: struct field initializer does not match its supported field type",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null
+    },
+    {
+      "case": "fixed-array-indexing",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported expression: Unsupported",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null
+    },
+    {
+      "case": "inline-module-import",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "generic-copy-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    },
+    {
+      "case": "string-slice-helper",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true
+    }
+  ],
+  "feature_coverage": [
+    {
+      "id": "control-flow",
+      "tracker_status": "partial",
+      "cases": 3,
+      "passed": 1,
+      "failed": [
+        "while-loop",
+        "integer-range-for-loop"
+      ]
+    },
+    {
+      "id": "enums-and-match",
+      "tracker_status": "partial",
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "functions-and-scalar-arithmetic",
+      "tracker_status": "partial",
+      "cases": 3,
+      "passed": 3,
+      "failed": []
+    },
+    {
+      "id": "generics",
+      "tracker_status": "partial",
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "modules-and-imports",
+      "tracker_status": "partial",
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "println--and-format",
+      "tracker_status": "partial",
+      "cases": 11,
+      "passed": 7,
+      "failed": [
+        "while-loop",
+        "integer-range-for-loop",
+        "struct-field-and-inherent-method",
+        "fixed-array-indexing"
+      ]
+    },
+    {
+      "id": "structs-and-inherent-methods",
+      "tracker_status": "partial",
+      "cases": 1,
+      "passed": 0,
+      "failed": [
+        "struct-field-and-inherent-method"
+      ]
+    },
+    {
+      "id": "tuples--arrays--and-slices",
+      "tracker_status": "partial",
+      "cases": 1,
+      "passed": 0,
+      "failed": [
+        "fixed-array-indexing"
+      ]
+    },
+    {
+      "id": "utf-8-string-literal-helper-calls",
+      "tracker_status": "available",
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    }
+  ]
+}
