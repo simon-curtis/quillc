@@ -331,8 +331,8 @@ export function renderStats(html, data) {
   if (data.crates) {
     const report = data.crates.value;
     if (!Array.isArray(report.packages)) throw new Error(`Invalid crate report: ${data.crates.path}`);
-    const outcome = (result) => Number.isInteger(result?.exit_code)
-      ? result.exit_code === 0 ? "Pass" : "Rejected"
+    const outcome = (result, failureLabel = "Rejected") => Number.isInteger(result?.exit_code)
+      ? result.exit_code === 0 ? "Pass" : failureLabel
       : "Not measured";
     const packages = report.packages;
     const parsed = packages.filter(p => p.quill_cargo_parse?.exit_code === 0).length;
@@ -342,7 +342,7 @@ export function renderStats(html, data) {
       <th scope="row">${escape(p.name)} <span>${escape(p.version)}</span></th>
       <td>${Number.isFinite(p.rust_source_lines) ? number(p.rust_source_lines) : "—"}</td>
       <td>${outcome(p.quill_cargo_parse)}</td>
-      <td>${outcome(p.quill_cargo_check_subset)}</td>
+      <td>${outcome(p.quill_cargo_check_subset, "Failed")}</td>
       <td>Not measured</td>
       <td>${outcome(p.rustc_cargo_check)}</td>
     </tr>`).join(""));
