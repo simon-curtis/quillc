@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13",
+  "experiment": "Generic trait implementation lookup scaling in the type checker",
+  "measurement": "Release-mode Rust benchmark; parse performed once, then seven type-check iterations measured per version. The workload validates the path by asserting a deliberately wrong trait implementation is diagnosed.",
+  "toolchain": "nightly-2026-08-23",
+  "host": {
+    "cpu": "Intel Core i7-8700K",
+    "logical_cpus": 12,
+    "architecture": "x86_64"
+  },
+  "workload": {
+    "distinct_traits": 1000,
+    "function_items": 3001,
+    "source_lines": 4003,
+    "description": "Each trait has one required method, one local implementation for Item, one generic bounded function, and one call site."
+  },
+  "baseline": {
+    "revision": "6987872",
+    "median_seconds": 0.25791469,
+    "samples_seconds": [
+      0.252342341,
+      0.253740909,
+      0.256819498,
+      0.25791469,
+      0.258589043,
+      0.265814841,
+      0.268393091
+    ]
+  },
+  "candidate": {
+    "revision": "e029c62",
+    "median_seconds": 0.004022042,
+    "samples_seconds": [
+      0.003980359,
+      0.00399195,
+      0.004013913,
+      0.004022042,
+      0.004024315,
+      0.004139612,
+      0.004555707
+    ]
+  },
+  "speedup": 64.12530997935875,
+  "reproduce": "cargo +nightly-2026-08-23 bench -p quill-typeck --bench trait_impl_index -- 1000",
+  "memory": "Not measured for this microbenchmark."
+}
