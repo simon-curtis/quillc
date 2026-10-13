@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [borrow-conflict run](results/2026-10-13-borrow-conflict-clean.json)
+passes 95/95 curated cases at clean revision `a0657a6`. It checks E0499 when
+two named mutable references to the same local are simultaneously live, and
+checks that a second borrow is accepted after the first reference's last use.
+Quill matches rustc's diagnostic code, message, and primary location. This
+100% corpus result does not establish overall Rust compatibility.
+
 The [match-flow run](results/2026-10-13-match-flow-clean.json) passes 93/93
 curated cases at clean revision `c544cb4`. It checks E0382 for moving a
 non-`Copy` match scrutinee through a binding and later arm use, verifies that
