@@ -200,6 +200,7 @@ fn find_enum_variant<'a>(
 struct SignatureIndex<'a> {
     exact: HashMap<&'a str, Vec<&'a FunctionItem>>,
     suffix: HashMap<&'a str, Vec<&'a FunctionItem>>,
+    methods: HashMap<&'a str, Vec<&'a FunctionItem>>,
 }
 
 fn matching_signatures<'a>(signatures: &SignatureIndex<'a>, path: &str) -> Vec<&'a FunctionItem> {
@@ -233,11 +234,10 @@ fn method_signatures<'a>(
         return Vec::new();
     };
     let named_candidates: Vec<_> = signatures
-        .values()
+        .get(method)
+        .into_iter()
         .flatten()
-        .filter(|function| {
-            function.name.rsplit("::").next() == Some(method) && method_owner(function).is_some()
-        })
+        .filter(|function| method_owner(function).is_some())
         .copied()
         .collect();
     let exact: Vec<_> = named_candidates
@@ -701,8 +701,14 @@ fn check_selected_functions<'a>(
     let signatures: SignatureIndex<'_> = {
         let mut exact = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut suffix = HashMap::<&str, Vec<&FunctionItem>>::new();
+        let mut methods = HashMap::<&str, Vec<&FunctionItem>>::new();
         for function in declarations {
             add_signature_suffixes(&mut exact, &mut suffix, function);
+            if method_owner(function).is_some()
+                && let Some(method) = function.name.rsplit("::").next()
+            {
+                methods.entry(method).or_default().push(function);
+            }
             // Root-module items remain directly addressable by their source
             // name even when stored under a canonical crate-qualified path.
             if function.scope.is_empty()
@@ -714,8 +720,17 @@ fn check_selected_functions<'a>(
         }
         for function in &external_functions {
             add_signature_suffixes(&mut exact, &mut suffix, function);
+            if method_owner(function).is_some()
+                && let Some(method) = function.name.rsplit("::").next()
+            {
+                methods.entry(method).or_default().push(function);
+            }
         }
-        SignatureIndex { exact, suffix }
+        SignatureIndex {
+            exact,
+            suffix,
+            methods,
+        }
     };
     let functions: Vec<_> = functions
         .into_iter()
@@ -2723,7 +2738,7 @@ fn infer_with_structs(
                 );
                 return accumulator_type;
             }
-            let candidates = method_signatures(&signatures.exact, &receiver_type, method);
+            let candidates = method_signatures(&signatures.methods, &receiver_type, method);
             if candidates.len() > 1 {
                 diagnostics.push(TypeDiagnostic {
                     span: expression.span.clone(),
