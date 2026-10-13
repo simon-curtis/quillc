@@ -57,6 +57,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [fixed-array runtime-index run](results/2026-10-13-fixed-array-runtime-index-clean.json)
+passes 71/71 cases at clean revision `39f0b91`. It adds runtime `u64`/`usize`
+subscripts for selected immutable integer arrays and checks both a successful
+lookup and rustc-matching bounds-panic text and location. Other array types,
+mutation, and indexing contexts remain incomplete. This curated pass rate is
+not an overall Rust compatibility percentage.
+
 The [Vec mutable-assignment run](results/2026-10-13-vec-index-assignment-clean.json)
 passes 69/69 cases at clean revision `5ad3860`. It adds in-range and
 out-of-range scalar Vec indexing in mutable assignment expressions; the latter
