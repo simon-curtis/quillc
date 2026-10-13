@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [Vec explicit-return run](results/2026-10-13-vec-index-returns-clean.json)
+passes 67/67 cases at clean revision `99b3c77`. It adds in-range and
+out-of-range scalar Vec indexing in explicit return expressions; the latter
+matches rustc's bounds-panic output. This is curated regression coverage, not
+an overall Rust compatibility percentage.
+
 The [Vec scalar-index run](results/2026-10-13-vec-u64-index.json) adds
 rustc differential cases for `Vec<u64>` growth beyond its initial capacity,
 `Vec<i32>` and `Vec<u64>` local indexing, and integer iteration. Quill passes
