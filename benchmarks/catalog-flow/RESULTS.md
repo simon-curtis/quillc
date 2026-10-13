@@ -62,6 +62,17 @@ this fixture, but semantic CPU-time speedup remains below 3×. These results
 do not establish general Rust compiler performance. The previous clean run at
 `798c9df` is retained in [`results-20261013-798c9df.json`](results-20261013-798c9df.json).
 
+## Phase CPU attribution
+
+One profiled semantic edit on compiler revision `8fabed9` measured source-graph
+loading at 14.14 ms wall and 80.13 ms process CPU. The parse cache reported 49
+hits and one miss; body type checking reported 506 cache hits and one miss.
+Package-object preparation used 28.93 ms process CPU, type checking 24.64 ms,
+and call resolution 16.26 ms. Process CPU includes worker threads, so it can
+exceed wall time. This is an attribution sample, not a repeated speed result;
+the [raw profile](../results/phase-cpu-20261013.json) records the method and
+cache counters.
+
 A nested call-resolution cache and borrowed qualified-call traversal were
 measured against the same fixture. The candidate did not reduce the semantic
 incremental medians: wall time rose 0.42% and CPU time rose 1.05%, with

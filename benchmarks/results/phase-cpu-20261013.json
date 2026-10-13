@@ -1,0 +1,540 @@
+{
+  "schema_version": 1,
+  "experiment": "Attribute process CPU time by Quill compiler phase for a semantic edit",
+  "compiler_revision": "8fabed9",
+  "compiler_binary_sha256": "ea717b0245254f6169657bb142c4d32204b2a8844b1c28fdc671e1b1ed536b6b",
+  "toolchain": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "host": {
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpu_count": 12
+  },
+  "workload": {
+    "fixture": "benchmarks/catalog-flow",
+    "rust_source_lines": 30992,
+    "semantic_edit": "1..=128 changed to 1..=127",
+    "samples_per_state": 1
+  },
+  "method": "QUILL_PROFILE uses CLOCK_PROCESS_CPUTIME_ID, which aggregates CPU across threads in the compiler process. One baseline invocation populated caches; the next invocation edited one literal and recorded the semantic rebuild. QUILL_CACHE_STATS recorded parse and per-file type-check cache counters.",
+  "baseline": {
+    "phases": {
+      "warm locate workspace": {
+        "wall_ms": 0.067,
+        "process_cpu_ms": 0.067
+      },
+      "warm Cargo build cache miss": {
+        "wall_ms": 0.167,
+        "process_cpu_ms": 0.166
+      },
+      "load Cargo workspace": {
+        "wall_ms": 121.854,
+        "process_cpu_ms": 1.14
+      },
+      "discover Cargo binary targets": {
+        "wall_ms": 0.001,
+        "process_cpu_ms": 0.001
+      },
+      "begin target compilation": {
+        "wall_ms": 0.001,
+        "process_cpu_ms": 0.001
+      },
+      "select Cargo binary target": {
+        "wall_ms": 0.007,
+        "process_cpu_ms": 0.007
+      },
+      "parse source graph": {
+        "wall_ms": 62.816,
+        "process_cpu_ms": 589.586
+      },
+      "compute semantic cache key": {
+        "wall_ms": 7.052,
+        "process_cpu_ms": 34.198
+      },
+      "compute source object cache keys": {
+        "wall_ms": 1.66,
+        "process_cpu_ms": 1.657
+      },
+      "resolve imports and calls": {
+        "wall_ms": 8.498,
+        "process_cpu_ms": 20.177
+      },
+      "parallel type-check": {
+        "wall_ms": 62.628,
+        "process_cpu_ms": 648.814
+      },
+      "prepare combined HIR input": {
+        "wall_ms": 13.314,
+        "process_cpu_ms": 24.031
+      },
+      "prepare and fetch package objects": {
+        "wall_ms": 44.837,
+        "process_cpu_ms": 369.233
+      },
+      "link package objects": {
+        "wall_ms": 8.231,
+        "process_cpu_ms": 0.144
+      },
+      "type-check, codegen, and link": {
+        "wall_ms": 148.569,
+        "process_cpu_ms": 1076.252
+      }
+    },
+    "parse_cache": {
+      "hits": 0,
+      "misses": 50,
+      "invalid": 0,
+      "write_failures": 0
+    },
+    "type_check_cache_per_file": [
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 2,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 1,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 0,
+        "misses": 84,
+        "invalid": 0,
+        "write_failures": 0
+      }
+    ],
+    "type_check_cache_totals": {
+      "hits": 0,
+      "misses": 3454,
+      "invalid": 0,
+      "write_failures": 0
+    },
+    "package_object_cache_hits": []
+  },
+  "semantic_edit": {
+    "phases": {
+      "warm locate workspace": {
+        "wall_ms": 0.031,
+        "process_cpu_ms": 0.031
+      },
+      "warm read and decode index": {
+        "wall_ms": 0.233,
+        "process_cpu_ms": 0.229
+      },
+      "warm validate compiler and environment": {
+        "wall_ms": 0.024,
+        "process_cpu_ms": 0.024
+      },
+      "warm scan input stamps": {
+        "wall_ms": 0.479,
+        "process_cpu_ms": 0.479
+      },
+      "warm Cargo build cache miss": {
+        "wall_ms": 0.792,
+        "process_cpu_ms": 0.788
+      },
+      "load Cargo workspace": {
+        "wall_ms": 0.588,
+        "process_cpu_ms": 0.586
+      },
+      "discover Cargo binary targets": {
+        "wall_ms": 0.002,
+        "process_cpu_ms": 0.002
+      },
+      "begin target compilation": {
+        "wall_ms": 0.001,
+        "process_cpu_ms": 0.001
+      },
+      "select Cargo binary target": {
+        "wall_ms": 0.009,
+        "process_cpu_ms": 0.009
+      },
+      "parse source graph": {
+        "wall_ms": 14.143,
+        "process_cpu_ms": 80.131
+      },
+      "compute semantic cache key": {
+        "wall_ms": 4.138,
+        "process_cpu_ms": 5.428
+      },
+      "compute source object cache keys": {
+        "wall_ms": 2.873,
+        "process_cpu_ms": 2.85
+      },
+      "resolve imports and calls": {
+        "wall_ms": 13.29,
+        "process_cpu_ms": 16.257
+      },
+      "parallel type-check": {
+        "wall_ms": 7.681,
+        "process_cpu_ms": 24.644
+      },
+      "prepare combined HIR input": {
+        "wall_ms": 6.595,
+        "process_cpu_ms": 11.437
+      },
+      "prepare and fetch package objects": {
+        "wall_ms": 16.873,
+        "process_cpu_ms": 28.933
+      },
+      "link package objects": {
+        "wall_ms": 8.31,
+        "process_cpu_ms": 0.138
+      },
+      "type-check, codegen, and link": {
+        "wall_ms": 57.067,
+        "process_cpu_ms": 86.602
+      }
+    },
+    "parse_cache": {
+      "hits": 49,
+      "misses": 1,
+      "invalid": 1,
+      "write_failures": 0
+    },
+    "type_check_cache_per_file": [
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 1,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 84,
+        "misses": 0,
+        "invalid": 0,
+        "write_failures": 0
+      },
+      {
+        "hits": 1,
+        "misses": 1,
+        "invalid": 1,
+        "write_failures": 0
+      }
+    ],
+    "type_check_cache_totals": {
+      "hits": 506,
+      "misses": 1,
+      "invalid": 1,
+      "write_failures": 0
+    },
+    "package_object_cache_hits": [
+      "path+file:///tmp/quillc-exp-callcache/benchmarks/catalog-flow/catalog-flow#0.1.0::catalog-flow"
+    ]
+  },
+  "semantic_edit_runtime_output_check": "Paired five-round benchmark at this compiler revision separately verified rustc and Quill outputs.",
+  "limitations": "One phase sample, collected for attribution rather than a performance comparison. Phase process CPU includes worker threads; it does not include child-process CPU."
+}
