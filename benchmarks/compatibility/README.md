@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [match-flow run](results/2026-10-13-match-flow-clean.json) passes 93/93
+curated cases at clean revision `c544cb4`. It checks E0382 for moving a
+non-`Copy` match scrutinee through a binding and later arm use, verifies that
+wildcard matches and moves in sibling arms are tracked independently, and
+compares positive semantic acceptance without code generation. This 100%
+corpus result does not establish overall Rust compatibility.
+
 The [match-move run](results/2026-10-13-match-move-clean.json) passes 91/91
 curated cases at clean revision `714f984`. It checks E0382 for a by-value
 match binding used after the match and checks that a wildcard match still
