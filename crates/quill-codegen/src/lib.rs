@@ -3990,14 +3990,10 @@ fn lower_statements(
                         statements: else_statements,
                         tail: Some(else_tail),
                     } = &else_branch.kind
-                    && (!then_statements.is_empty() || !else_statements.is_empty())
+                    && (!then_statements.is_empty()
+                        || !else_statements.is_empty()
+                        || has_short_circuit_index_rhs(condition))
                 {
-                    let condition = condition_from_expression_with_structs(
-                        condition,
-                        environment,
-                        functions,
-                        structs,
-                    )?;
                     let lower_value_branch =
                         |statements: &[BodyStatement],
                          tail: &BodyExpr,
@@ -4042,11 +4038,16 @@ fn lower_statements(
                         slot,
                         value: else_value.clone(),
                     });
-                    lowered.push(Statement::If {
+                    lowered.extend(lower_condition_if(
                         condition,
                         then_body,
                         else_body,
-                    });
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
                     let local_value = if is_word_value(&then_value) {
                         generic_argument_type(&then_value).map_or(
                             Value::WordLocal(slot),
@@ -8142,6 +8143,82 @@ fn lower_condition_if(
             });
             Ok(lowered)
         }
+    }
+}
+
+fn has_short_circuit_index_rhs(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Parenthesized(inner) | BodyExprKind::Not(inner) => {
+            has_short_circuit_index_rhs(inner)
+        }
+        BodyExprKind::Binary {
+            operator: BinaryOperator::And | BinaryOperator::Or,
+            left,
+            right,
+        } => {
+            expression_contains_index(right)
+                || has_short_circuit_index_rhs(left)
+                || has_short_circuit_index_rhs(right)
+        }
+        _ => false,
+    }
+}
+
+fn expression_contains_index(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Index { .. } => true,
+        BodyExprKind::Binary { left, right, .. } => {
+            expression_contains_index(left) || expression_contains_index(right)
+        }
+        BodyExprKind::Call { arguments, .. } | BodyExprKind::Tuple(arguments) => {
+            arguments.iter().any(expression_contains_index)
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            expression_contains_index(receiver)
+                || arguments.iter().any(expression_contains_index)
+        }
+        BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::Reference { expression, .. }
+        | BodyExprKind::Dereference(expression) => expression_contains_index(expression),
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expression_contains_index(condition)
+                || expression_contains_index(then_branch)
+                || else_branch
+                    .as_deref()
+                    .is_some_and(expression_contains_index)
+        }
+        BodyExprKind::Block { statements, tail } => {
+            statements.iter().any(|statement| match statement {
+                BodyStatement::Let {
+                    initializer: Some(initializer),
+                    ..
+                }
+                | BodyStatement::Assign {
+                    value: initializer,
+                    ..
+                }
+                | BodyStatement::Expression {
+                    expression: initializer,
+                    ..
+                } => expression_contains_index(initializer),
+                _ => false,
+            }) || tail
+                .as_deref()
+                .is_some_and(expression_contains_index)
+        }
+        _ => false,
     }
 }
 
