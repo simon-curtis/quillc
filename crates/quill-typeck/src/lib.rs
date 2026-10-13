@@ -9,6 +9,8 @@ use quill_syntax::{
 };
 use serde::{Deserialize, Serialize};
 
+mod borrowck;
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TypeDiagnostic {
     pub span: Range<usize>,
@@ -70,7 +72,7 @@ enum Ty {
     Iterator(Box<Ty>),
     Into(Box<Ty>),
     Tuple(Vec<Ty>),
-    Reference(Box<Ty>),
+    Reference(Box<Ty>, bool),
     Option(Box<Ty>),
     Result(Box<Ty>, Box<Ty>),
     Named(String),
@@ -122,7 +124,7 @@ impl Ty {
             Self::Iterator(_) => "iterator",
             Self::Into(_) => "Into",
             Self::Tuple(_) => "tuple",
-            Self::Reference(_) => "reference",
+            Self::Reference(_, _) => "reference",
             Self::Option(_) => "Option",
             Self::Result(_, _) => "Result",
             Self::Named(name) if name.starts_with("\0quill_generic:") => "generic parameter",
@@ -227,6 +229,16 @@ fn type_from_function_syntax(
     structs: &[StructSignature],
 ) -> Ty {
     let text = text.trim();
+    if text == "Self" {
+        return method_owner(function).map_or(Ty::Unknown, |owner| {
+            let resolved = type_from_syntax(owner, structs);
+            if resolved == Ty::Unknown {
+                Ty::Named(owner.to_owned())
+            } else {
+                resolved
+            }
+        });
+    }
     if let Some(generic) = function
         .generic_parameters
         .iter()
@@ -241,11 +253,14 @@ fn type_from_function_syntax(
                 .find(char::is_whitespace)
                 .map_or("", |index| reference[index..].trim_start())
         } else {
-            reference.strip_prefix("mut ").unwrap_or(reference)
+            reference
         };
-        return Ty::Reference(Box::new(type_from_function_syntax(
-            referent, function, structs,
-        )));
+        let mutable = referent.starts_with("mut ");
+        let referent = referent.strip_prefix("mut ").unwrap_or(referent);
+        return Ty::Reference(
+            Box::new(type_from_function_syntax(referent, function, structs)),
+            mutable,
+        );
     }
     if let Some(value) = text.strip_prefix("mut ") {
         return type_from_function_syntax(value, function, structs);
@@ -470,14 +485,37 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
                 .find(char::is_whitespace)
                 .map_or("", |index| reference[index..].trim_start())
         } else {
-            reference.strip_prefix("mut ").unwrap_or(reference)
+            reference
         };
-        return Ty::Reference(Box::new(type_from_syntax(referent, structs)));
+        let mutable = referent.starts_with("mut ");
+        let referent = referent.strip_prefix("mut ").unwrap_or(referent);
+        return Ty::Reference(Box::new(type_from_syntax(referent, structs)), mutable);
     }
     if let Some((ok_type, err_type)) = generic_pair(text, "Result") {
         return Ty::Result(
             Box::new(type_from_syntax(ok_type, structs)),
             Box::new(type_from_syntax(err_type, structs)),
+        );
+    }
+    // A crate-local `type Result<T> = std::result::Result<T, Error>` alias is
+    // common in I/O libraries. Its error type is unavailable until aliases
+    // are part of HIR, but preserving the Result shape still allows `?` and
+    // `Ok` payloads to be checked without inventing an error type.
+    if let Some(ok_type) = generic_single(text, "Result") {
+        return Ty::Result(
+            Box::new(type_from_syntax(ok_type, structs)),
+            Box::new(Ty::Unknown),
+        );
+    }
+    // std::io::Result<T> and io::Result<T> are aliases for
+    // Result<T, std::io::Error>. Keeping the error type explicit lets `?`
+    // propagate through ordinary Read/Write helper methods.
+    if let Some(ok_type) = generic_single(text, "std::io::Result")
+        .or_else(|| generic_single(text, "io::Result"))
+    {
+        return Ty::Result(
+            Box::new(type_from_syntax(ok_type, structs)),
+            Box::new(Ty::Named("std::io::Error".to_owned())),
         );
     }
     if let Some(value_type) =
@@ -548,10 +586,13 @@ fn infer_generic_type(type_text: &str, actual: &Ty, generic: &str) -> Option<Ty>
         return Some(actual.clone());
     }
     if let Some(referent) = type_text.strip_prefix('&') {
-        let Ty::Reference(actual_referent) = actual else {
+        let Ty::Reference(actual_referent, actual_mutable) = actual else {
             return None;
         };
         let referent = referent.trim_start();
+        if referent.starts_with("mut ") && !*actual_mutable {
+            return None;
+        }
         let referent = referent.strip_prefix("mut ").unwrap_or(referent);
         return infer_generic_type(referent, actual_referent, generic);
     }
@@ -627,7 +668,7 @@ fn is_option_none_path(path: &str) -> bool {
 }
 
 fn without_references(mut ty: &Ty) -> &Ty {
-    while let Ty::Reference(inner) = ty {
+    while let Ty::Reference(inner, _) = ty {
         ty = inner;
     }
     ty
@@ -643,8 +684,8 @@ fn is_cloneable(ty: &Ty, structs: &[StructSignature]) -> bool {
         | Ty::InferFloat
         | Ty::String
         | Ty::StringSlice
-        | Ty::Reference(_)
         | Ty::Unknown => true,
+        Ty::Reference(_, mutable) => !*mutable,
         Ty::Vector(item) | Ty::Slice(item) | Ty::Array(item, _) => is_cloneable(item, structs),
         Ty::Map(key, value) => is_cloneable(key, structs) && is_cloneable(value, structs),
         Ty::Tuple(items) => items.iter().all(|item| is_cloneable(item, structs)),
@@ -1047,6 +1088,14 @@ fn check_one_function(
         function_structs,
         &mut diagnostics,
     );
+    diagnostics.extend(
+        borrowck::check(function, body, signatures, function_structs, &locals)
+            .into_iter()
+            .map(|diagnostic| TypeDiagnostic {
+                span: diagnostic.span,
+                message: diagnostic.message,
+            }),
+    );
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
     check_loop_control(body, 0, &mut diagnostics);
     if strict_calls {
@@ -1106,7 +1155,7 @@ fn check_move_expression(
             let Some(ty) = locals.get(name) else {
                 return;
             };
-            if moved.contains(name) {
+            if move_state_contains(name, moved) {
                 diagnostics.push(TypeDiagnostic {
                     span: expression.span.clone(),
                     message: format!(
@@ -1138,6 +1187,20 @@ fn check_move_expression(
         ),
         BodyExprKind::Block { statements, tail } => {
             let original_locals = locals.clone();
+            let original_names: HashSet<String> = original_locals.keys().cloned().collect();
+            let original_moved = moved.clone();
+            let shadowed_names: HashSet<String> = statements
+                .iter()
+                .flat_map(|statement| match statement {
+                    BodyStatement::Let {
+                        name: Some(name), ..
+                    } => vec![name.clone()],
+                    BodyStatement::LetTuple { names, .. }
+                    | BodyStatement::ForEach { names, .. } => names.clone(),
+                    BodyStatement::ForRange { name, .. } => vec![name.clone()],
+                    _ => Vec::new(),
+                })
+                .collect();
             for statement in statements {
                 match statement {
                     BodyStatement::Let {
@@ -1211,7 +1274,7 @@ fn check_move_expression(
                             moved,
                             diagnostics,
                         );
-                        moved.remove(name);
+                        clear_move_state(name, moved);
                     }
                     BodyStatement::Expression { expression, .. } => check_move_expression(
                         expression,
@@ -1263,21 +1326,63 @@ fn check_move_expression(
                             &mut loop_moved,
                             diagnostics,
                         );
+                        loop_moved.extend(moved.iter().cloned());
+                        *moved = loop_moved;
+                    }
+                    BodyStatement::Loop { body, .. } => {
+                        let mut loop_locals = locals.clone();
+                        let mut loop_moved = moved.clone();
+                        check_move_expression(
+                            body,
+                            false,
+                            signatures,
+                            struct_signatures,
+                            &mut loop_locals,
+                            &mut loop_moved,
+                            diagnostics,
+                        );
+                        loop_moved.extend(moved.iter().cloned());
+                        *moved = loop_moved;
                     }
                     BodyStatement::ForRange {
-                        start, end, body, ..
+                        name,
+                        start,
+                        end,
+                        body,
+                        ..
                     } => {
-                        for value in [start, end, body] {
-                            check_move_expression(
-                                value,
-                                false,
-                                signatures,
-                                struct_signatures,
-                                locals,
-                                moved,
-                                diagnostics,
-                            );
-                        }
+                        check_move_expression(
+                            start,
+                            true,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        check_move_expression(
+                            end,
+                            true,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        let mut loop_locals = locals.clone();
+                        loop_locals.insert(name.clone(), Ty::Unknown);
+                        let mut loop_moved = moved.clone();
+                        check_move_expression(
+                            body,
+                            false,
+                            signatures,
+                            struct_signatures,
+                            &mut loop_locals,
+                            &mut loop_moved,
+                            diagnostics,
+                        );
+                        loop_moved.extend(moved.iter().cloned());
+                        *moved = loop_moved;
                     }
                     BodyStatement::ForEach { iterator, body, .. } => {
                         check_move_expression(
@@ -1289,15 +1394,19 @@ fn check_move_expression(
                             moved,
                             diagnostics,
                         );
+                        let mut loop_locals = locals.clone();
+                        let mut loop_moved = moved.clone();
                         check_move_expression(
                             body,
                             false,
                             signatures,
                             struct_signatures,
-                            locals,
-                            moved,
+                            &mut loop_locals,
+                            &mut loop_moved,
                             diagnostics,
                         );
+                        loop_moved.extend(moved.iter().cloned());
+                        *moved = loop_moved;
                     }
                     _ => {}
                 }
@@ -1313,7 +1422,100 @@ fn check_move_expression(
                     diagnostics,
                 );
             }
+            // Bindings introduced in this block cease to exist at its closing
+            // brace. A moved inner binding must not poison an outer binding
+            // with the same spelling after the block.
+            moved.retain(|name| original_names.contains(name));
+            for name in shadowed_names.intersection(&original_names) {
+                if original_moved.contains(name) {
+                    moved.insert(name.clone());
+                } else {
+                    moved.remove(name);
+                }
+            }
             *locals = original_locals;
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_move_expression(
+                condition,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            let incoming = moved.clone();
+            let mut then_moved = incoming.clone();
+            let mut then_locals = locals.clone();
+            check_move_expression(
+                then_branch,
+                consume,
+                signatures,
+                struct_signatures,
+                &mut then_locals,
+                &mut then_moved,
+                diagnostics,
+            );
+            let mut else_moved = incoming;
+            if let Some(else_branch) = else_branch {
+                let mut else_locals = locals.clone();
+                check_move_expression(
+                    else_branch,
+                    consume,
+                    signatures,
+                    struct_signatures,
+                    &mut else_locals,
+                    &mut else_moved,
+                    diagnostics,
+                );
+            }
+            // A value is considered moved if any reachable branch consumes
+            // it; this is the conservative join used by definite-initialization
+            // analysis at the following program point.
+            then_moved.extend(else_moved);
+            *moved = then_moved;
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            // A match scrutinee is inspected as a place. It is consumed only
+            // when a by-value binding takes ownership of the matched value.
+            let consumes_scrutinee = arms
+                .iter()
+                .any(|arm| matches!(&arm.pattern, MatchPattern::Binding(_)));
+            check_move_expression(
+                scrutinee,
+                consumes_scrutinee,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            let incoming = moved.clone();
+            let mut joined = HashSet::new();
+            for arm in arms {
+                let mut arm_moved = incoming.clone();
+                let mut arm_locals = locals.clone();
+                if let MatchPattern::Binding(name) = &arm.pattern {
+                    arm_locals.insert(name.clone(), Ty::Unknown);
+                    arm_moved.remove(name);
+                }
+                check_move_expression(
+                    &arm.body,
+                    consume,
+                    signatures,
+                    struct_signatures,
+                    &mut arm_locals,
+                    &mut arm_moved,
+                    diagnostics,
+                );
+                joined.extend(arm_moved);
+            }
+            *moved = joined;
         }
         BodyExprKind::Call { arguments, .. } => {
             for argument in arguments {
@@ -1372,6 +1574,33 @@ fn check_move_expression(
                 );
             }
         }
+        BodyExprKind::Binary {
+            operator: BinaryOperator::PatternEqual,
+            left,
+            right,
+        } => {
+            // The parser lowers simple `if let` literal/path patterns to a
+            // non-consuming equality predicate. The scrutinee is inspected
+            // in place, as it is for the pattern-match lowering.
+            check_move_expression(
+                left,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            check_move_expression(
+                right,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+        }
         BodyExprKind::Binary { left, right, .. } => {
             check_move_expression(
                 left,
@@ -1392,6 +1621,198 @@ fn check_move_expression(
                 diagnostics,
             );
         }
+        BodyExprKind::Closure {
+            parameters,
+            body,
+            move_capture,
+        } => {
+            let mut captures = borrowck::captures(body, parameters)
+                .into_iter()
+                .filter(|name| locals.contains_key(name))
+                .collect::<Vec<_>>();
+            captures.sort();
+            let mut closure_locals = locals.clone();
+            let mut closure_moved = moved.clone();
+            if *move_capture {
+                for name in &captures {
+                    let captured = BodyExpr {
+                        kind: BodyExprKind::Path(name.clone()),
+                        span: expression.span.clone(),
+                    };
+                    check_move_expression(
+                        &captured,
+                        true,
+                        signatures,
+                        struct_signatures,
+                        locals,
+                        moved,
+                        diagnostics,
+                    );
+                    closure_moved.remove(name);
+                }
+            }
+            for parameter in parameters {
+                match parameter {
+                    ClosureParameter::Identifier(name) => {
+                        closure_locals.insert(name.clone(), Ty::Unknown);
+                        closure_moved.remove(name);
+                    }
+                    ClosureParameter::Tuple(names) => {
+                        for name in names {
+                            closure_locals.insert(name.clone(), Ty::Unknown);
+                            closure_moved.remove(name);
+                        }
+                    }
+                }
+            }
+            check_move_expression(
+                body,
+                false,
+                signatures,
+                struct_signatures,
+                &mut closure_locals,
+                &mut closure_moved,
+                diagnostics,
+            );
+        }
+        BodyExprKind::FieldAccess { base, .. } => {
+            if let Some(place) = move_place(expression) {
+                let root = place.split(['.', '[']).next().unwrap_or(&place);
+                if !locals.contains_key(root) {
+                    return;
+                }
+                if move_state_contains(&place, moved) {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "error[E0382]: {} of moved value: `{place}`",
+                            if consume { "use" } else { "borrow" }
+                        ),
+                    });
+                } else if consume {
+                    let mut ignored = Vec::new();
+                    let ty = infer_with_structs(
+                        expression,
+                        locals,
+                        signatures,
+                        struct_signatures,
+                        &Ty::Unknown,
+                        &mut ignored,
+                    );
+                    let base_type = infer_with_structs(
+                        base,
+                        locals,
+                        signatures,
+                        struct_signatures,
+                        &Ty::Unknown,
+                        &mut ignored,
+                    );
+                    if matches!(base_type, Ty::Reference(_, _))
+                        && !is_copy_type(&ty, struct_signatures)
+                    {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!(
+                                "error[E0507]: cannot move out of borrowed content `{place}`"
+                            ),
+                        });
+                    } else if !is_copy_type(&ty, struct_signatures) {
+                        moved.insert(place);
+                    }
+                }
+            }
+            else {
+                check_move_expression(
+                    base,
+                    false,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Index { base, index } => {
+            // Indexing borrows its base place; the index expression itself is
+            // evaluated by value.
+            check_move_expression(
+                base,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            check_move_expression(
+                index,
+                true,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            if consume {
+                let mut ignored = Vec::new();
+                let ty = infer_with_structs(
+                    expression,
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &Ty::Unknown,
+                    &mut ignored,
+                );
+                if !is_copy_type(&ty, struct_signatures) && ty != Ty::Unknown {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: "error[E0507]: cannot move out of indexed content".to_owned(),
+                    });
+                }
+            }
+        }
+        BodyExprKind::Dereference(inner) => {
+            check_move_expression(
+                inner,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            if consume {
+                let mut ignored = Vec::new();
+                let ty = infer_with_structs(
+                    expression,
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &Ty::Unknown,
+                    &mut ignored,
+                );
+                if !is_copy_type(&ty, struct_signatures) && ty != Ty::Unknown {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: "error[E0507]: cannot move out of borrowed content".to_owned(),
+                    });
+                }
+            }
+        }
+        BodyExprKind::StructLiteral { fields, .. } => {
+            for (_, value) in fields {
+                check_move_expression(
+                    value,
+                    true,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+        }
         BodyExprKind::Return(Some(value)) => check_move_expression(
             value,
             true,
@@ -1402,6 +1823,39 @@ fn check_move_expression(
             diagnostics,
         ),
         _ => {}
+    }
+}
+
+fn move_state_contains(place: &str, moved: &HashSet<String>) -> bool {
+    moved.iter().any(|moved_place| {
+        place == moved_place
+            || place
+                .strip_prefix(moved_place)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+            || moved_place
+                .strip_prefix(place)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+    })
+}
+
+fn clear_move_state(place: &str, moved: &mut HashSet<String>) {
+    moved.retain(|moved_place| {
+        moved_place != place
+            && !moved_place
+                .strip_prefix(place)
+                .is_some_and(|suffix| suffix.starts_with('.'))
+    });
+}
+
+fn move_place(expression: &BodyExpr) -> Option<String> {
+    match &expression.kind {
+        BodyExprKind::Path(name) => Some(name.clone()),
+        BodyExprKind::Parenthesized(inner) => move_place(inner),
+        BodyExprKind::FieldAccess { base, field } => {
+            Some(format!("{}.{field}", move_place(base)?))
+        }
+        BodyExprKind::Index { base, .. } => Some(format!("{}[*]", move_place(base)?)),
+        _ => None,
     }
 }
 
@@ -1515,7 +1969,7 @@ fn check_call_targets(
                 check_call_targets(argument, locals, signatures, diagnostics);
             }
         }
-        BodyExprKind::Closure { parameters, body } => {
+        BodyExprKind::Closure { parameters, body, .. } => {
             let mut scoped = locals.clone();
             for parameter in parameters {
                 match parameter {
@@ -1801,7 +2255,7 @@ fn check_mutability(
                 check_mutability(argument, locals, diagnostics);
             }
         }
-        BodyExprKind::Closure { parameters, body } => {
+        BodyExprKind::Closure { parameters, body, .. } => {
             let mut scoped = locals.clone();
             for parameter in parameters {
                 match parameter {
@@ -1976,6 +2430,10 @@ fn infer_with_structs(
             .get(path.rsplit("::").next().unwrap_or(path))
             .cloned()
             .or_else(|| {
+                (path == "Self" && expected_return != &Ty::Unknown)
+                    .then(|| expected_return.clone())
+            })
+            .or_else(|| {
                 (is_option_none_path(path) && matches!(expected_return, Ty::Option(_)))
                     .then(|| expected_return.clone())
             })
@@ -1991,14 +2449,17 @@ fn infer_with_structs(
                     .map(|structure| Ty::Named(structure.path.clone()))
             })
             .unwrap_or(Ty::Unknown),
-        BodyExprKind::Reference { expression, .. } => Ty::Reference(Box::new(infer_with_structs(
-            expression,
-            locals,
-            signatures,
-            struct_signatures,
-            expected_return,
-            diagnostics,
-        ))),
+        BodyExprKind::Reference { mutable, expression } => Ty::Reference(
+            Box::new(infer_with_structs(
+                expression,
+                locals,
+                signatures,
+                struct_signatures,
+                expected_return,
+                diagnostics,
+            )),
+            *mutable,
+        ),
         BodyExprKind::Dereference(expression) => {
             let ty = infer_with_structs(
                 expression,
@@ -2009,7 +2470,7 @@ fn infer_with_structs(
                 diagnostics,
             );
             match ty {
-                Ty::Reference(inner) => *inner,
+                Ty::Reference(inner, _) => *inner,
                 Ty::Unknown => Ty::Unknown,
                 other => {
                     diagnostics.push(TypeDiagnostic {
@@ -2116,7 +2577,7 @@ fn infer_with_structs(
             );
             // Rust field lookup performs autoderef through shared and mutable
             // references before resolving a named struct field.
-            while let Ty::Reference(referent) = base_type {
+            while let Ty::Reference(referent, _) = base_type {
                 base_type = *referent;
             }
             match base_type {
@@ -2299,7 +2760,7 @@ fn infer_with_structs(
                     diagnostics,
                 );
                 let string_compatible = matches!(actual, Ty::String | Ty::StringSlice)
-                    || matches!(&actual, Ty::Reference(inner) if **inner == Ty::StringSlice);
+                    || matches!(&actual, Ty::Reference(inner, _) if **inner == Ty::StringSlice);
                 if !string_compatible && actual != Ty::Unknown {
                     diagnostics.push(TypeDiagnostic {
                         span: arguments[0].span.clone(),
@@ -2705,6 +3166,50 @@ fn infer_with_structs(
                 diagnostics,
             );
             let receiver_base = without_references(&receiver_type);
+            if matches!(method.as_str(), "read_exact" | "write_all")
+                && generic_receiver_has_trait(
+                    &receiver_type,
+                    if method == "read_exact" { "Read" } else { "Write" },
+                )
+            {
+                if arguments.len() != 1 {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "method `{method}` expects 1 argument but received {}",
+                            arguments.len()
+                        ),
+                    });
+                    return Ty::Unknown;
+                }
+                // The standard Read and Write methods both take a byte slice
+                // and return std::io::Result<()>. The generic parameter's
+                // trait bound keeps this built-in from masking unrelated
+                // methods with the same spelling.
+                let byte_slice = Ty::Reference(
+                    Box::new(Ty::Slice(Box::new(Ty::Integer("u8".to_owned())))),
+                    false,
+                );
+                let actual = infer_with_structs(
+                    &arguments[0],
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &byte_slice,
+                    diagnostics,
+                );
+                require_type(
+                    diagnostics,
+                    arguments[0].span.clone(),
+                    &byte_slice,
+                    &actual,
+                    "I/O byte buffer",
+                );
+                return Ty::Result(
+                    Box::new(Ty::Unit),
+                    Box::new(Ty::Named("std::io::Error".to_owned())),
+                );
+            }
             if method == "clone" {
                 if !arguments.is_empty() {
                     diagnostics.push(TypeDiagnostic {
@@ -2739,12 +3244,17 @@ fn infer_with_structs(
                 && (*receiver_base == Ty::Unknown
                     || is_as_ref_str_type(receiver_base, struct_signatures))
             {
-                return Ty::Reference(Box::new(Ty::StringSlice));
+                return Ty::Reference(Box::new(Ty::StringSlice), false);
             }
             if matches!(method.as_str(), "len" | "is_empty")
                 && matches!(
                     receiver_base,
-                    Ty::String | Ty::StringSlice | Ty::Vector(_) | Ty::Slice(_) | Ty::Map(_, _)
+                    Ty::String
+                        | Ty::StringSlice
+                        | Ty::Vector(_)
+                        | Ty::Array(_, _)
+                        | Ty::Slice(_)
+                        | Ty::Map(_, _)
                 )
             {
                 if !arguments.is_empty() {
@@ -2763,11 +3273,73 @@ fn infer_with_structs(
                     Ty::Bool
                 };
             }
+            if method == "copy_from_slice"
+                && let Some(element) = match receiver_base {
+                    Ty::Slice(element) | Ty::Array(element, _) | Ty::Vector(element) => {
+                        Some(element.as_ref())
+                    }
+                    _ => None,
+                }
+            {
+                if arguments.len() != 1 {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "method `copy_from_slice` expects 1 argument but received {}",
+                            arguments.len()
+                        ),
+                    });
+                    return Ty::Unknown;
+                }
+                let expected = Ty::Reference(Box::new(Ty::Slice(Box::new(element.clone()))), false);
+                let actual = infer_with_structs(
+                    &arguments[0],
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &expected,
+                    diagnostics,
+                );
+                require_type(
+                    diagnostics,
+                    arguments[0].span.clone(),
+                    &expected,
+                    &actual,
+                    "copy_from_slice source",
+                );
+                return Ty::Unit;
+            }
+            if arguments.is_empty()
+                && matches!(method.as_str(), "to_be_bytes" | "to_le_bytes" | "to_ne_bytes")
+            {
+                let width = match receiver_base {
+                    Ty::Integer(name) => match name.as_str() {
+                        "i8" | "u8" => Some(1),
+                        "i16" | "u16" => Some(2),
+                        "i32" | "u32" => Some(4),
+                        "i64" | "u64" | "isize" | "usize" => Some(8),
+                        "i128" | "u128" => Some(16),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(width) = width {
+                    return Ty::Array(Box::new(Ty::Integer("u8".to_owned())), width);
+                }
+            }
+            if method == "to_bits"
+                && arguments.is_empty()
+                && let Ty::Float(name) = receiver_base
+            {
+                return Ty::Integer(
+                    (if name == "f32" { "u32" } else { "u64" }).to_owned(),
+                );
+            }
             if method == "iter" {
                 let item = match receiver_base {
-                    Ty::Vector(item) | Ty::Slice(item) => Ty::Reference(item.clone()),
-                    Ty::String => Ty::Reference(Box::new(Ty::Integer("u8".to_owned()))),
-                    Ty::StringSlice => Ty::Reference(Box::new(Ty::Integer("u8".to_owned()))),
+                    Ty::Vector(item) | Ty::Slice(item) => Ty::Reference(item.clone(), false),
+                    Ty::String => Ty::Reference(Box::new(Ty::Integer("u8".to_owned())), false),
+                    Ty::StringSlice => Ty::Reference(Box::new(Ty::Integer("u8".to_owned())), false),
                     Ty::Map(_, _) => Ty::Unknown,
                     _ => Ty::Unknown,
                 };
@@ -2785,7 +3357,7 @@ fn infer_with_structs(
                 && matches!(receiver_base, Ty::String | Ty::StringSlice)
                 && arguments.is_empty()
             {
-                return Ty::Reference(Box::new(Ty::StringSlice));
+                return Ty::Reference(Box::new(Ty::StringSlice), false);
             }
             if method == "any"
                 && let Ty::Iterator(item_type) = receiver_base
@@ -2800,7 +3372,7 @@ fn infer_with_structs(
                     });
                     return Ty::Unknown;
                 }
-                let BodyExprKind::Closure { parameters, body } = &arguments[0].kind else {
+                let BodyExprKind::Closure { parameters, body, .. } = &arguments[0].kind else {
                     diagnostics.push(TypeDiagnostic {
                         span: arguments[0].span.clone(),
                         message: "`Iterator::any` requires a one-argument closure".to_owned(),
@@ -2865,7 +3437,7 @@ fn infer_with_structs(
                     expected_return,
                     diagnostics,
                 );
-                let BodyExprKind::Closure { parameters, body } = &arguments[1].kind else {
+                let BodyExprKind::Closure { parameters, body, .. } = &arguments[1].kind else {
                     diagnostics.push(TypeDiagnostic {
                         span: arguments[1].span.clone(),
                         message: "`Iterator::fold` requires a two-argument closure".to_owned(),
@@ -3155,7 +3727,7 @@ fn infer_with_structs(
                     &arguments[0], locals, signatures, struct_signatures, key_type, diagnostics,
                 );
                 if !(**key_type == Ty::String
-                    && matches!(&actual, Ty::Reference(inner) if **inner == Ty::StringSlice))
+                    && matches!(&actual, Ty::Reference(inner, _) if **inner == Ty::StringSlice))
                 {
                     require_type(
                         diagnostics,
@@ -3165,7 +3737,7 @@ fn infer_with_structs(
                         "BTreeMap::get key",
                     );
                 }
-                return Ty::Option(Box::new(Ty::Reference(value_type.clone())));
+                return Ty::Option(Box::new(Ty::Reference(value_type.clone(), false)));
             }
             if method == "is_some" {
                 if !matches!(receiver_type, Ty::Option(_)) && receiver_type != Ty::Unknown {
@@ -3639,23 +4211,47 @@ fn infer_with_structs(
                             expected_return,
                             diagnostics,
                         );
-                        let expected_field = name.split_once('.').and_then(|(base, field)| {
-                            let mut base_type = locals.get(base)?.clone();
-                            while let Ty::Reference(referent) = base_type {
-                                base_type = *referent;
-                            }
-                            let Ty::Named(structure_name) = base_type else {
-                                return None;
+                        let normalized_name = name.trim();
+                        let dereferences = normalized_name
+                            .chars()
+                            .take_while(|character| *character == '*')
+                            .count();
+                        let target = normalized_name.trim_start_matches('*').trim();
+                        let root_end = target.find(['.', '[']).unwrap_or(target.len());
+                        let root = &target[..root_end];
+                        let mut base_type = locals.get(root).cloned();
+                        for _ in 0..dereferences {
+                            base_type = match base_type {
+                                Some(Ty::Reference(referent, _)) => Some(*referent),
+                                _ => None,
                             };
-                            find_struct_signature(struct_signatures, &structure_name)?
+                        }
+                        let expected_target = base_type.as_ref().and_then(|base_type| {
+                            let mut base_type = base_type.clone();
+                            if dereferences > 0 || target.contains('.') || target.contains('[') {
+                                while let Ty::Reference(referent, _) = base_type {
+                                    base_type = *referent;
+                                }
+                            }
+                            if let Some((_, field)) = target.split_once('.') {
+                                let Ty::Named(structure_name) = &base_type else { return None };
+                                find_struct_signature(struct_signatures, structure_name)?
                                 .fields
                                 .iter()
                                 .find(|candidate| candidate.name == field)
                                 .map(|candidate| {
                                     type_from_syntax(&candidate.type_text, struct_signatures)
                                 })
+                            } else if target.contains('[') {
+                                match &base_type {
+                                    Ty::Array(element, _) | Ty::Slice(element) | Ty::Vector(element) => Some((**element).clone()),
+                                    _ => None,
+                                }
+                            } else {
+                                Some(base_type)
+                            }
                         });
-                        if let Some(expected) = expected_field.as_ref().or_else(|| locals.get(name))
+                        if let Some(expected) = expected_target.as_ref()
                         {
                             if !types_compatible(expected, &actual) {
                                 mismatch(
@@ -3666,7 +4262,10 @@ fn infer_with_structs(
                                     "assignment",
                                 );
                             }
-                        } else {
+                        } else if !normalized_name.contains('*')
+                            && !target.contains('.')
+                            && !target.contains('[')
+                        {
                             diagnostics.push(TypeDiagnostic {
                                 span: span.clone(),
                                 message: format!("cannot assign to unresolved local `{name}`"),
@@ -3817,7 +4416,7 @@ fn infer_with_structs(
                             diagnostics,
                         );
                         let (element_type, borrowed_item) = match &iterator_type {
-                            Ty::Reference(inner) => match inner.as_ref() {
+                            Ty::Reference(inner, _) => match inner.as_ref() {
                                 Ty::Slice(element) | Ty::Vector(element) => {
                                     (Some(element.as_ref()), true)
                                 }
@@ -3833,7 +4432,7 @@ fn infer_with_structs(
                         if let Some(element_type) = element_type {
                             let binding_type = |ty: &Ty| {
                                 if borrowed_item {
-                                    Ty::Reference(Box::new(ty.clone()))
+                                    Ty::Reference(Box::new(ty.clone()), false)
                                 } else {
                                     ty.clone()
                                 }
@@ -4254,7 +4853,7 @@ fn infer_with_structs(
         }
         BodyExprKind::ArrayLiteral(elements) => {
             let expected_element = match expected_return {
-                Ty::Reference(inner) => match inner.as_ref() {
+                Ty::Reference(inner, _) => match inner.as_ref() {
                     Ty::Slice(element) => Some(element.as_ref()),
                     _ => None,
                 },
@@ -4283,7 +4882,7 @@ fn infer_with_structs(
                     );
                 }
             }
-            Ty::Reference(Box::new(Ty::Slice(Box::new(element_type))))
+            Ty::Reference(Box::new(Ty::Slice(Box::new(element_type))), false)
         }
         BodyExprKind::FixedArrayLiteral(elements) => {
             let expected = match expected_return {
@@ -4347,7 +4946,7 @@ fn literal_type(literal: &LiteralKind) -> Ty {
         }
         LiteralKind::Boolean(_) => Ty::Bool,
         LiteralKind::Character(_) => Ty::Char,
-        LiteralKind::String { .. } => Ty::Reference(Box::new(Ty::StringSlice)),
+        LiteralKind::String { .. } => Ty::Reference(Box::new(Ty::StringSlice), false),
     }
 }
 
@@ -4376,17 +4975,27 @@ fn require_type(
 fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
     expected == actual
         || matches!(expected, Ty::Into(target) if types_compatible(target, actual)
-            || matches!((&**target, actual), (Ty::String, Ty::Reference(inner)) if **inner == Ty::StringSlice))
+            || matches!((&**target, actual), (Ty::String, Ty::Reference(inner, _)) if **inner == Ty::StringSlice))
         || matches!((expected, actual), (Ty::Tuple(expected), Ty::Tuple(actual))
             if expected.len() == actual.len()
                 && expected.iter().zip(actual).all(|(expected, actual)| types_compatible(expected, actual)))
+        || matches!((expected, actual), (Ty::Option(expected), Ty::Option(actual))
+            if types_compatible(expected, actual))
+        || matches!((expected, actual), (Ty::Result(expected_ok, expected_err), Ty::Result(actual_ok, actual_err))
+            if types_compatible(expected_ok, actual_ok)
+                && types_compatible(expected_err, actual_err))
+        || matches!((expected, actual), (Ty::Vector(expected), Ty::Vector(actual))
+            if types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Array(expected, expected_len), Ty::Array(actual, actual_len))
             if expected_len == actual_len && types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Slice(expected), Ty::Vector(actual)) if types_compatible(expected, actual))
-        || matches!((expected, actual), (Ty::Reference(expected), Ty::Reference(actual))
-            if matches!((&**expected, &**actual), (Ty::Slice(expected), Ty::Array(actual, _) | Ty::Vector(actual))
-                if types_compatible(expected, actual)))
-        || matches!((expected, actual), (Ty::Reference(expected), Ty::Reference(actual)) | (Ty::Slice(expected), Ty::Slice(actual)) if types_compatible(expected, actual))
+        || matches!((expected, actual), (Ty::Reference(expected, expected_mut), Ty::Reference(actual, actual_mut))
+            if (!*expected_mut || *actual_mut)
+                && matches!((&**expected, &**actual), (Ty::Slice(expected), Ty::Array(actual, _) | Ty::Vector(actual))
+                    if types_compatible(expected, actual)))
+        || matches!((expected, actual), (Ty::Reference(expected, expected_mut), Ty::Reference(actual, actual_mut))
+            if (!*expected_mut || *actual_mut) && types_compatible(expected, actual))
+        || matches!((expected, actual), (Ty::Slice(expected), Ty::Slice(actual)) if types_compatible(expected, actual))
         || *expected == Ty::Unknown
         || *actual == Ty::Unknown
         || matches!((expected, actual), (Ty::Integer(_), Ty::InferInteger))
@@ -4403,8 +5012,8 @@ fn is_copy_type(ty: &Ty, structs: &[StructSignature]) -> bool {
         | Ty::InferInteger
         | Ty::Float(_)
         | Ty::InferFloat
-        | Ty::Reference(_)
         | Ty::Never => true,
+        Ty::Reference(_, mutable) => !*mutable,
         Ty::Tuple(fields) => fields.iter().all(|field| is_copy_type(field, structs)),
         Ty::Array(element, _) => is_copy_type(element, structs),
         Ty::Named(name) if name.starts_with("\0quill_generic:") => {
@@ -4420,10 +5029,34 @@ fn is_copy_type(ty: &Ty, structs: &[StructSignature]) -> bool {
     }
 }
 
+fn generic_receiver_has_trait(ty: &Ty, requested_trait: &str) -> bool {
+    let Ty::Named(name) = without_references(ty) else {
+        return false;
+    };
+    // These extension traits inherit the standard I/O traits. Within a trait
+    // default method, `Self` is represented by the extension-trait owner
+    // rather than by a function generic marker.
+    if (requested_trait == "Read" && name.ends_with("ReadBytesExt"))
+        || (requested_trait == "Write" && name.ends_with("WriteBytesExt"))
+    {
+        return true;
+    }
+    let Some(traits) = name
+        .strip_prefix("\0quill_generic:")
+        .and_then(|marker| marker.split_once(":traits=").map(|(_, traits)| traits))
+        .map(|traits| traits.split(':').next().unwrap_or_default())
+    else {
+        return false;
+    };
+    traits
+        .split('+')
+        .any(|trait_name| trait_name.rsplit("::").next() == Some(requested_trait))
+}
+
 fn is_as_ref_str_type(ty: &Ty, structs: &[StructSignature]) -> bool {
     match ty {
         Ty::String => true,
-        Ty::Reference(inner) => matches!(inner.as_ref(), Ty::String | Ty::StringSlice),
+        Ty::Reference(inner, mutable) => !*mutable && matches!(inner.as_ref(), Ty::String | Ty::StringSlice),
         Ty::Named(name) if name.starts_with("\0quill_generic:") => {
             name.split(':').nth_back(1) == Some("1")
         }
@@ -5476,5 +6109,215 @@ mod tests {
         let parsed = parse(&source);
         assert!(!parsed.had_error);
         assert!(check_functions(&parsed.functions).is_empty());
+    }
+
+    #[test]
+    fn allows_replacing_a_mutable_reference_in_a_loop_before_using_it() {
+        let source = SourceFile::from_text(
+            "loop-reborrow.rs",
+            "fn loop_reborrow() { let mut flag = true; let mut value: i32 = 0; let mut reference = &mut value; while flag { reference = &mut value; flag = false; } *reference += 1; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn checks_assignments_through_shared_and_mutable_references() {
+        let valid = SourceFile::from_text(
+            "mutable-reference-write.rs",
+            "fn valid() { let mut value: i32 = 0; let reference = &mut value; *reference = 1; }",
+        );
+        let parsed = parse(&valid);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+        let invalid = SourceFile::from_text(
+            "shared-reference-write.rs",
+            "fn invalid() { let value: i32 = 0; let reference = &value; *reference = 1; }",
+        );
+        let parsed = parse(&invalid);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0594]: cannot assign to data in an immutable reference")
+        }));
+        assert!(diagnostics.iter().all(|diagnostic| {
+            !diagnostic.message.contains("cannot assign to unresolved local")
+        }));
+    }
+
+    #[test]
+    fn carries_loop_generated_loans_to_the_loop_exit() {
+        let source = SourceFile::from_text(
+            "loop-loan-exit.rs",
+            "fn invalid(flag: bool) { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut value; while flag { reference = &mut other; } let conflict = &mut other; *reference += 1; *conflict += 1; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0499]: cannot borrow `other` as mutable more than once")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn rejects_a_borrow_of_an_inner_local_stored_in_an_outer_reference() {
+        let source = SourceFile::from_text(
+            "scope-escape.rs",
+            "fn invalid() { let mut reference = &0i32; { let value = 1i32; reference = &value; } println!(\"{reference}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0597]: `value` does not live long enough")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn checks_user_defined_shared_and_mutable_method_receivers() {
+        let source = SourceFile::from_text(
+            "method-receiver-borrows.rs",
+            "struct Buffer { value: i32 } impl Buffer { fn shared(&self, target: &mut i32) {} fn exclusive(&mut self, target: &i32) {} } fn shared_conflict() { let mut item = Buffer { value: 0 }; item.shared(&mut item.value); } fn mutable_conflict() { let mut item = Buffer { value: 0 }; item.exclusive(&item.value); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[StructSignature {
+                path: "Buffer".to_owned(),
+                fields: vec![StructFieldSignature {
+                    name: "value".to_owned(),
+                    type_text: "i32".to_owned(),
+                }],
+                ..StructSignature::default()
+            }],
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.message.contains("error[E0502]"))
+                .count()
+                >= 2,
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn keeps_a_loan_from_a_user_defined_reference_returning_method() {
+        let source = SourceFile::from_text(
+            "method-returned-loan.rs",
+            "struct Buffer { value: i32 } impl Buffer { fn value(&self) -> &i32 { &self.value } } fn invalid() { let mut item = Buffer { value: 0 }; let borrowed = item.value(); item.value = 1; println!(\"{borrowed}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[StructSignature {
+                path: "Buffer".to_owned(),
+                fields: vec![StructFieldSignature {
+                    name: "value".to_owned(),
+                    type_text: "i32".to_owned(),
+                }],
+                ..StructSignature::default()
+            }],
+        );
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `item` because it is borrowed")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn applies_two_phase_borrows_to_mutable_method_receivers() {
+        let source = SourceFile::from_text(
+            "two-phase-receiver.rs",
+            "struct Buffer { value: i32 } impl Buffer { fn update(&mut self, amount: i32) {} fn shared_arg(&mut self, other: &i32) {} } fn valid() { let mut item = Buffer { value: 1 }; item.update(item.value); } fn invalid() { let mut item = Buffer { value: 1 }; item.shared_arg(&item.value); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[StructSignature {
+                path: "Buffer".to_owned(),
+                fields: vec![StructFieldSignature {
+                    name: "value".to_owned(),
+                    type_text: "i32".to_owned(),
+                }],
+                ..StructSignature::default()
+            }],
+        );
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0502]: cannot borrow `item` as mutable because it is also borrowed as immutable")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn invalid").unwrap()
+                && diagnostic.message.contains("error[E050")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn propagates_loans_through_reference_returning_function_calls() {
+        let source = SourceFile::from_text(
+            "call-returned-loan.rs",
+            "fn identity(value: &i32) -> &i32 { value } fn invalid() { let mut value: i32 = 0; let borrowed = identity(&value); value = 1; println!(\"{borrowed}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `value` because it is borrowed")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn models_mutable_reborrows_returned_from_function_calls() {
+        let source = SourceFile::from_text(
+            "call-reborrow.rs",
+            "fn identity(value: &mut i32) -> &mut i32 { value } fn invalid() { let mut value: i32 = 0; let reference = &mut value; let returned = identity(reference); *reference = 1; *returned = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0503]: cannot use `value` while a reborrow of its mutable reference is active")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn follows_named_lifetimes_to_the_correct_call_argument() {
+        let source = SourceFile::from_text(
+            "named-call-lifetime.rs",
+            "fn choose<'a, 'b>(left: &'a i32, right: &'b i32) -> &'b i32 { right } fn check() { let mut first: i32 = 0; let mut second: i32 = 0; let borrowed = choose(&first, &second); first = 1; second = 1; println!(\"{borrowed}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `second` because it is borrowed")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `first` because it is borrowed")
+        }), "{diagnostics:?}");
     }
 }
