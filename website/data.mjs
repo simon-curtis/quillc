@@ -89,9 +89,24 @@ export async function siteData() {
   const counts = { available: 0, partial: 0, planned: 0, unassessed: 0 };
   const languageCounts = { available: 0, partial: 0, planned: 0, unassessed: 0 };
   const languageGroups = new Set(["Language", "Checking", "Macros"]);
+  const generatingIds = new Set([
+    "functions-and-scalar-arithmetic", "control-flow", "enums-and-match", "if-let",
+    "structs-and-inherent-methods", "tuples--arrays--and-slices", "generics",
+    "primitive-types-and-literals", "floating-point-semantics", "operators-casts-and-overflow",
+    "closures-and-capture", "destructuring-patterns", "let-else-and-pattern-conditions",
+    "references-and-raw-pointers", "function-types-and-abi", "static-items-and-mutability",
+    "unsafe-rust", "unions-and-layout", "async-await-and-futures", "inline-assembly",
+    "foreign-items-and-ffi", "trait-objects-and-dynamic-dispatch",
+  ]);
+  const stageAreas = { checking: [], generating: [] };
+
   $(".compatibility-row[data-status]").each((_, el) => {
     const status = $(el).attr("data-status");
     if (status in counts) counts[status]++;
+    const area = { id: $(el).attr("id"), name: $(el).find("h2").text(), status };
+    if ($(el).find(".feature-category").text().trim() === "Checking") stageAreas.checking.push(area);
+    if (generatingIds.has(area.id)) stageAreas.generating.push(area);
+
     if (status in languageCounts && languageGroups.has($(el).find(".feature-category").text().trim()))
       languageCounts[status]++;
   });
@@ -128,6 +143,7 @@ export async function siteData() {
     revision: revision(),
     counts,
     languageCounts,
+    stageAreas,
     docs,
     catalog,
     compatibility,
@@ -158,15 +174,19 @@ export function renderStats(html, data) {
   const $ = load(html);
   const { catalog, compatibility, lsp, counts } = data;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const language = data.languageCounts;
-  const languageTotal = Object.values(language).reduce((a, b) => a + b, 0);
-  const implemented = language.available + language.partial;
-  const coverage = languageTotal ? Math.round(implemented / languageTotal * 100) : null;
-  $("[data-language-coverage]").text(coverage === null ? "—" : `${coverage}%`);
-  $("[data-language-count]").text(`${implemented} of ${languageTotal} tracked language areas have some support`);
-  $("[data-language-breakdown]").text(
-    `${language.available} fully supported · ${language.partial} partially supported · ${language.planned} not yet supported · ${language.unassessed} unassessed`,
-  );
+  for (const stage of ["checking", "generating"]) {
+    const areas = data.stageAreas[stage];
+    const complete = areas.filter(a => a.status === "available").length;
+    const partial = areas.filter(a => a.status === "partial").length;
+    const supported = complete + partial;
+    const percentage = areas.length ? Math.round(supported / areas.length * 100) : null;
+    $(`[data-stage="${stage}"] [data-stage-value]`).text(percentage === null ? "—" : `${percentage}%`);
+    $(`[data-stage="${stage}"] [data-stage-count]`).text(`${supported} of ${areas.length} tracked areas have support`);
+    $(`[data-stage="${stage}"] [data-stage-detail]`).text(`${complete} full · ${partial} partial · ${areas.length - supported} without established support`);
+    $(`[data-stage="${stage}"] [data-stage-areas]`).html(areas.map(a =>
+      `<li><a href="/compatibility.html#${escape(a.id)}">${escape(a.name)}</a> — ${a.status === "planned" ? "not yet" : escape(a.status)}</li>`
+    ).join(""));
+  }
 
   $("#compatibility-score").text("—");
   $(".overview-score .score-unit").text("");

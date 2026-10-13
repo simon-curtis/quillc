@@ -19,10 +19,28 @@
 </div>
 <section class="project-overview" id="language-coverage" aria-labelledby="language-coverage-title">
   <h2 id="language-coverage-title">Rust language coverage.</h2>
-  <p class="overview-score" data-language-coverage>—</p>
-  <p data-language-count></p>
-  <p data-language-breakdown></p>
-  <p class="project-fit-note">The percentage counts tracked language, checking, and macro areas with partial or full implementation. Each area has equal weight; partial support does not mean every form works. Library APIs, Cargo, and platforms are listed separately below. This is not a conformance percentage or a prediction that your project will compile.</p>
+<div class="language-stages">
+  <section data-stage="parsing" aria-label="Parsing coverage">
+    <h3>Parsing</h3><div class="stage-value">—</div>
+    <p>Compiler coverage not yet measured</p>
+    <p class="stage-detail">Reads Rust source into a syntax tree.</p>
+    <p class="stage-detail">The comprehensive syntax report covers the editor parser, not the compiler pipeline.</p>
+    <a href="/docs/compiler-parser-migration.md">Parser implementation ↗</a>
+  </section>
+  <section data-stage="checking" aria-label="Checking coverage">
+    <h3>Checking</h3><div class="stage-value" data-stage-value>—</div>
+    <p data-stage-count></p><p class="stage-detail" data-stage-detail></p>
+    <p class="stage-detail">Checks types, traits, borrowing, lifetimes, and diagnostics.</p>
+    <details><summary>Counted areas</summary><ul data-stage-areas></ul></details>
+  </section>
+  <section data-stage="generating" aria-label="Code generation coverage">
+    <h3>Generating</h3><div class="stage-value" data-stage-value>—</div>
+    <p data-stage-count></p><p class="stage-detail" data-stage-detail></p>
+    <p class="stage-detail">Turns supported language constructs into native code for Linux x86-64.</p>
+    <details><summary>Counted areas</summary><ul data-stage-areas></ul></details>
+  </section>
+</div>
+<p class="project-fit-note">Percentages count tracked areas with partial or full support, with equal weight per area. Partial means gaps remain. These stage inventories measure implementation breadth, not conformance to every Rust rule; they are not averaged into an overall score. Libraries, Cargo, and platforms are tracked separately.</p>
 </section>
 <section class="project-overview" aria-labelledby="project-fit-title">
   <h2 id="project-fit-title">Check these first.</h2>

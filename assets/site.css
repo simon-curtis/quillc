@@ -1709,3 +1709,55 @@ h2 {
     transform: translateY(0);
   }
 }
+
+/* Compiler stage coverage */
+.language-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 36px;
+}
+
+.language-stages h3 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.stage-value {
+  font-size: clamp(42px, 5vw, 64px);
+  line-height: 1.1;
+  letter-spacing: -0.06em;
+  margin-bottom: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.language-stages p,
+.language-stages a,
+.language-stages details {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.language-stages .stage-detail {
+  color: var(--muted);
+}
+
+.language-stages summary {
+  cursor: pointer;
+}
+
+.language-stages ul {
+  padding-left: 18px;
+}
+
+.language-stages a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 700px) {
+  .language-stages {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
