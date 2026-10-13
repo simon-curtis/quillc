@@ -201,6 +201,8 @@ struct SignatureIndex<'a> {
     exact: HashMap<&'a str, Vec<&'a FunctionItem>>,
     suffix: HashMap<&'a str, Vec<&'a FunctionItem>>,
     methods: HashMap<&'a str, Vec<&'a FunctionItem>>,
+    trait_methods: HashMap<&'a str, Vec<&'a FunctionItem>>,
+    trait_impl_methods: HashMap<(&'a str, &'a str), Vec<&'a FunctionItem>>,
 }
 
 fn generic_type_marker(function: &FunctionItem, generic: &str) -> Ty {
@@ -273,6 +275,41 @@ fn method_owner(function: &FunctionItem) -> Option<&str> {
     })
 }
 
+fn index_trait_method<'a>(
+    trait_methods: &mut HashMap<&'a str, Vec<&'a FunctionItem>>,
+    trait_impl_methods: &mut HashMap<(&'a str, &'a str), Vec<&'a FunctionItem>>,
+    function: &'a FunctionItem,
+) {
+    let trait_owner = function.scope.iter().find_map(|scope| {
+        scope
+            .strip_prefix("trait:")
+            .map(|owner| owner.rsplit("::").next().unwrap_or(owner))
+    });
+    if let Some(trait_owner) = trait_owner {
+        trait_methods
+            .entry(trait_owner)
+            .or_default()
+            .push(function);
+    }
+
+    let trait_impl_owner = function.scope.iter().find_map(|scope| {
+        scope
+            .strip_prefix("traitimpl:")
+            .map(|owner| owner.rsplit("::").next().unwrap_or(owner))
+    });
+    let impl_owner = function.scope.iter().find_map(|scope| {
+        scope
+            .strip_prefix("impl:")
+            .map(|owner| owner.rsplit("::").next().unwrap_or(owner))
+    });
+    if let (Some(trait_owner), Some(impl_owner)) = (trait_impl_owner, impl_owner) {
+        trait_impl_methods
+            .entry((trait_owner, impl_owner))
+            .or_default()
+            .push(function);
+    }
+}
+
 fn generic_marker_traits(name: &str) -> impl Iterator<Item = &str> {
     name.split(':')
         .find_map(|part| part.strip_prefix("traits="))
@@ -316,32 +353,12 @@ fn trait_is_implemented_for_type(
 ) -> bool {
     let trait_name = trait_name.rsplit("::").next().unwrap_or(trait_name);
     let type_name = type_name.rsplit("::").next().unwrap_or(type_name);
-    let methods: Vec<_> = signatures.methods.values().flatten().collect();
-    let required: Vec<_> = methods
-        .iter()
-        .copied()
-        .filter(|function| {
-            function.scope.iter().any(|scope| {
-                scope
-                    .strip_prefix("trait:")
-                    .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
-            })
-        })
-        .collect();
-    let provided: Vec<_> = methods
-        .into_iter()
-        .filter(|function| {
-            function.scope.iter().any(|scope| {
-                scope.strip_prefix("traitimpl:").is_some_and(|owner| {
-                    owner.rsplit("::").next().unwrap_or(owner) == trait_name
-                })
-            }) && function.scope.iter().any(|scope| {
-                scope.strip_prefix("impl:").is_some_and(|owner| {
-                    owner.rsplit("::").next().unwrap_or(owner) == type_name
-                })
-            })
-        })
-        .collect();
+    let Some(required) = signatures.trait_methods.get(trait_name) else {
+        return false;
+    };
+    let Some(provided) = signatures.trait_impl_methods.get(&(trait_name, type_name)) else {
+        return false;
+    };
     !required.is_empty()
         && required.iter().all(|trait_method| {
             let method_name = trait_method.name.rsplit("::").next().unwrap_or(&trait_method.name);
@@ -854,6 +871,8 @@ fn check_selected_functions<'a>(
         let mut exact = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut suffix = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut methods = HashMap::<&str, Vec<&FunctionItem>>::new();
+        let mut trait_methods = HashMap::<&str, Vec<&FunctionItem>>::new();
+        let mut trait_impl_methods = HashMap::<(&str, &str), Vec<&FunctionItem>>::new();
         for function in declarations {
             add_signature_suffixes(&mut exact, &mut suffix, function);
             if method_owner(function).is_some()
@@ -861,6 +880,11 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
+            index_trait_method(
+                &mut trait_methods,
+                &mut trait_impl_methods,
+                function,
+            );
             // Root-module items remain directly addressable by their source
             // name even when stored under a canonical crate-qualified path.
             if function.scope.is_empty()
@@ -877,11 +901,18 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
+            index_trait_method(
+                &mut trait_methods,
+                &mut trait_impl_methods,
+                function,
+            );
         }
         SignatureIndex {
             exact,
             suffix,
             methods,
+            trait_methods,
+            trait_impl_methods,
         }
     };
     let functions: Vec<_> = functions

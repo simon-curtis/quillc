@@ -11,3 +11,7 @@ serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 quill-source = { path = "../quill-source" }
+
+[[bench]]
+name = "trait_impl_index"
+harness = false
