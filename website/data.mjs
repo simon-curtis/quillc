@@ -153,10 +153,10 @@ export function renderStats(html, data) {
   const $ = load(html);
   const { catalog, compatibility, lsp, counts } = data;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  $("#compatibility-score").text(counts.available);
-  $(".score-unit").text(` / ${total}`);
+  $("#compatibility-score").text("—");
+  $(".overview-score .score-unit").text("");
   const summary = `${counts.available} available · ${counts.partial} partial · ${counts.planned} not yet · ${counts.unassessed} unassessed`;
-  $("#coverage-counts").text(summary);
+  $("#coverage-counts").text(`Capability inventory: ${summary}. Partial entries include implemented features with remaining gaps.`);
   $("#coverage-bar").attr("aria-label", `${total} tracked entries: ${summary}`);
   for (const [status, count] of Object.entries(counts)) {
     $(`#coverage-bar .coverage-${status}`)
@@ -173,32 +173,28 @@ export function renderStats(html, data) {
     const d = compatibility.value;
     if (d.passed < 0 || d.total < d.passed)
       throw new Error(`Invalid counts: ${compatibility.path}`);
+    $("#compatibility-score").text(d.passed);
+    $(".overview-score .score-unit").text(` / ${d.total}`);
     $(".differential-number").html(`${d.passed} <span>/ ${d.total}</span>`);
     $(".differential-heading .text-link").attr(
       "href",
       "/" + compatibility.path,
     );
     const coverage = d.feature_coverage || [];
-    const stats = $(".differential-stats dd");
-    stats
-      .eq(0)
-      .html(
-        `${coverage.filter((f) => f.probed).length} <span>/ ${coverage.length}</span>`,
+    // Locate values by their labels; optional inventory rows must not shift them.
+    $(".differential-stats div").each((_, el) => {
+      const row = $(el);
+      const label = row.find("dt").text().trim();
+      if (label === "Cases with mismatches") row.find("dd").text(d.total - d.passed);
+      if (label === "Windows output") row.find("dd").text(
+        coverage.find((f) => f.id === "windows-output")?.probed ? "Probed" : "Not probed",
       );
-    stats.eq(1).text(d.total - d.passed);
-    stats
-      .eq(2)
-      .text(
-        coverage.find((f) => f.id === "windows-output")?.probed
-          ? "Probed"
-          : "Not probed",
-      );
-    $(".differential-stats dt").first().text("Report categories probed");
+    });
     $(".differential-source p").text(
       `${(d.rustc || d.toolchain || "").split("\n")[0]} · ${provenance(d)}. See report for exact provenance.`,
     );
     $(".coverage-evidence").html(
-      `<strong>Differential checks:</strong> ${d.passed} of ${d.total} curated cases match rustc. <a href="/compatibility.html#differential-results">See the results</a>.`,
+      `${escape(provenance(d))}. <a href="/${escape(compatibility.path)}">Read the comparison report</a>.`,
     );
   } else {
     $(".differential-number").text("—");
