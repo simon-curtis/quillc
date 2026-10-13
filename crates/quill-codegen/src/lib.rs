@@ -538,43 +538,6 @@ fn emit_subset_object(
         Value::Integer(0)
     };
 
-    let explicit_roots = main_index.iter().copied().collect::<Vec<_>>();
-    let reachable_items = quill_hir::codegen_reachable_items(
-        &parse.functions,
-        &explicit_roots,
-        !executable,
-    );
-    drop(by_name);
-    let reachable_parse = Parse {
-        functions: parse
-            .functions
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| reachable_items.contains(index))
-            .map(|(_, function)| function.clone())
-            .collect(),
-        structs: parse.structs.clone(),
-        enums: parse.enums.clone(),
-        modules: parse.modules.clone(),
-        imports: parse.imports.clone(),
-        unsupported_item_count: parse.unsupported_item_count,
-        diagnostics: parse.diagnostics.clone(),
-        had_error: parse.had_error,
-        ..Parse::default()
-    };
-    let parse = &reachable_parse;
-    let mut by_name = HashMap::with_capacity(parse.functions.len());
-    for (index, function) in parse.functions.iter().enumerate() {
-        by_name.insert(function.name.as_str(), index);
-    }
-    let main_index = if executable {
-        Some(*by_name.get("main").ok_or(CodegenError::UnsupportedProgram(
-            "expected a `main` function",
-        ))?)
-    } else {
-        None
-    };
-
     let mut hir = lower_functions("quill_input", &parse.functions);
     // This API emits an executable, not a library with externally callable
     // symbols. All semantic bodies were validated above; only `main` and its

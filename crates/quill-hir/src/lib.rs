@@ -878,56 +878,6 @@ pub fn codegen_reachable(hir: &HirCrate, explicit_roots: &[DefPath]) -> BTreeSet
     reachable
 }
 
-/// Find the function items needed by codegen before lowering function bodies
-/// into HIR. This uses the same recognized direct-call graph as
-/// [`codegen_reachable`], allowing type and borrow checking to inspect every
-/// body while HIR lowering skips unreachable bodies.
-pub fn codegen_reachable_items(
-    items: &[FunctionItem],
-    explicit_roots: &[usize],
-    include_public: bool,
-) -> BTreeSet<usize> {
-    let by_name: HashMap<&str, Vec<usize>> = {
-        let mut index: HashMap<&str, Vec<usize>> = HashMap::new();
-        for (item_index, item) in items.iter().enumerate() {
-            index.entry(&item.name).or_default().push(item_index);
-        }
-        index
-    };
-    let mut reachable = BTreeSet::new();
-    let mut pending = VecDeque::new();
-    for (item_index, item) in items.iter().enumerate() {
-        if item.is_generic
-            || (include_public && item.is_public)
-            || item
-                .scope
-                .iter()
-                .any(|scope| scope.starts_with("impl:") || scope.starts_with("trait:"))
-        {
-            if reachable.insert(item_index) {
-                pending.push_back(item_index);
-            }
-        }
-    }
-    for &root in explicit_roots {
-        if root < items.len() && reachable.insert(root) {
-            pending.push_back(root);
-        }
-    }
-    while let Some(item_index) = pending.pop_front() {
-        for called_name in &items[item_index].calls {
-            if let Some(candidates) = by_name.get(called_name.as_str()) {
-                for &candidate in candidates {
-                    if reachable.insert(candidate) {
-                        pending.push_back(candidate);
-                    }
-                }
-            }
-        }
-    }
-    reachable
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -938,39 +888,6 @@ mod tests {
         let file = SourceFile::from_text("sample.rs", source);
         let syntax = parse(&file);
         lower_functions("sample", &syntax.functions)
-    }
-
-    #[test]
-    fn source_reachability_prunes_dead_items_and_keeps_library_roots() {
-        let source = SourceFile::from_text(
-            "sample.rs",
-            "fn main() { live(); } fn live() { leaf(); } fn leaf() {} fn dead() {} fn identity<T>(value: T) -> T { value } pub fn exported() {} struct S; impl S { fn method(&self) {} }",
-        );
-        let syntax = parse(&source);
-        let main = syntax
-            .functions
-            .iter()
-            .position(|function| function.name == "main")
-            .unwrap();
-        let executable = codegen_reachable_items(&syntax.functions, &[main], false)
-            .into_iter()
-            .map(|index| syntax.functions[index].name.as_str())
-            .collect::<BTreeSet<_>>();
-        assert!(executable.contains("main"));
-        assert!(executable.contains("live"));
-        assert!(executable.contains("leaf"));
-        assert!(executable.contains("method"));
-        assert!(executable.contains("identity"));
-        assert!(!executable.contains("dead"));
-        assert!(!executable.contains("exported"));
-
-        let library = codegen_reachable_items(&syntax.functions, &[], true)
-            .into_iter()
-            .map(|index| syntax.functions[index].name.as_str())
-            .collect::<BTreeSet<_>>();
-        assert!(library.contains("exported"));
-        assert!(library.contains("identity"));
-        assert!(!library.contains("dead"));
     }
 
     #[test]
