@@ -242,7 +242,7 @@
     "kind": "parse",
     "features": [
       "rust-source-parsing",
-      "async--const-evaluation--and-unsafe-code",
+      "async-await-and-futures",
       "general-macro-expansion"
     ],
     "edition": "2024",
@@ -534,7 +534,7 @@
     "kind": "parse",
     "features": [
       "rust-source-parsing",
-      "async--const-evaluation--and-unsafe-code"
+      "async-await-and-futures"
     ],
     "edition": "future",
     "rustc_args": ["-Zunstable-options"],

@@ -59,28 +59,26 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The latest Linux run passes 42 of 46 cases (91.3%) using a clean compiler
-build at revision `7288f7f`. The report records the exact binary hash and
-verifies first- and second-element `Vec<String>` indexing, string-keyed
-`BTreeMap` lookup, generic `AsRef<str>` dispatch, and comma-plus, semicolon-plus,
-and zero-or-more macro repetition:
-[`results/2026-10-13-macro-repetition-complete.json`](results/2026-10-13-macro-repetition-complete.json).
+The latest clean Linux run passes 43 of 46 cases (93.5%) at revision
+`010a3b9`. The report records the exact binary hash and clean source status.
+It adds edition-aware Rust 2015 `async` identifier handling to the passing
+checks, while retaining Rust 2018 rejection and async syntax coverage:
+[`results/2026-10-13-edition-aware-clean.json`](results/2026-10-13-edition-aware-clean.json).
 Borrowed integer slice iteration and `Vec<String>` growth, indexing, cloning,
 and output match rustc in the maintained cases. Windows output remains
 unprobed.
 
-Four cases fail: generic trait dispatch, panic behavior, rustc's inability to
-consume Quill's object as an `--extern` library, and Rust 2015's valid
-`async` identifier. The paired Rust
-2015/2018 tests show that Quill rejects the identifier in both editions, while
-rustc accepts it in 2015 and rejects it in 2018. Four edition probes pass: Rust
+Three cases fail: generic trait dispatch, panic behavior, and rustc's inability
+to consume Quill's object as an `--extern` library. The paired Rust 2015/2018
+tests now match rustc: `async` is an identifier in 2015 and reserved for async
+syntax in 2018. Five edition probes pass: Rust 2015 identifier handling, Rust
 2018 async syntax parsing, Rust 2021 format capture, Rust 2024 if-let-chain
 parsing, and experimental `future` edition async parsing. Loop break/continue,
 signed widening, tuple projections, borrowed slice iteration, `Vec<String>`
 indexing, and the tested `Result` status check also match rustc. Build-script support covers the tested native script that emits
 `rustc-cfg`; other directives and build dependencies remain incomplete.
 
-The 91.3% rate is only for these curated cases; it is not an overall Rust
+The 93.5% rate is only for these curated cases; it is not an overall Rust
 compatibility score. The case count and the grouped website inventory describe
 different things and must not be compared as percentages. The full destination
 remains in [`TARGET.md`](TARGET.md),
