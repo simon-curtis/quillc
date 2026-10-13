@@ -1463,7 +1463,13 @@ fn generic_instance_name(
     for (generic_index, generic) in function.generic_parameters.iter().enumerate() {
         let mut inferred = None;
         for (parameter, argument) in function.parameters.iter().zip(arguments) {
-            let Some(ty) = infer_generic_type(&parameter.type_text, generic, argument) else {
+            let inferred_type = infer_generic_type(&parameter.type_text, generic, argument)
+                .or_else(|| {
+                    (function.generic_as_ref_str_parameters.contains(generic)
+                        && is_slice_value(argument))
+                    .then(|| "&str".to_owned())
+                });
+            let Some(ty) = inferred_type else {
                 continue;
             };
             if !explicit_arguments.is_empty() && ty != explicit_arguments[generic_index] {
@@ -6895,10 +6901,9 @@ fn value_from_expression(
                         receiver.kind
                     ))
                 })?;
-            let function = resolve_impl_method(&owner, method, functions).ok_or_else(|| {
-                eprintln!("unresolved inherent method during compatibility probe: {owner}::{method}; receiver={:?}", receiver.kind);
-                CodegenError::UnsupportedProgram("method is not a supported inherent method")
-            })?;
+            let function = resolve_impl_method(&owner, method, functions).ok_or(
+                CodegenError::UnsupportedProgram("method is not a supported inherent method"),
+            )?;
             if function.is_generic || function.parameters.len() != arguments.len() + 1 {
                 return Err(CodegenError::UnsupportedProgram(
                     "method must have a concrete receiver and matching argument count",
@@ -7474,23 +7479,36 @@ fn validate_value_target(
                     "helper call arity does not match its supported signature",
                 ));
             }
+            let concrete_types = parse_generic_instance_name(name)
+                .map(|(_, types)| types)
+                .unwrap_or_default();
+            let substitutions = items[index]
+                .generic_parameters
+                .iter()
+                .zip(&concrete_types)
+                .map(|(generic, concrete)| (generic.as_str(), concrete.as_str()))
+                .collect::<HashMap<_, _>>();
+            let expected_types = normalized_item
+                .parameters
+                .iter()
+                .map(|parameter| substitute_generic_types(&parameter.type_text, &substitutions))
+                .collect::<Vec<_>>();
             if arguments
                 .iter()
-                .zip(&normalized_item.parameters)
-                .any(|(argument, parameter)| {
+                .zip(&expected_types)
+                .any(|(argument, expected_type)| {
                     let expected_struct =
-                        referenced_type_name(&parameter.type_text).or_else(|| {
+                        referenced_type_name(expected_type).or_else(|| {
                             matches!(argument, Value::StructReference { .. }).then_some(
-                                parameter
-                                    .type_text
+                                expected_type
                                     .trim()
                                     .strip_prefix("mut ")
-                                    .unwrap_or(parameter.type_text.trim()),
+                                    .unwrap_or(expected_type.trim()),
                             )
                         });
-                    is_slice_value(argument) != is_slice_type(&parameter.type_text)
+                    is_slice_value(argument) != is_slice_type(expected_type)
                         || (matches!(argument, Value::StructReference { .. })
-                            != (!is_slice_type(&parameter.type_text) && expected_struct.is_some()))
+                            != (!is_slice_type(expected_type) && expected_struct.is_some()))
                         || matches!(argument, Value::StructReference { type_name, .. }
                         if !type_name.rsplit("::").next().unwrap_or(type_name).eq_ignore_ascii_case(
                             expected_struct
