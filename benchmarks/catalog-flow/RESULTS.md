@@ -105,6 +105,15 @@ edits use less aggregate CPU with a small wall-time regression. Raw runs:
 [`results-20261013-79e11e0-parse-summaries.json`](results-20261013-79e11e0-parse-summaries.json),
 and [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
 
+The native object emitter previously cloned each target's complete parse tree
+before appending external declarations. An ownership-taking path removes that
+clone. At `9edab5c`, the semantic-edit medians moved from 85.0 ms / 146 ms CPU
+to 80.1 ms / 131 ms CPU; the five-sample ranges overlap, so this remains an
+inconclusive candidate. Comment-only incremental medians were 13.1 ms / 29.8
+ms CPU, close to the prior 13.8 ms / 30.1 ms. Program output still matched.
+The clean paired samples are in
+[`results-20261013-9edab5c-owned-emission.json`](results-20261013-9edab5c-owned-emission.json).
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
