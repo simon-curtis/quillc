@@ -6644,6 +6644,48 @@ mod tests {
     }
 
     #[test]
+    fn constructs_an_owned_string_from_a_literal_like_rustc() {
+        let root = std::env::temp_dir().join(format!(
+            "quillc-build-string-from-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("main.rs");
+        let quill_output = root.join("quill-program");
+        let rustc_output = root.join("rustc-program");
+        std::fs::write(
+            &source,
+            "fn main() { let value = String::from(\"quill\"); println!(\"{value}\"); }\n",
+        )
+        .unwrap();
+
+        compile_subset_main(
+            &source.display().to_string(),
+            &quill_output.display().to_string(),
+        )
+        .unwrap();
+        let rustc = std::process::Command::new("rustc")
+            .arg("+nightly-2026-08-23")
+            .arg(&source)
+            .arg("-o")
+            .arg(&rustc_output)
+            .output()
+            .expect("pinned rustc must be available for differential compiler tests");
+        assert!(
+            rustc.status.success(),
+            "rustc rejected the String::from fixture: {}",
+            String::from_utf8_lossy(&rustc.stderr)
+        );
+        let quill_output = std::process::Command::new(&quill_output).output().unwrap();
+        let rustc_output = std::process::Command::new(&rustc_output).output().unwrap();
+        assert_eq!(quill_output.status.code(), rustc_output.status.code());
+        assert_eq!(quill_output.stdout, rustc_output.stdout);
+        assert_eq!(quill_output.stderr, rustc_output.stderr);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn type_checks_dead_functions_before_pruning_their_codegen() {
         let root = std::env::temp_dir().join(format!(
             "quillc-build-dead-invalid-{}-{}",

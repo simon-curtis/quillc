@@ -899,6 +899,7 @@ fn check_call_targets(
                     | "BTreeMap::new"
                     | "std::collections::BTreeMap::new"
                     | "String::new"
+                    | "String::from"
                     | "String::with_capacity"
                     | "std::string::String::with_capacity"
                     | "u64::from"
@@ -1674,6 +1675,41 @@ fn infer_with_structs(
                     });
                 }
                 return Ty::Integer("u64".to_owned());
+            }
+            if matches!(
+                callee.as_str(),
+                "String::from" | "std::string::String::from"
+            ) {
+                if arguments.len() != 1 {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "constructor `{callee}` expects 1 argument but received {}",
+                            arguments.len()
+                        ),
+                    });
+                    return Ty::Unknown;
+                }
+                let actual = infer_with_structs(
+                    &arguments[0],
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &Ty::StringSlice,
+                    diagnostics,
+                );
+                let string_compatible = matches!(actual, Ty::String | Ty::StringSlice)
+                    || matches!(&actual, Ty::Reference(inner) if **inner == Ty::StringSlice);
+                if !string_compatible && actual != Ty::Unknown {
+                    diagnostics.push(TypeDiagnostic {
+                        span: arguments[0].span.clone(),
+                        message: format!(
+                            "`{callee}` cannot construct a String from `{}`",
+                            actual.display_name()
+                        ),
+                    });
+                }
+                return Ty::String;
             }
             let constructor_type = match callee.as_str() {
                 "Vec::new" | "std::vec::Vec::new" => Some(Ty::Vector(Box::new(Ty::Unknown))),

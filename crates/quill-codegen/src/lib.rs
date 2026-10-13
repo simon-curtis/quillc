@@ -1175,6 +1175,11 @@ fn is_supported_owned_string_expression(expression: &BodyExpr) -> bool {
             arguments,
             ..
         } if matches!(method.as_str(), "into" | "to_owned") && arguments.is_empty()
+    ) || matches!(
+        &expression.kind,
+        BodyExprKind::Call { callee, arguments, .. }
+            if matches!(callee.as_str(), "String::from" | "std::string::String::from")
+                && arguments.len() == 1
     )
 }
 
@@ -5778,6 +5783,22 @@ fn value_from_expression(
                     .map(|element| value_from_expression(element, environment, functions))
                     .collect::<Result<Vec<_>, _>>()?,
             ))
+        }
+        BodyExprKind::Call {
+            callee, arguments, ..
+        } if matches!(
+            callee.as_str(),
+            "String::from" | "std::string::String::from"
+        ) && arguments.len() == 1 =>
+        {
+            let value = value_from_expression(&arguments[0], environment, functions)?;
+            if is_slice_value(&value) {
+                Ok(Value::OwnedString(Box::new(value)))
+            } else {
+                Err(CodegenError::UnsupportedProgram(
+                    "`String::from` currently requires a supported string-slice value",
+                ))
+            }
         }
         BodyExprKind::Call {
             callee, arguments, ..
