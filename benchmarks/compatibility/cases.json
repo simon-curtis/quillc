@@ -371,6 +371,39 @@
     "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let observed = &*first; let second = &mut value; println!(\"{second}\"); }"
   },
   {
+    "id": "diagnostic-shared-then-mutable-borrow",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &value; let second = &mut value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "diagnostic-mutable-then-shared-borrow",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let second = &value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "shared-borrows-may-overlap",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let value = String::from(\"owned\"); let first = &value; let second = &value; println!(\"{first}{second}\"); }"
+  },
+  {
     "id": "rust-syntax-async-lifetimes-macros",
     "kind": "parse",
     "features": [

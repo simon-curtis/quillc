@@ -1047,7 +1047,7 @@ fn check_one_function(
         function_structs,
         &mut diagnostics,
     );
-    check_mutable_borrow_conflicts(body, &mut diagnostics);
+    check_local_borrow_conflicts(body, &mut diagnostics);
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
     check_loop_control(body, 0, &mut diagnostics);
     if strict_calls {
@@ -1093,46 +1093,63 @@ fn check_move_uses(
     );
 }
 
-/// Diagnose overlapping mutable borrows held by named locals in a block.
+/// Diagnose overlapping references held by named locals in a block.
 /// Liveness is approximated by whether the first reference is used after the
 /// second borrow; this preserves Rust's non-lexical end of borrow for simple
 /// straight-line bodies.
-fn check_mutable_borrow_conflicts(body: &BodyExpr, diagnostics: &mut Vec<TypeDiagnostic>) {
-    check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+fn check_local_borrow_conflicts(body: &BodyExpr, diagnostics: &mut Vec<TypeDiagnostic>) {
+    check_local_borrow_conflicts_in_expression(body, diagnostics);
 }
 
-fn check_mutable_borrow_conflicts_in_expression(
+fn check_local_borrow_conflicts_in_expression(
     expression: &BodyExpr,
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
-            let mut mutable_borrows = Vec::<(String, String)>::new();
+            let mut borrows = Vec::<(String, String, bool)>::new();
             for (index, statement) in statements.iter().enumerate() {
                 if let BodyStatement::Let {
                     name: Some(name),
                     initializer: Some(initializer),
                     ..
                 } = statement
-                    && let Some(place) = mutable_borrowed_path(initializer)
+                    && let Some((place, is_mutable)) = borrowed_local_path(initializer)
                 {
-                    if mutable_borrows.iter().any(|(borrower, borrowed_place)| {
-                        borrowed_place == place
-                            && local_used_after(borrower, &statements[index + 1..], tail.as_deref())
-                    }) {
-                        diagnostics.push(TypeDiagnostic {
-                            span: initializer.span.clone(),
-                            message: format!(
-                                "error[E0499]: cannot borrow `{place}` as mutable more than once at a time"
-                            ),
-                        });
+                    for (borrower, borrowed_place, previous_is_mutable) in &borrows {
+                        if borrowed_place == place
+                            && (*previous_is_mutable || is_mutable)
+                            && local_used_after(
+                                borrower,
+                                &statements[index + 1..],
+                                tail.as_deref(),
+                            )
+                        {
+                            let message = match (*previous_is_mutable, is_mutable) {
+                                (true, true) => format!(
+                                    "error[E0499]: cannot borrow `{place}` as mutable more than once at a time"
+                                ),
+                                (false, true) => format!(
+                                    "error[E0502]: cannot borrow `{place}` as mutable because it is also borrowed as immutable"
+                                ),
+                                (true, false) => format!(
+                                    "error[E0502]: cannot borrow `{place}` as immutable because it is also borrowed as mutable"
+                                ),
+                                (false, false) => unreachable!("shared borrows may overlap"),
+                            };
+                            diagnostics.push(TypeDiagnostic {
+                                span: initializer.span.clone(),
+                                message,
+                            });
+                            break;
+                        }
                     }
-                    mutable_borrows.push((name.clone(), place.to_owned()));
+                    borrows.push((name.clone(), place.to_owned(), is_mutable));
                 }
-                check_mutable_borrow_conflicts_in_statement(statement, diagnostics);
+                check_local_borrow_conflicts_in_statement(statement, diagnostics);
             }
             if let Some(tail) = tail {
-                check_mutable_borrow_conflicts_in_expression(tail, diagnostics);
+                check_local_borrow_conflicts_in_expression(tail, diagnostics);
             }
         }
         BodyExprKind::Reference { expression, .. }
@@ -1142,14 +1159,14 @@ fn check_mutable_borrow_conflicts_in_expression(
         | BodyExprKind::Try(expression)
         | BodyExprKind::Parenthesized(expression)
         | BodyExprKind::Dereference(expression) => {
-            check_mutable_borrow_conflicts_in_expression(expression, diagnostics)
+            check_local_borrow_conflicts_in_expression(expression, diagnostics)
         }
         BodyExprKind::Call { arguments, .. }
         | BodyExprKind::Tuple(arguments)
         | BodyExprKind::ArrayLiteral(arguments)
         | BodyExprKind::FixedArrayLiteral(arguments) => {
             for argument in arguments {
-                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+                check_local_borrow_conflicts_in_expression(argument, diagnostics);
             }
         }
         BodyExprKind::MethodCall {
@@ -1157,54 +1174,54 @@ fn check_mutable_borrow_conflicts_in_expression(
             arguments,
             ..
         } => {
-            check_mutable_borrow_conflicts_in_expression(receiver, diagnostics);
+            check_local_borrow_conflicts_in_expression(receiver, diagnostics);
             for argument in arguments {
-                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+                check_local_borrow_conflicts_in_expression(argument, diagnostics);
             }
         }
         BodyExprKind::Closure { body, .. } => {
-            check_mutable_borrow_conflicts_in_expression(body, diagnostics)
+            check_local_borrow_conflicts_in_expression(body, diagnostics)
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
-                check_mutable_borrow_conflicts_in_expression(value, diagnostics);
+                check_local_borrow_conflicts_in_expression(value, diagnostics);
             }
         }
         BodyExprKind::FieldAccess { base, .. } => {
-            check_mutable_borrow_conflicts_in_expression(base, diagnostics)
+            check_local_borrow_conflicts_in_expression(base, diagnostics)
         }
         BodyExprKind::Index { base, index, .. } => {
-            check_mutable_borrow_conflicts_in_expression(base, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(index, diagnostics);
+            check_local_borrow_conflicts_in_expression(base, diagnostics);
+            check_local_borrow_conflicts_in_expression(index, diagnostics);
         }
         BodyExprKind::Binary { left, right, .. } => {
-            check_mutable_borrow_conflicts_in_expression(left, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(right, diagnostics);
+            check_local_borrow_conflicts_in_expression(left, diagnostics);
+            check_local_borrow_conflicts_in_expression(right, diagnostics);
         }
         BodyExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            check_mutable_borrow_conflicts_in_expression(condition, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(then_branch, diagnostics);
+            check_local_borrow_conflicts_in_expression(condition, diagnostics);
+            check_local_borrow_conflicts_in_expression(then_branch, diagnostics);
             if let Some(else_branch) = else_branch {
-                check_mutable_borrow_conflicts_in_expression(else_branch, diagnostics);
+                check_local_borrow_conflicts_in_expression(else_branch, diagnostics);
             }
         }
         BodyExprKind::Match { scrutinee, arms } => {
-            check_mutable_borrow_conflicts_in_expression(scrutinee, diagnostics);
+            check_local_borrow_conflicts_in_expression(scrutinee, diagnostics);
             for arm in arms {
-                check_mutable_borrow_conflicts_in_expression(&arm.body, diagnostics);
+                check_local_borrow_conflicts_in_expression(&arm.body, diagnostics);
             }
         }
         BodyExprKind::MacroInvocation(macro_expression) => {
             for argument in &macro_expression.arguments {
-                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+                check_local_borrow_conflicts_in_expression(argument, diagnostics);
             }
         }
         BodyExprKind::Return(Some(value)) => {
-            check_mutable_borrow_conflicts_in_expression(value, diagnostics)
+            check_local_borrow_conflicts_in_expression(value, diagnostics)
         }
         BodyExprKind::Unit
         | BodyExprKind::Literal(_)
@@ -1215,14 +1232,14 @@ fn check_mutable_borrow_conflicts_in_expression(
     }
 }
 
-fn check_mutable_borrow_conflicts_in_statement(
+fn check_local_borrow_conflicts_in_statement(
     statement: &BodyStatement,
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
     match statement {
         BodyStatement::Let { initializer, .. } => {
             if let Some(initializer) = initializer {
-                check_mutable_borrow_conflicts_in_expression(initializer, diagnostics);
+                check_local_borrow_conflicts_in_expression(initializer, diagnostics);
             }
         }
         BodyStatement::LetTuple { initializer, .. }
@@ -1232,33 +1249,33 @@ fn check_mutable_borrow_conflicts_in_statement(
         | BodyStatement::Expression {
             expression: initializer,
             ..
-        } => check_mutable_borrow_conflicts_in_expression(initializer, diagnostics),
+        } => check_local_borrow_conflicts_in_expression(initializer, diagnostics),
         BodyStatement::While {
             condition, body, ..
         } => {
-            check_mutable_borrow_conflicts_in_expression(condition, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+            check_local_borrow_conflicts_in_expression(condition, diagnostics);
+            check_local_borrow_conflicts_in_expression(body, diagnostics);
         }
         BodyStatement::Loop { body, .. } => {
-            check_mutable_borrow_conflicts_in_expression(body, diagnostics)
+            check_local_borrow_conflicts_in_expression(body, diagnostics)
         }
         BodyStatement::ForRange {
             start, end, body, ..
         } => {
-            check_mutable_borrow_conflicts_in_expression(start, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(end, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+            check_local_borrow_conflicts_in_expression(start, diagnostics);
+            check_local_borrow_conflicts_in_expression(end, diagnostics);
+            check_local_borrow_conflicts_in_expression(body, diagnostics);
         }
         BodyStatement::ForEach { iterator, body, .. } => {
-            check_mutable_borrow_conflicts_in_expression(iterator, diagnostics);
-            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+            check_local_borrow_conflicts_in_expression(iterator, diagnostics);
+            check_local_borrow_conflicts_in_expression(body, diagnostics);
         }
         BodyStatement::MacroInvocation {
             arguments,
             ..
         } => {
             for argument in arguments {
-                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+                check_local_borrow_conflicts_in_expression(argument, diagnostics);
             }
         }
         BodyStatement::Break { .. }
@@ -1267,16 +1284,16 @@ fn check_mutable_borrow_conflicts_in_statement(
     }
 }
 
-fn mutable_borrowed_path(expression: &BodyExpr) -> Option<&str> {
+fn borrowed_local_path(expression: &BodyExpr) -> Option<(&str, bool)> {
     match &expression.kind {
         BodyExprKind::Reference {
-            mutable: true,
+            mutable,
             expression,
         } => match &expression.kind {
-            BodyExprKind::Path(name) => Some(name),
+            BodyExprKind::Path(name) => Some((name, *mutable)),
             _ => None,
         },
-        BodyExprKind::Parenthesized(inner) => mutable_borrowed_path(inner),
+        BodyExprKind::Parenthesized(inner) => borrowed_local_path(inner),
         _ => None,
     }
 }
