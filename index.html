@@ -54,12 +54,13 @@
       <h2 id="overview-title">Where Quill stands.</h2>
       <div class="overview-columns">
         <div class="overview-compatibility">
-          <p class="overview-label">Rustc comparison · Linux x86-64</p>
-          <p class="overview-score"><span id="compatibility-score">—</span><span class="score-unit"></span><span class="score-description">checks<br>match rustc</span></p>
+          <p class="overview-label">Regression suite · Linux x86-64</p>
+          <p class="overview-score"><span id="compatibility-score">—</span><span class="score-unit"></span><span class="score-description">regression checks<br>passing</span></p>
           <a class="text-link" href="/compatibility.html#differential-results">Explore compatibility <span aria-hidden="true">↗</span></a>
-          <p class="coverage-method">Results from our curated compiler checks. This measures the tested cases, not overall Rust compatibility.</p>
+          <p class="coverage-method">Each check compares a specific program or diagnostic with rustc. The total counts cases in our suite; missing Rust features may have no case yet. Even a full pass would not mean full Rust compatibility.</p>
           <p class="coverage-evidence">Comparison report unavailable.</p>
           <p class="coverage-counts" id="coverage-counts"></p>
+          <p class="coverage-method">The inventory describes broader capabilities. “Partial” means some forms work and others remain unsupported—even when their regression checks pass. These counts are not a completion percentage.</p>
         </div>
         <div class="overview-progress">
           <p class="overview-label">Current stage</p>

@@ -156,7 +156,7 @@ export function renderStats(html, data) {
   $("#compatibility-score").text("—");
   $(".overview-score .score-unit").text("");
   const summary = `${counts.available} available · ${counts.partial} partial · ${counts.planned} not yet · ${counts.unassessed} unassessed`;
-  $("#coverage-counts").text(`Capability inventory: ${summary}. Partial entries include implemented features with remaining gaps.`);
+  $("#coverage-counts").text(`Capability inventory · ${total} entries: ${summary}.`);
   $("#coverage-bar").attr("aria-label", `${total} tracked entries: ${summary}`);
   for (const [status, count] of Object.entries(counts)) {
     $(`#coverage-bar .coverage-${status}`)
