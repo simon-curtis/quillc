@@ -3026,7 +3026,7 @@ fn helper_return_value(
                     )?
                 }
             };
-            let value = if lowered_statements.is_empty() {
+            let mut value = if lowered_statements.is_empty() {
                 tail_value
             } else {
                 Value::Block {
@@ -3034,6 +3034,21 @@ fn helper_return_value(
                     tail: Box::new(tail_value),
                 }
             };
+            if let Some(field_types) = function.return_type.as_deref().and_then(pair_type_fields) {
+                let tuple = match &mut value {
+                    Value::Tuple(fields) => Some(fields),
+                    Value::Block { tail, .. } => match tail.as_mut() {
+                        Value::Tuple(fields) => Some(fields),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(tuple) = tuple {
+                    for (field, field_type) in tuple.iter_mut().zip(field_types) {
+                        coerce_annotated_integer_values(field, field_type);
+                    }
+                }
+            }
             if function.return_type.as_deref().is_some_and(is_slice_type) {
                 if !is_slice_value(&value) {
                     return Err(CodegenError::UnsupportedProgram(
@@ -3891,6 +3906,55 @@ fn lower_statements(
                         });
                         continue;
                     }
+                }
+                if matches!(&initializer.kind, BodyExprKind::Call { .. })
+                    && let Some(function) =
+                        function_for_call_expression(initializer, environment, functions)
+                    && let Some(field_types) =
+                        function.return_type.as_deref().and_then(pair_type_fields)
+                    && field_types
+                        .iter()
+                        .all(|field_type| *field_type == "i32" || is_word_type(field_type))
+                {
+                    let value = value_from_expression(initializer, environment, functions)?;
+                    if !matches!(
+                        &value,
+                        Value::Call {
+                            returns_pair: true,
+                            ..
+                        }
+                    ) {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "tuple local initializer must be a direct pair-returning call",
+                        ));
+                    }
+                    let mut fields = Vec::with_capacity(2);
+                    let mut call_fields = Vec::with_capacity(2);
+                    for field_type in field_types {
+                        let slot = *next_slot;
+                        *next_slot += 1;
+                        let is_word = is_word_type(field_type);
+                        fields.push(if is_word {
+                            Value::TypedWordLocal {
+                                slot,
+                                type_name: field_type.to_owned(),
+                            }
+                        } else {
+                            Value::Local(slot)
+                        });
+                        call_fields.push((slot, is_word));
+                    }
+                    environment.insert(name.clone(), Value::Tuple(fields));
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::LetTupleCall {
+                        fields: call_fields,
+                        initializer: value,
+                    });
+                    continue;
                 }
                 if let Some(function) =
                     function_for_call_expression(initializer, environment, functions)
@@ -5945,6 +6009,16 @@ fn value_from_expression(
                     "field reads currently require a local struct value",
                 ));
             };
+            if let Some(Value::Tuple(fields)) = environment.get(name) {
+                let index = field
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|index| *index < fields.len())
+                    .ok_or(CodegenError::UnsupportedProgram(
+                        "tuple field projection index is out of bounds",
+                    ))?;
+                return Ok(fields[index].clone());
+            }
             let Some(Value::StructLocal { fields, .. }) = environment.get(name) else {
                 return Err(CodegenError::UnsupportedProgram(
                     "field read base is not a supported local struct",
@@ -11842,6 +11916,20 @@ mod tests {
         )
         .unwrap();
         assert!(object.starts_with(b"\x7fELF"));
+    }
+
+    #[test]
+    fn stores_pair_return_locals_and_reads_each_field() {
+        let object = emit(
+            "fn pair() -> (u64, u64) { (19, 23) } fn main() { let values = pair(); let result = values.0 + values.1; println!(\"{result}\"); }",
+        )
+        .unwrap();
+        let output = std::env::temp_dir().join(format!("quill-pair-local-{}", std::process::id()));
+        quill_link::link_elf_executable(&object, &output, "_start").unwrap();
+        let result = std::process::Command::new(&output).output().unwrap();
+        let _ = std::fs::remove_file(&output);
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"42\n");
     }
 
     #[test]
