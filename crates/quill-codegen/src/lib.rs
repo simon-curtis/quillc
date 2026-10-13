@@ -6705,6 +6705,18 @@ fn value_from_expression(
             )?;
             Ok(Value::TextSlice(value.clone()))
         }
+        BodyExprKind::MacroInvocation(macro_expression) if macro_expression.path == "env" => {
+            let name = macro_expression.format_string.as_deref().ok_or(
+                CodegenError::UnsupportedProgram("`env!` requires a string literal name"),
+            )?;
+            std::env::var(name)
+                .map(Value::TextSlice)
+                .map_err(|_| {
+                    CodegenError::UnsupportedExpression(format!(
+                        "`env!` could not read environment variable `{name}`"
+                    ))
+                })
+        }
         BodyExprKind::MacroInvocation(_) => Err(CodegenError::UnsupportedProgram(
             "expression macro has no native expansion",
         )),

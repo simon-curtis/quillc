@@ -283,6 +283,20 @@
     "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(19); values.push(23); let mut total: u64 = 0; for value in values { total = total + value; } println!(\"{total}\"); }"
   },
   {
+    "id": "builtin-env-macro",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "built-in-macros",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "environment": {
+      "QUILL_COMPAT_ENV": "configured-value"
+    },
+    "source": "fn main() { let value = env!(\"QUILL_COMPAT_ENV\"); println!(\"{value}\"); }"
+  },
+  {
     "id": "panic-runtime",
     "kind": "run",
     "features": [

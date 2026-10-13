@@ -38,13 +38,21 @@ class Result:
     diagnostic_observed: dict | None = None
 
 
-def invoke(argv: list[str], cwd: pathlib.Path) -> subprocess.CompletedProcess[bytes]:
+def invoke(
+    argv: list[str],
+    cwd: pathlib.Path,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
     if argv and argv[0] in {"cargo", "rustc"} and not any(
         argument.startswith("+") for argument in argv[1:2]
     ):
         argv = [argv[0], f"+{TOOLCHAIN}", *argv[1:]]
     try:
-        return subprocess.run(argv, cwd=cwd, capture_output=True, check=False)
+        environment = os.environ.copy()
+        environment.update(extra_env or {})
+        return subprocess.run(
+            argv, cwd=cwd, env=environment, capture_output=True, check=False
+        )
     except OSError as error:
         raise RuntimeError(f"could not run {argv[0]!r}: {error}") from error
 
@@ -76,6 +84,12 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
     case_dir.mkdir()
     rust_binary = case_dir / "rustc-program"
     quill_binary = case_dir / "quill-program"
+    compile_environment = case.get("environment", {})
+    if not isinstance(compile_environment, dict) or any(
+        not isinstance(name, str) or not isinstance(value, str)
+        for name, value in compile_environment.items()
+    ):
+        raise RuntimeError(f"case {case['id']} environment must map strings to strings")
     if case["kind"] == "diagnostic":
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
@@ -299,7 +313,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
             ["rustc", "--edition", case.get("edition", "2024"),
              "--crate-type", "lib", "--emit=metadata", *case.get("rustc_args", []),
              str(source), "-o", str(rust_meta)],
-            case_dir)
+            case_dir, compile_environment)
         quill_args = [str(quill), "parse", str(source)]
     else:
         source = case_dir / "main.rs"
@@ -307,7 +321,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         edition = case.get("edition", "2024")
         rustc_args = ["rustc", "--edition", edition, *case.get("rustc_args", [])]
         rustc_args += [str(source), "-o", str(rust_binary)]
-        rustc_result = invoke(rustc_args, case_dir)
+        rustc_result = invoke(rustc_args, case_dir, compile_environment)
     rustc_accepted = rustc_result.returncode == 0
     if case["kind"] == "syntax-reject":
         quill_result = invoke([str(quill), "parse", str(source)], case_dir)
@@ -323,7 +337,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
 
     if case["kind"] == "run":
         quill_args = [str(quill), "build-subset", str(source), "-o", str(quill_binary)]
-    quill_result = invoke(quill_args, case_dir)
+    quill_result = invoke(quill_args, case_dir, compile_environment)
     quill_accepted = quill_result.returncode == 0
     if case["kind"] == "parse":
         passed = rustc_accepted and quill_accepted
@@ -337,8 +351,8 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                       f"Quill rejected positive case: {detail}",
                       rustc_result.returncode, quill_result.returncode)
 
-    rust_run = invoke([str(rust_binary)], case_dir)
-    quill_run = invoke([str(quill_binary)], case_dir)
+    rust_run = invoke([str(rust_binary)], case_dir, compile_environment)
+    quill_run = invoke([str(quill_binary)], case_dir, compile_environment)
     rust_stderr = normalize_runtime_stderr(case, rust_run.stderr)
     quill_stderr = normalize_runtime_stderr(case, quill_run.stderr)
     same = (rust_run.returncode == quill_run.returncode

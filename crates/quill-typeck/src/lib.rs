@@ -4214,7 +4214,7 @@ fn infer_with_structs(
             }
             match macro_expression.path.as_str() {
                 "format" => Ty::String,
-                "concat" => Ty::StringSlice,
+                "concat" | "env" => Ty::StringSlice,
                 "panic" | "todo" | "unimplemented" => Ty::Never,
                 _ => Ty::Unknown,
             }
