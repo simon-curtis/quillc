@@ -64,6 +64,7 @@ struct ParsedSource {
     module_path: Vec<String>,
     parse: quill_syntax::Parse,
     owner: Option<CrateTargetId>,
+    summary_only: bool,
 }
 
 #[derive(Clone)]
@@ -281,7 +282,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
         })
         .collect();
     let mut pool = None;
-    let (parsed_files, module_errors) = match parse_cargo_module_trees(&roots, &mut pool) {
+    let (parsed_files, module_errors) = match parse_cargo_module_trees(&roots, &mut pool, false) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("quillc: could not parse Cargo target roots: {error}");
@@ -716,6 +717,7 @@ fn compile_library_object(source_path: &str, output_path: &str) -> Result<(), St
         module_path: Vec::new(),
         parse: parsed,
         owner: None,
+        summary_only: false,
     };
     let diagnostics = quill_typeck::check_functions_strict_with_structs(
         &parsed_source.parse.functions,
@@ -1121,7 +1123,7 @@ fn compile_cargo_subset_for_target_with_workspace(
         roots.push((owner, library.source_path.display().to_string()));
     }
     let mut pool = None;
-    let (parsed_files, module_errors) = parse_cargo_module_trees(&roots, &mut pool)
+    let (parsed_files, module_errors) = parse_cargo_module_trees(&roots, &mut pool, true)
         .map_err(|error| format!("could not read Cargo target sources: {error}"))?;
     profile_checkpoint("parse source graph", &mut profile_timer);
     if !module_errors.is_empty() {
@@ -1974,6 +1976,18 @@ fn compile_parsed_sources(
     } else {
         preloaded_objects.keys().cloned().collect()
     };
+
+    for file in &mut parsed_files {
+        let Some(owner) = file.owner.as_ref() else {
+            continue;
+        };
+        if file.summary_only && !cached_target_keys.contains(&owner.key()) {
+            let cache = quill_query::ParseCache::for_source(&file.source);
+            file.parse =
+                cache.parse_file_with_cfg_and_edition(&file.source, &owner.cfg, &owner.edition);
+            file.summary_only = false;
+        }
+    }
 
     let enum_definitions = parsed_files
         .iter()
@@ -4237,7 +4251,7 @@ fn parse_module_trees(
     pool: &mut Option<quill_parallel::WorkPool>,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let roots: Vec<_> = roots.iter().map(|path| (None, path.clone())).collect();
-    parse_module_roots(&roots, pool)
+    parse_module_roots(&roots, pool, false)
 }
 
 fn parse_module_trees_with_cfg(
@@ -4251,23 +4265,25 @@ fn parse_module_trees_with_cfg(
         cfg: cfg.clone(),
         edition: "2024".into(),
     };
-    parse_module_roots(&[(Some(owner), root.to_owned())], pool)
+    parse_module_roots(&[(Some(owner), root.to_owned())], pool, false)
 }
 
 fn parse_cargo_module_trees(
     roots: &[(CrateTargetId, String)],
     pool: &mut Option<quill_parallel::WorkPool>,
+    summaries: bool,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let roots: Vec<_> = roots
         .iter()
         .map(|(owner, path)| (Some(owner.clone()), path.clone()))
         .collect();
-    parse_module_roots(&roots, pool)
+    parse_module_roots(&roots, pool, summaries)
 }
 
 fn parse_module_roots(
     roots: &[(Option<CrateTargetId>, String)],
     pool: &mut Option<quill_parallel::WorkPool>,
+    summaries: bool,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let root_requests = roots
         .iter()
@@ -4332,7 +4348,16 @@ fn parse_module_roots(
             inputs
                 .iter()
                 .map(|(source, cfg, edition)| {
-                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
+                    if summaries {
+                        let (parse, compact) =
+                            cache.parse_file_summary_with_cfg_and_edition(source, cfg, edition);
+                        (parse, compact)
+                    } else {
+                        (
+                            cache.parse_file_with_cfg_and_edition(source, cfg, edition),
+                            false,
+                        )
+                    }
                 })
                 .collect()
         } else {
@@ -4342,11 +4367,18 @@ fn parse_module_roots(
             pool.as_ref()
                 .expect("pool initialized")
                 .map(&inputs, |(source, cfg, edition)| {
-                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
+                    if summaries {
+                        cache.parse_file_summary_with_cfg_and_edition(source, cfg, edition)
+                    } else {
+                        (
+                            cache.parse_file_with_cfg_and_edition(source, cfg, edition),
+                            false,
+                        )
+                    }
                 })
         };
         let mut next_requests = Vec::new();
-        for ((source, module_path, path_is_override, owner), parse) in
+        for ((source, module_path, path_is_override, owner), (parse, summary_only)) in
             frontier.into_iter().zip(parses)
         {
             let (requests, file_errors) =
@@ -4358,6 +4390,7 @@ fn parse_module_roots(
                 module_path,
                 parse,
                 owner,
+                summary_only,
             });
         }
         let load_module = |(path, module_path, path_is_override, owner): &(
@@ -4580,6 +4613,7 @@ mod tests {
             module_path: vec!["api".to_owned()],
             parse: quill_syntax::Parse::default(),
             owner: None,
+            summary_only: false,
         };
         assert_eq!(
             canonical_struct_path(&file, &structure, "catalog"),
@@ -4793,6 +4827,7 @@ mod tests {
             source,
             module_path: Vec::new(),
             owner: None,
+            summary_only: false,
         };
         assert!(
             module_import_aliases(&file, &HashSet::new(), "")
@@ -4809,6 +4844,7 @@ mod tests {
             source,
             module_path: Vec::new(),
             owner: None,
+            summary_only: false,
         };
         assert!(module_import_aliases(&file, &HashSet::new(), "").is_err());
     }
