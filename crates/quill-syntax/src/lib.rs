@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use syn::parse::Parser;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
@@ -729,9 +730,16 @@ struct AstCollector<'a> {
     enums: Vec<EnumItem>,
     modules: Vec<ModuleItem>,
     imports: Vec<ImportItem>,
+    macro_expansions: Vec<LocalMacroExpansion>,
     impl_generic_parameters: Vec<String>,
     impl_generic_has_bounds: bool,
     unsupported_item_count: usize,
+}
+
+struct LocalMacroExpansion {
+    name: String,
+    scope: Vec<String>,
+    expression: syn::Expr,
 }
 
 impl<'a> AstCollector<'a> {
@@ -745,6 +753,7 @@ impl<'a> AstCollector<'a> {
             enums: Vec::new(),
             modules: Vec::new(),
             imports: Vec::new(),
+            macro_expansions: Vec::new(),
             impl_generic_parameters: Vec::new(),
             impl_generic_has_bounds: false,
             unsupported_item_count: 0,
@@ -863,10 +872,15 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
         if !self.cfg.attributes_enabled(item_attributes(item)) {
             return;
         }
+        let supported_literal_macro = matches!(item, syn::Item::Macro(macro_item)
+            if macro_item.mac.path.is_ident("macro_rules")
+                && macro_item.ident.is_some()
+                && zero_arg_literal_macro(macro_item).is_some());
         if !matches!(
             item,
             syn::Item::Fn(_) | syn::Item::Struct(_) | syn::Item::Enum(_) | syn::Item::Impl(_)
-        ) {
+        ) && !supported_literal_macro
+        {
             self.unsupported_item_count += 1;
         }
         if let syn::Item::Fn(function) = item {
@@ -882,10 +896,33 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
     }
 
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        self.add_function(&item.sig, &item.vis, item.span(), Some(&item.block));
+        if self.macro_expansions.is_empty() {
+            self.add_function(&item.sig, &item.vis, item.span(), Some(&item.block));
+            self.scope.push(format!("fn:{}", item.sig.ident));
+            syn::visit::visit_block(self, &item.block);
+            self.scope.pop();
+            return;
+        }
+        let mut block = (*item.block).clone();
+        expand_syn_macros(&mut block, &self.macro_expansions, &self.scope);
+        self.add_function(&item.sig, &item.vis, item.span(), Some(&block));
         self.scope.push(format!("fn:{}", item.sig.ident));
-        syn::visit::visit_block(self, &item.block);
+        syn::visit::visit_block(self, &block);
         self.scope.pop();
+    }
+
+    fn visit_item_macro(&mut self, item: &'ast syn::ItemMacro) {
+        self.unsupported_item_count += unsupported_attribute_count(&item.attrs);
+        if item.mac.path.is_ident("macro_rules")
+            && let Some(name) = &item.ident
+            && let Some(expression) = zero_arg_literal_macro(item)
+        {
+            self.macro_expansions.push(LocalMacroExpansion {
+                name: name.to_string(),
+                scope: self.scope.clone(),
+                expression,
+            });
+        }
     }
 
     fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
@@ -1125,6 +1162,84 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
             &mut self.imports,
         );
     }
+}
+
+fn zero_arg_literal_macro(item: &syn::ItemMacro) -> Option<syn::Expr> {
+    let mut tokens = item.mac.tokens.clone().into_iter();
+    let proc_macro2::TokenTree::Group(pattern) = tokens.next()? else {
+        return None;
+    };
+    if pattern.delimiter() != proc_macro2::Delimiter::Parenthesis || !pattern.stream().is_empty() {
+        return None;
+    }
+    for expected in ['=', '>'] {
+        let proc_macro2::TokenTree::Punct(punctuation) = tokens.next()? else {
+            return None;
+        };
+        if punctuation.as_char() != expected {
+            return None;
+        }
+    }
+    let proc_macro2::TokenTree::Group(body) = tokens.next()? else {
+        return None;
+    };
+    if body.delimiter() != proc_macro2::Delimiter::Brace {
+        return None;
+    }
+    if let Some(token) = tokens.next()
+        && !matches!(token, proc_macro2::TokenTree::Punct(punctuation) if punctuation.as_char() == ';')
+    {
+        return None;
+    }
+    if tokens.next().is_some() {
+        return None;
+    }
+    let expression = syn::parse2::<syn::Expr>(body.stream()).ok()?;
+    matches!(expression, syn::Expr::Lit(_)).then_some(expression)
+}
+
+fn expand_syn_macros(
+    block: &mut syn::Block,
+    definitions: &[LocalMacroExpansion],
+    scope: &[String],
+) {
+    struct Expander<'a> {
+        definitions: &'a [LocalMacroExpansion],
+        scope: &'a [String],
+    }
+
+    impl syn::visit_mut::VisitMut for Expander<'_> {
+        fn visit_expr_mut(&mut self, expression: &mut syn::Expr) {
+            let replacement = if let syn::Expr::Macro(invocation) = expression {
+                let path = &invocation.mac.path;
+                let name = if path.segments.len() == 1
+                    && matches!(path.segments[0].arguments, syn::PathArguments::None)
+                    && invocation.mac.tokens.is_empty()
+                {
+                    Some(path.segments[0].ident.to_string())
+                } else {
+                    None
+                };
+                name.and_then(|name| {
+                    self.definitions
+                        .iter()
+                        .rev()
+                        .find(|definition| {
+                            definition.name == name && definition.scope == self.scope
+                        })
+                        .map(|definition| definition.expression.clone())
+                })
+            } else {
+                None
+            };
+            if let Some(replacement) = replacement {
+                *expression = replacement;
+            }
+            syn::visit_mut::visit_expr_mut(self, expression);
+        }
+    }
+
+    Expander { definitions, scope }.visit_block_mut(block);
 }
 
 fn unsupported_attribute_count(attributes: &[syn::Attribute]) -> usize {
@@ -3281,6 +3396,36 @@ mod tests {
         assert_eq!(
             macro_expression.const_expansion.as_deref(),
             Some("qui121.5true")
+        );
+    }
+
+    #[test]
+    fn expands_zero_argument_literal_macro_rules_invocations() {
+        let source = SourceFile::from_text(
+            "literal-macro.rs",
+            "macro_rules! answer { () => { 42u64 }; } fn main() { let value = answer!(); }",
+        );
+        let parsed = parse_ast(&source);
+        assert!(!parsed.had_error);
+        assert_eq!(parsed.unsupported_item_count, 0);
+        let BodyExprKind::Block { statements, .. } =
+            &parsed.functions[0].body.as_ref().unwrap().kind
+        else {
+            panic!("expected the main function body");
+        };
+        let BodyStatement::Let {
+            initializer: Some(expression),
+            ..
+        } = &statements[0]
+        else {
+            panic!("expected the macro expansion to initialize a local");
+        };
+        assert_eq!(
+            expression.kind,
+            BodyExprKind::Literal(LiteralKind::Integer {
+                text: "42".to_owned(),
+                suffix: "u64".to_owned(),
+            })
         );
     }
 

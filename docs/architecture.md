@@ -60,8 +60,9 @@ predicates, and parses independent files in parallel. HIR retains module and
 target ownership, imports, struct fields, impl ownership, and selected
 qualified call paths. It does not expand macros or implement Rust's complete
 name resolution, visibility, or type namespaces. The frontend constant-folds
-literal-only `concat!` invocations; general declarative and procedural
-macro expansion remains unsupported.
+literal-only `concat!` invocations and expands zero-argument, single-arm
+`macro_rules!` definitions whose bodies are literals. General declarative and
+procedural macro expansion remains unsupported.
 
 Parse queries are keyed by canonical path, content, and `cfg` fingerprint.
 Type-check queries have whole-file and per-body cache entries; body entries
