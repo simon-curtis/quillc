@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [borrowed-move run](results/2026-10-13-borrowed-move-clean.json) passes
+105/105 curated cases at clean revision `8985c9f`. It detects E0505 when moving
+a non-`Copy` local with a live shared borrow and accepts the move after that
+borrow's last use. Quill matches rustc's checked diagnostic code, message, and
+primary location. This 100% corpus result does not establish overall Rust
+compatibility.
+
 The [live-access run](results/2026-10-13-live-access-clean.json) passes
 103/103 curated cases at clean revision `7a0b586`. It catches E0506 for
 assigning through a local while a shared borrow remains live, E0503 for
