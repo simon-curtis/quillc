@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [shared/mutable borrow run](results/2026-10-13-shared-mut-borrow-clean.json)
+passes 98/98 curated cases at clean revision `9a710b9`. It checks E0499 for
+overlapping named mutable references, E0502 for overlapping shared/mutable
+references in both borrow orders, and accepts overlapping shared references.
+Quill matches rustc's checked diagnostic codes, messages, and primary
+locations. This 100% corpus result does not establish overall Rust compatibility.
+
 The [borrow-conflict run](results/2026-10-13-borrow-conflict-clean.json)
 passes 95/95 curated cases at clean revision `a0657a6`. It checks E0499 when
 two named mutable references to the same local are simultaneously live, and
