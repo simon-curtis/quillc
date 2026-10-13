@@ -174,3 +174,6 @@
 .performance-provenance p{font-size:12px;line-height:1.7;color:var(--muted);margin:0}.performance-provenance #checkout-revision{font-family:'Geist Mono',monospace;font-size:11px;color:var(--ink);margin-left:9px}
 #checkout-revision a{text-decoration:underline;text-underline-offset:4px}.benchmark-revision-note{display:inline-block;margin-left:20px;font-size:11px}.performance-provenance .text-link{font-size:12px;flex-shrink:0}
 @media(max-width:900px){.overview-columns{grid-template-columns:1fr;gap:32px}.project-overview{padding-block:28px 34px}.project-overview>h2{margin-bottom:24px}.coverage-bar,.overview-progress>p:not(.overview-label),.project-milestones{max-width:100%}.performance-provenance{align-items:flex-start;flex-direction:column;gap:13px}.benchmark-revision-note{display:block;margin-left:0;margin-top:6px}}
+
+.github-link{white-space:nowrap}.github-link span{margin-left:4px}
+@media(max-width:900px){.header nav{flex-wrap:wrap;justify-content:flex-end;gap:0 16px;max-width:calc(100% - 125px)}.header nav a{padding-block:6px}}
