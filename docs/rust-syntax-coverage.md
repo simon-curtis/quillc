@@ -55,6 +55,25 @@ understand every node.
 
 ## Evidence and upgrade gate
 
+The compiler's Quill model collector also has rustc differential acceptance
+corpora. Run them with the pinned compiler toolchain and rust-src installed:
+
+```sh
+cargo test -p quill-syntax --lib rustc_parser_fixture_corpus -- --ignored --nocapture
+cargo test -p quill-syntax --lib rustc_library_source_corpus -- --ignored --nocapture
+```
+
+On 2026-10-13, the parser fixture gate checked 304 rustc-accepted fixtures
+among 440 complete-source fixtures. The library-source gate checked 1,125
+rustc-accepted files across `core`, `alloc`, `std`, `test`, `proc_macro`,
+`panic_abort`, `panic_unwind`, and `std_detect`; Quill accepted every file that
+the local rustc AST dump accepted. Rustc's AST dump performs early AST
+validation, so these counts are accepted inputs, not a claim that every file
+was fully type-checked. The corpus checks Quill's source-model collector, while
+the LSP runner above checks full-tree parsing, diagnostics, and incremental
+edits. Together they provide broad regression coverage but cannot establish
+literal 100% compatibility with every stable and unstable Rust grammar form.
+
 Run the release server through the Quill-owned gate:
 
 ```sh
