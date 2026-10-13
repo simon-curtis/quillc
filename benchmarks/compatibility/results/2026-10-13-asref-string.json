@@ -1,0 +1,886 @@
+{
+  "toolchain": "nightly-2026-08-23",
+  "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "quillc": "/home/simon/git/quillc/target/release/quillc",
+  "quillc_source_revision": "e702671b30008c6cc3e08608bff34a0ead6cf7aa",
+  "quillc_source_dirty": true,
+  "quillc_source_dirty_paths": [
+    "crates/quill-lsp/src/lib.rs"
+  ],
+  "quillc_artifact_mtime": "2026-10-13T16:35:04.881053+00:00",
+  "quillc_sha256": "7130c1ce7620345aa0e4f66ac917b4fe128722098b7aa83a66b2c2cdd1656830",
+  "passed": 39,
+  "total": 44,
+  "percent": 88.6,
+  "results": [
+    {
+      "case": "hello-world",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "scalar-calls-and-arithmetic",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "recursive-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "integer-match",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "while-loop",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "integer-range-for-loop",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "struct-field-and-inherent-method",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "fixed-array-indexing",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "inline-module-import",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-copy-function",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "string-slice-helper",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-local-workspace-library",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-features-and-target-cfg",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-multiple-binary-targets",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-type-mismatch",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0308",
+        "rustc_message": "mismatched types",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 30
+        },
+        "quill_code": "E0308",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 30
+        },
+        "quill_diagnostic": "/tmp/quill-rustc-compat-vgs43zyi/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+      }
+    },
+    {
+      "case": "if-let-fieldless-enum",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "option-status-check",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "owned-string-format-capture",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-expansion",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-use-after-move",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0382",
+        "rustc_message": "borrow of moved value: `value`",
+        "rustc_primary_span": {
+          "line": 1,
+          "column": 78
+        },
+        "quill_code": "E0382",
+        "quill_primary_location": {
+          "line": 1,
+          "column": 78
+        },
+        "quill_diagnostic": "/tmp/quill-rustc-compat-vgs43zyi/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+      }
+    },
+    {
+      "case": "rust-syntax-async-lifetimes-macros",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "derive-clone-debug-equality",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-trait-dispatch",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-vgs43zyi/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-push-and-iteration",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "panic-runtime",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: this macro invocation has no native expansion",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "cargo-build-script-cfg",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "rustc-host-links-quill-rust-abi-object",
+      "kind": "abi-link",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "object interop matches",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "rustc-extern-quill-library-artifact",
+      "kind": "extern-artifact",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-vgs43zyi/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-vgs43zyi/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-vgs43zyi/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-vgs43zyi/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "signed-i32-arithmetic-and-branching",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "loop-break-and-continue",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "two-scalar-tuple-return-and-fields",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-integer-slice-iteration",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "result-status-check",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-string-growth-and-index",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-string-second-element-index",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "btreemap-string-insert-and-get",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-asref-string",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-repetition-expansion",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-vgs43zyi/macro-repetition-expansion/main.rs: unsupported item outside the native codegen subset",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2015-async-identifier",
+      "kind": "cargo-run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected binary `edition-2015-check`: quillc: /tmp/quill-rustc-compat-vgs43zyi/edition-2015-async-identifier/src/main.rs:1:17: invalid Rust syntax: expected one of: identifier, `::`, `<`, `_`, literal, `const`, `ref`, `mut`, `&`, parentheses, square brackets, `..`, `const`",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-function-syntax",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-identifier-rejected",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2021-format-capture",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2024-if-let-chain",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-future-async-parse",
+      "kind": "parse",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept source syntax",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    }
+  ],
+  "feature_coverage": [
+    {
+      "id": "async--const-evaluation--and-unsafe-code",
+      "tracker_status": "unassessed",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "borrow-checking-and-lifetimes",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "cargo-artifacts-and-rust-abi",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 2,
+      "passed": 1,
+      "failed": [
+        "rustc-extern-quill-library-artifact"
+      ]
+    },
+    {
+      "id": "control-flow",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 7,
+      "passed": 7,
+      "failed": []
+    },
+    {
+      "id": "derive-implementations",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "diagnostics-parity",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "enums-and-match",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "external-dependencies-and-build-scripts",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "features-and-cfg",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "functions-and-scalar-arithmetic",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 7,
+      "passed": 5,
+      "failed": [
+        "macro-repetition-expansion",
+        "edition-2015-async-identifier"
+      ]
+    },
+    {
+      "id": "general-macro-expansion",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 3,
+      "passed": 2,
+      "failed": [
+        "macro-repetition-expansion"
+      ]
+    },
+    {
+      "id": "generics",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 3,
+      "passed": 2,
+      "failed": [
+        "generic-trait-dispatch"
+      ]
+    },
+    {
+      "id": "if-let",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "linux-x86-64-executables",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 36,
+      "passed": 32,
+      "failed": [
+        "generic-trait-dispatch",
+        "panic-runtime",
+        "macro-repetition-expansion",
+        "edition-2015-async-identifier"
+      ]
+    },
+    {
+      "id": "modules-and-imports",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "multiple-binary-targets",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "option--result--and",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "owned-strings",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 4,
+      "passed": 4,
+      "failed": []
+    },
+    {
+      "id": "println--and-format",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 27,
+      "passed": 25,
+      "failed": [
+        "macro-repetition-expansion",
+        "edition-2015-async-identifier"
+      ]
+    },
+    {
+      "id": "rust-source-parsing",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 6,
+      "passed": 5,
+      "failed": [
+        "edition-2015-async-identifier"
+      ]
+    },
+    {
+      "id": "single-binary-with-workspace-libraries",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "standard-library--drop--and-panic",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 1,
+      "passed": 0,
+      "failed": [
+        "panic-runtime"
+      ]
+    },
+    {
+      "id": "structs-and-inherent-methods",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "trait-solving",
+      "tracker_status": "planned",
+      "probed": true,
+      "cases": 1,
+      "passed": 0,
+      "failed": [
+        "generic-trait-dispatch"
+      ]
+    },
+    {
+      "id": "tuples--arrays--and-slices",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 3,
+      "passed": 3,
+      "failed": []
+    },
+    {
+      "id": "type-checking",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "utf-8-string-literal-helper-calls",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "vec-and-btreemap",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 4,
+      "passed": 4,
+      "failed": []
+    },
+    {
+      "id": "windows-output",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    }
+  ]
+}
