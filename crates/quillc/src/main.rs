@@ -2260,9 +2260,20 @@ fn compile_parsed_sources(
             );
         }
         profile_checkpoint("prepare and fetch package objects", &mut profile_timer);
-        let object_refs = target_objects.iter().map(Vec::as_slice).collect::<Vec<_>>();
-        quill_link::link_elf_objects(&object_refs, output_path, "_start")
-            .map_err(|error| error.to_string())?;
+        let cached_paths = fast_object_cache_paths.and_then(|paths| {
+            target_order
+                .iter()
+                .map(|target| paths.get(target))
+                .collect::<Option<Vec<_>>>()
+        });
+        if let Some(paths) = cached_paths {
+            quill_link::link_elf_object_paths(&paths, output_path, "_start")
+                .map_err(|error| error.to_string())?;
+        } else {
+            let object_refs = target_objects.iter().map(Vec::as_slice).collect::<Vec<_>>();
+            quill_link::link_elf_objects(&object_refs, output_path, "_start")
+                .map_err(|error| error.to_string())?;
+        }
         profile_checkpoint("link package objects", &mut profile_timer);
         return Ok(());
     }

@@ -62,13 +62,37 @@ pub fn link_elf_objects(
         object_paths.push(path.clone());
         temporary_objects.push(TempObject(path));
     }
+    link_elf_object_paths(&object_paths, output_path, entry_symbol)
+}
+
+/// Link existing ELF object files without copying their contents through
+/// temporary files. Callers retain ownership of the input paths.
+pub fn link_elf_object_paths(
+    object_paths: &[impl AsRef<Path>],
+    output_path: impl AsRef<Path>,
+    entry_symbol: &str,
+) -> Result<(), LinkError> {
+    if object_paths.is_empty() {
+        return Err(LinkError::InvalidElfObject);
+    }
+    for path in object_paths {
+        let mut file = fs::File::open(path.as_ref())
+            .map_err(|error| LinkError::TemporaryObjectIo(error.to_string()))?;
+        let mut magic = [0; 4];
+        use std::io::Read;
+        file.read_exact(&mut magic)
+            .map_err(|error| LinkError::TemporaryObjectIo(error.to_string()))?;
+        if &magic != b"\x7fELF" {
+            return Err(LinkError::InvalidElfObject);
+        }
+    }
     let mut command = Command::new("ld");
     command
         .arg("-o")
         .arg(output_path.as_ref())
         .arg("-e")
         .arg(entry_symbol);
-    command.args(&object_paths);
+    command.args(object_paths.iter().map(AsRef::as_ref));
     let output = command
         .output()
         .map_err(|error| LinkError::LinkerUnavailable(error.to_string()))?;
