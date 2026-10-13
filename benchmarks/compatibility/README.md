@@ -57,6 +57,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [fixed-i32-array runtime-index run](results/2026-10-13-fixed-i32-array-index-clean.json)
+passes 76/76 cases at clean revision `cac1ddc`. It adds in-range and
+out-of-range runtime indexing for immutable `[i32; N]` arrays, matching
+rustc's output and bounds-panic location. Other array element types and
+mutation remain incomplete. This curated pass rate is not an overall Rust
+compatibility percentage.
+
 The [borrowed-slice runtime-index run](results/2026-10-13-borrowed-slice-index-clean.json)
 passes 74/74 cases at clean revision `746950b`. It checks runtime `u64` and
 `i32` indexing through borrowed slices plus an out-of-bounds `u64` access with
