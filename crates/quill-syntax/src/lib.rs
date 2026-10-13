@@ -2806,7 +2806,7 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
                 .collect::<Option<Vec<_>>>()
                 .map(|parts| parts.concat())
         }),
-        "stringify" => Some(mac.tokens.to_string()),
+        "stringify" => stringify_tokens(&mac.tokens, source),
         _ => None,
     };
     MacroExpression {
@@ -2815,6 +2815,206 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
         format_string,
         arguments,
         const_expansion,
+    }
+}
+
+fn stringify_tokens(tokens: &proc_macro2::TokenStream, source: &SourceFile) -> Option<String> {
+    let range = tokens.span().byte_range();
+    let text = source.text().get(range)?;
+    let fragment = SourceFile::from_text(source.path().to_path_buf(), text);
+    let items = build_token_trees(&fragment)?;
+    Some(stringify_sequence(
+        &items,
+        fragment.text(),
+        0..fragment.text().len(),
+        false,
+    ))
+}
+
+fn build_token_trees(source: &SourceFile) -> Option<Vec<TokenTree>> {
+    let lexed = lex(source);
+    if lexed.had_error {
+        return None;
+    }
+    let mut items = Vec::new();
+    let mut stack: Vec<GroupFrame> = Vec::new();
+    for token in lexed.tokens {
+        let text = source.slice(token.span.clone());
+        if let Some(delimiter) = opening(text) {
+            stack.push(GroupFrame {
+                delimiter,
+                start: token.span.start,
+                children: Vec::new(),
+            });
+        } else if let Some(delimiter) = closing(text) {
+            if !stack
+                .last()
+                .is_some_and(|frame| frame.delimiter == delimiter)
+            {
+                return None;
+            }
+            let frame = stack.pop().expect("top frame checked");
+            append_tree(
+                &mut items,
+                &mut stack,
+                TokenTree::Group {
+                    delimiter,
+                    span: frame.start..token.span.end,
+                    children: frame.children,
+                },
+            );
+        } else {
+            append_tree(&mut items, &mut stack, TokenTree::Token(token));
+        }
+    }
+    if !stack.is_empty() {
+        return None;
+    }
+    Some(items)
+}
+
+fn stringify_sequence(
+    trees: &[TokenTree],
+    source: &str,
+    bounds: Range<usize>,
+    preserve_colon_space: bool,
+) -> String {
+    let mut result = String::new();
+    let mut previous_end = bounds.start;
+    let mut previous = None;
+    for tree in trees {
+        if matches!(tree, TokenTree::Token(token) if token.kind == TokenKind::DocComment) {
+            continue;
+        }
+        let span = match tree {
+            TokenTree::Token(token) => &token.span,
+            TokenTree::Group { span, .. } => span,
+        };
+        let gap = source.get(previous_end..span.start).unwrap_or_default();
+        if !gap.is_empty()
+            && !stringify_suppresses_gap(tree, previous, source, preserve_colon_space)
+        {
+            result.push(' ');
+        }
+        match tree {
+            TokenTree::Token(token) => {
+                result.push_str(source.get(token.span.clone()).unwrap_or_default());
+                previous = Some(StringifyPrevious::Token(token));
+            }
+            TokenTree::Group {
+                delimiter,
+                span,
+                children,
+            } => {
+                result.push_str(&stringify_group(*delimiter, span, children, source));
+                previous = Some(StringifyPrevious::Group);
+            }
+        }
+        previous_end = span.end;
+    }
+    result
+}
+
+#[derive(Clone, Copy)]
+enum StringifyPrevious<'a> {
+    Token(&'a Token),
+    Group,
+}
+
+fn stringify_suppresses_gap(
+    current: &TokenTree,
+    previous: Option<StringifyPrevious<'_>>,
+    source: &str,
+    preserve_colon_space: bool,
+) -> bool {
+    if let TokenTree::Token(token) = current
+        && matches!(source.get(token.span.clone()), Some("," | ";"))
+    {
+        return true;
+    }
+    if !preserve_colon_space
+        && matches!(current, TokenTree::Token(token)
+            if token.kind == TokenKind::Punctuation
+                && source.get(token.span.clone()) == Some(":"))
+    {
+        return true;
+    }
+    let TokenTree::Group {
+        delimiter: Delimiter::Parenthesis,
+        ..
+    } = current
+    else {
+        return false;
+    };
+    match previous {
+        Some(StringifyPrevious::Token(token)) if token.kind == TokenKind::Identifier => true,
+        Some(StringifyPrevious::Token(token))
+            if token.kind == TokenKind::Punctuation
+                && matches!(source.get(token.span.clone()), Some("!" | "#")) =>
+        {
+            true
+        }
+        Some(StringifyPrevious::Group) | Some(StringifyPrevious::Token(_)) | None => false,
+    }
+}
+
+fn stringify_group(
+    delimiter: Delimiter,
+    span: &Range<usize>,
+    children: &[TokenTree],
+    source: &str,
+) -> String {
+    let (opening, closing) = match delimiter {
+        Delimiter::Parenthesis => ('(', ')'),
+        Delimiter::Brace => ('{', '}'),
+        Delimiter::Bracket => ('[', ']'),
+    };
+    let inner_start = span.start + opening.len_utf8();
+    let inner_end = span.end - closing.len_utf8();
+    let visible: Vec<_> = children
+        .iter()
+        .filter(|tree| !matches!(tree, TokenTree::Token(token) if token.kind == TokenKind::DocComment))
+        .collect();
+    let preserve_edge_spacing = delimiter == Delimiter::Brace;
+    let mut result = String::from(opening);
+    if let Some(first) = visible.first() {
+        let first_span = tree_span(first);
+        if preserve_edge_spacing
+            && source
+                .get(inner_start..first_span.start)
+                .is_some_and(|gap| !gap.is_empty())
+        {
+            result.push(' ');
+        }
+        let last_span = tree_span(visible.last().expect("first child exists"));
+        result.push_str(&stringify_sequence(
+            children,
+            source,
+            first_span.start..last_span.end,
+            delimiter == Delimiter::Brace,
+        ));
+        if preserve_edge_spacing
+            && source
+                .get(last_span.end..inner_end)
+                .is_some_and(|gap| !gap.is_empty())
+        {
+            result.push(' ');
+        }
+    } else if preserve_edge_spacing
+        && source
+            .get(inner_start..inner_end)
+            .is_some_and(|gap| !gap.is_empty())
+    {
+        result.push(' ');
+    }
+    result.push(closing);
+    result
+}
+
+fn tree_span(tree: &TokenTree) -> &Range<usize> {
+    match tree {
+        TokenTree::Token(token) => &token.span,
+        TokenTree::Group { span, .. } => span,
     }
 }
 
@@ -4029,26 +4229,36 @@ mod tests {
 
     #[test]
     fn computes_stringify_macro_expansion_from_tokens() {
-        let source = SourceFile::from_text(
-            "stringify.rs",
-            "fn value() -> &'static str { stringify!(answer + value) }",
-        );
-        let parsed = parse_ast(&source);
-        assert!(!parsed.had_error);
-        let body = parsed.functions[0].body.as_ref().unwrap();
-        let BodyExprKind::Block {
-            tail: Some(expression),
-            ..
-        } = &body.kind
-        else {
-            panic!("expected the function's stringify expression");
-        };
-        let BodyExprKind::MacroInvocation(macro_expression) = &expression.kind else {
-            panic!("expected a preserved stringify invocation");
-        };
-        assert_eq!(macro_expression.path, "stringify");
-        assert_eq!(macro_expression.const_expansion.as_deref(), Some("answer + value"));
-        assert!(macro_expression.arguments.is_empty());
+        let cases = [
+            ("answer + value", "answer + value"),
+            ("{a:1}", "{a:1}"),
+            ("{ a : b }", "{ a : b }"),
+            ("[a,b]", "[a,b]"),
+            ("[ a , b ]", "[a, b]"),
+            ("a/* comment */+b", "a +b"),
+            ("foo ()", "foo()"),
+            ("foo :: bar", "foo :: bar"),
+        ];
+        for (tokens, expected) in cases {
+            let text = format!("fn value() -> &'static str {{ stringify!({tokens}) }}");
+            let source = SourceFile::from_text("stringify.rs", text);
+            let parsed = parse_ast(&source);
+            assert!(!parsed.had_error, "{tokens}: {:?}", parsed.diagnostics);
+            let body = parsed.functions[0].body.as_ref().unwrap();
+            let BodyExprKind::Block {
+                tail: Some(expression),
+                ..
+            } = &body.kind
+            else {
+                panic!("expected stringify expression for {tokens}");
+            };
+            let BodyExprKind::MacroInvocation(macro_expression) = &expression.kind else {
+                panic!("expected preserved stringify invocation for {tokens}");
+            };
+            assert_eq!(macro_expression.path, "stringify");
+            assert_eq!(macro_expression.const_expansion.as_deref(), Some(expected));
+            assert!(macro_expression.arguments.is_empty());
+        }
     }
 
     #[test]
