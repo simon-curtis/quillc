@@ -1228,7 +1228,7 @@ impl Collector<'_> {
                 };
                 parameters.push(ParameterItem {
                     name: Some("self".to_owned()),
-                    mutable: type_text.starts_with("mut "),
+                    mutable: type_text.starts_with("mut ") || type_text.starts_with("&mut "),
                     type_text,
                     span: self.span(receiver.syntax()),
                 });
