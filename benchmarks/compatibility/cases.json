@@ -454,6 +454,28 @@
     "source": "macro_rules! sum { ($($value:expr),+ $(,)?) => {{ let mut total: u64 = 0; $(total = total + $value;)+ total }}; }\nfn main() { let result = sum!(7, 11, 24,); println!(\"{result}\"); }"
   },
   {
+    "id": "macro-semicolon-repetition",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "general-macro-expansion",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "macro_rules! sum { ($($value:expr);+) => {{ let mut total: u64 = 0; $(total = total + $value;)+ total }}; }\nfn main() { let result = sum!(7; 11; 24); println!(\"{result}\"); }"
+  },
+  {
+    "id": "macro-zero-or-more-repetition",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "general-macro-expansion",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "macro_rules! sum { ($($value:expr),*) => {{ let mut total: u64 = 0; $(total = total + $value;)* total }}; }\nfn main() { let result = sum!(); println!(\"{result}\"); }"
+  },
+  {
     "id": "edition-2015-async-identifier",
     "kind": "cargo-run",
     "features": [
