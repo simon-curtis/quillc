@@ -5312,8 +5312,27 @@ fn lower_statements(
                         continue;
                     }
                 };
+                let mut rewritten_condition = condition.clone();
+                let mut condition_temporaries = Vec::new();
+                materialize_index_reads(
+                    &mut rewritten_condition,
+                    environment,
+                    &mut condition_temporaries,
+                    *next_slot,
+                    "__quill_if",
+                );
+                if !condition_temporaries.is_empty() {
+                    lowered.extend(lower_statements(
+                        &condition_temporaries,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                }
                 let condition = condition_from_expression_with_structs(
-                    condition,
+                    &rewritten_condition,
                     environment,
                     functions,
                     structs,
