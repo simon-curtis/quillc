@@ -27,20 +27,21 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.698 s | 5.647 s | 567.3 MiB |
-| `quillc cargo-build-subset` | Cold | 0.314 s | 1.839 s | 133.3 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.688 s | 5.603 s | 560.2 MiB |
+| `quillc cargo-build-subset` | Cold | 0.325 s | 1.868 s | 134.9 MiB |
 | `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 18.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.006 s | 0.002 s | 18.1 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.287 s | 0.410 s | 229.0 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.082 s | 35.3 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.426 s | 229.0 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.174 s | 52.1 MiB |
+| `quillc cargo-build-subset` | Warm | 0.007 s | 0.002 s | 18.3 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.289 s | 0.413 s | 222.0 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.080 s | 35.4 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.305 s | 0.434 s | 229.7 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.081 s | 0.176 s | 52.4 MiB |
 
-Quill's median wall-time ratios were 8.59× cold, 3.17× warm, 11.04× for the
-comment edit, and 3.60× for the semantic edit. It used less sampled peak RSS
-in all four states. The semantic-edit median now clears the 3× wall-time
-target; this measures only the documented fixture and does not establish
-general Rust compiler performance.
+Quill's median wall-time ratios were 8.27× cold, 2.71× warm, 10.70× for the
+comment edit, and 3.77× for the semantic edit. It used less sampled peak RSS
+in all four states. The semantic-edit CPU-time ratio was 2.47× (0.176 s vs.
+0.434 s). The warm wall-time ratio is below 3×, and this result measures only
+the documented fixture; it does not establish general Rust compiler
+performance.
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
@@ -51,9 +52,12 @@ only exported interfaces and generic bodies are retained for dependent crates.
 A nested body-parallelism trial increased cold RSS without improving wall time
 and was reverted. The latest change moves parsed function bodies into the
 qualified-function index instead of deep-cloning them; on the semantic-edit
-fixture, wall time fell from the previous 0.103 s median to 0.084 s, and peak
-RSS fell from 73.5 MiB to 52.1 MiB. These are experiment notes, not separate
-acceptance results.
+fixture, wall time fell from the previous 0.103 s median to 0.081 s, and peak
+RSS fell from 73.5 MiB to 52.4 MiB. A three-run worker-count sweep found that
+`QUILL_JOBS=4` used 0.122 s median CPU time at 0.086 s wall time, while the
+12-worker setting used 0.172 s CPU at 0.081 s wall time. The current default
+uses all available workers for the fastest observed wall time. These are
+experiment notes, not separate acceptance results.
 
 ## Scope
 
