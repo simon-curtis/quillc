@@ -33,6 +33,7 @@ and feature IDs.
 | --- | --- |
 | `run`, `cargo-run` | Compile with both compilers; compare executable exit status, stdout, and stderr. Cargo cases may list multiple `binaries`, all of which are compared. |
 | `parse` | Syntax acceptance. |
+| `check` | Compiler type-check acceptance without requiring code generation. |
 | `syntax-reject` | Both compilers reject the source. |
 | `diagnostic` | Expected rustc error code, primary message, and primary source location. |
 
@@ -56,6 +57,13 @@ version but ran outside the repository without explicitly pinning the toolchain.
 Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
+
+The [match-move run](results/2026-10-13-match-move-clean.json) passes 91/91
+curated cases at clean revision `714f984`. It checks E0382 for a by-value
+match binding used after the match and checks that a wildcard match still
+accepts an already-moved value. The runner's `check` case compares semantic
+acceptance without requiring code generation. This 100% corpus result does not
+establish overall Rust compatibility.
 
 The [move-flow run](results/2026-10-13-move-flow-clean.json) passes 89/89
 curated cases at clean revision `f392c5f`. In addition to the conditional move
