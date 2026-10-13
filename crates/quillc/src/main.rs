@@ -35,6 +35,8 @@ struct BuildArtifactIndex {
     external_inputs: Vec<PathBuf>,
     semantic_inputs: Vec<(PathBuf, [u8; 32])>,
     artifact: PathBuf,
+    output_path: Option<PathBuf>,
+    output_stamp: Option<BuildFileStamp>,
 }
 
 struct CargoBuildArtifact {
@@ -82,13 +84,20 @@ fn main() -> ExitCode {
         Some("cargo-plan") => cargo_plan_command(args.collect()),
         Some("cargo-parse") => cargo_parse_command(args.collect()),
         Some("cargo-check-subset") => cargo_check_subset_command(args.collect()),
+        Some("lsp") if args.next().is_none() => match quill_lsp::run_stdio() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("quillc lsp: {error}");
+                ExitCode::FAILURE
+            }
+        },
         Some("--version") if args.next().is_none() => {
             println!("quillc {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         _ => {
             eprintln!(
-                "usage: quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program> | quillc --version"
+                "usage: quillc lsp | quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program> | quillc --version"
             );
             ExitCode::from(2)
         }
@@ -1012,8 +1021,13 @@ fn compile_cargo_subset_for_target_with_workspace(
             })?;
         }
         if std::fs::copy(&cache_path.path, output).is_ok() {
-            let _ =
-                write_build_artifact_index(&workspace.root, manifest, cache_path, external_inputs);
+            let _ = write_build_artifact_index(
+                &workspace.root,
+                manifest,
+                cache_path,
+                external_inputs,
+                output,
+            );
             return Ok(());
         }
     }
@@ -1042,7 +1056,13 @@ fn compile_cargo_subset_for_target_with_workspace(
     profile_checkpoint("type-check, codegen, and link", &mut profile_timer);
     if let Some(cache_path) = build_cache.filter(|_| selected_bin.is_none()) {
         let _ = cache_compiled_executable(output, &cache_path.path);
-        let _ = write_build_artifact_index(&workspace.root, manifest, &cache_path, external_inputs);
+        let _ = write_build_artifact_index(
+            &workspace.root,
+            manifest,
+            &cache_path,
+            external_inputs,
+            output,
+        );
     }
     Ok(())
 }
@@ -1086,13 +1106,35 @@ fn restore_cached_cargo_build(manifest: &str, output: &str) -> bool {
         return false;
     }
     profile_checkpoint("warm validate cached executable", &mut profile_timer);
+    if let Ok(output_path) = std::fs::canonicalize(output)
+        && index.output_path.as_ref() == Some(&output_path)
+        && index.output_stamp.as_ref() == file_stamp(&output_path).as_ref()
+    {
+        profile_checkpoint("warm reuse existing output", &mut profile_timer);
+        return true;
+    }
     if let Some(parent) = Path::new(output).parent()
         && std::fs::create_dir_all(parent).is_err()
     {
         return false;
     }
-    let copied = std::fs::copy(index.artifact, output).is_ok();
+    let copied = std::fs::copy(&index.artifact, output).is_ok();
     profile_checkpoint("warm copy output", &mut profile_timer);
+    if copied {
+        let artifact = CargoBuildArtifact {
+            path: index.artifact,
+            cfg_digest: index.cfg_digest,
+            uses_build_script: index.uses_build_script,
+            semantic_inputs: index.semantic_inputs,
+        };
+        let _ = write_build_artifact_index(
+            &workspace_root,
+            manifest,
+            &artifact,
+            index.external_inputs,
+            output,
+        );
+    }
     copied
 }
 
@@ -1360,6 +1402,7 @@ fn write_build_artifact_index(
     manifest: &str,
     artifact: &CargoBuildArtifact,
     external_inputs: Vec<PathBuf>,
+    output: &str,
 ) -> std::io::Result<()> {
     let manifest_path = std::fs::canonicalize(manifest)?;
     let Some(compiler) = std::env::current_exe()
@@ -1371,6 +1414,8 @@ fn write_build_artifact_index(
     let Some(inputs) = build_input_stamps(workspace_root, &external_inputs) else {
         return Ok(());
     };
+    let output_path = std::fs::canonicalize(output).ok();
+    let output_stamp = output_path.as_deref().and_then(file_stamp);
     let index = BuildArtifactIndex {
         workspace_root: workspace_root.to_path_buf(),
         manifest: manifest_path.clone(),
@@ -1382,6 +1427,8 @@ fn write_build_artifact_index(
         external_inputs,
         semantic_inputs: artifact.semantic_inputs.clone(),
         artifact: artifact.path.clone(),
+        output_path,
+        output_stamp,
     };
     let cache_root = cargo_cache_root(workspace_root);
     let path = build_artifact_index_path(&cache_root, &manifest_path);
