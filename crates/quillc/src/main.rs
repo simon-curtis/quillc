@@ -839,7 +839,8 @@ fn compile_library_rlib(
         .map_err(|error| format!("could not write Quill object: {error}"))?;
 
     let wrapper_path = staging.join("wrapper.rs");
-    let wrapper = render_rlib_wrapper(crate_name, &wrappers)?;
+    let internal_module = format!("__quill_native_{}", &blake3::hash(&object).to_hex()[..16]);
+    let wrapper = render_rlib_wrapper(crate_name, &internal_module, &wrappers)?;
     std::fs::write(&wrapper_path, wrapper)
         .map_err(|error| format!("could not write rlib wrapper: {error}"))?;
     let toolchain = std::env::var("QUILL_RUSTC_TOOLCHAIN")
@@ -902,9 +903,10 @@ fn compile_library_rlib(
 
 fn render_rlib_wrapper(
     crate_name: &str,
+    internal_module: &str,
     functions: &[&quill_syntax::FunctionItem],
 ) -> Result<String, String> {
-    let mut source = String::from("unsafe extern \"C\" {\n");
+    let mut source = format!("mod {internal_module} {{\nunsafe extern \"C\" {{\n");
     for (index, function) in functions.iter().enumerate() {
         let symbol = quill_codegen::quill_export_symbol(&function.name);
         let parameters = function
@@ -923,10 +925,10 @@ fn render_rlib_wrapper(
             format!(" -> {return_type}")
         };
         source.push_str(&format!(
-            "    #[link_name = {symbol:?}]\n    fn __quill_native_{index}({parameters}){result};\n"
+            "    #[link_name = {symbol:?}]\n    pub(super) fn __quill_native_{index}({parameters}){result};\n"
         ));
     }
-    source.push_str("}\n");
+    source.push_str("}\n}\n");
     for (index, function) in functions.iter().enumerate() {
         let public_name = rust_export_identifier(&function.name)?;
         let parameters = function
@@ -952,7 +954,7 @@ fn render_rlib_wrapper(
             format!(" -> {return_type}")
         };
         source.push_str(&format!(
-            "pub fn {public_name}({parameters}){result} {{ unsafe {{ __quill_native_{index}({arguments}) }} }}\n"
+            "pub fn {public_name}({parameters}){result} {{ unsafe {{ {internal_module}::__quill_native_{index}({arguments}) }} }}\n"
         ));
     }
     if crate_name.contains('-') {
