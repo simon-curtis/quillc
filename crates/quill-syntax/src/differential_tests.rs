@@ -298,22 +298,7 @@ fn matches_rustc_parser_acceptance_for_item_macro_paths() {
         let source = SourceFile::from_text("rustc-parser.rs", text);
         let actual =
             parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), edition);
-        let mut rustc = Command::new("rustc")
-            .args(["--edition", edition, "-Z", "unpretty=ast-tree", "-"])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .expect("pinned rustc is available for syntax compatibility tests");
-        let mut stdin = rustc.stdin.take().expect("stdin is piped");
-        use std::io::Write;
-        stdin.write_all(text.as_bytes()).expect("write Rust fixture");
-        drop(stdin);
-        let rustc_accepts = rustc
-            .wait_with_output()
-            .expect("wait for rustc")
-            .status
-            .success();
+        let rustc_accepts = rustc_parser_accepts(text, edition);
         assert_eq!(rustc_accepts, expected_acceptance, "rustc fixture: {text}");
         assert_eq!(
             !actual.had_error,
@@ -328,6 +313,145 @@ fn matches_rustc_parser_acceptance_for_item_macro_paths() {
             );
         }
     }
+}
+
+#[test]
+fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
+    let cases = [
+        (
+            "2021",
+            "fn f<T: (Copy) + (?Sized) + (for<'a> Trait<'a>)>() {}",
+        ),
+        (
+            "2021",
+            "fn main() { let _: Box<(Copy) + (?Sized) + (for<'a> Trait<'a>)>; }",
+        ),
+        ("2021", "impl impl NotType {}"),
+        ("2021", "impl Trait2 for impl NotType {}"),
+        ("2021", "#![cfg(key = value)]"),
+        ("2021", "struct S(i32, i32); fn f() { let s = S(1, 2); let a = s.1e0; }"),
+    ];
+    for (edition, text) in cases {
+        assert!(rustc_parser_accepts(text, edition), "rustc fixture: {text}");
+        let source = SourceFile::from_text("upstream-parser-recovery.rs", text);
+        let actual =
+            parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), edition);
+        assert!(
+            !actual.had_error,
+            "edition {edition}, source {text:?}, diagnostics {:?}",
+            actual.diagnostics
+        );
+    }
+
+    let malformed = "fn main() { let _: Box<(Copy) + (?Sized)>; let broken = ; }";
+    assert!(!rustc_parser_accepts(malformed, "2021"));
+    let source = SourceFile::from_text("malformed-with-recovery-context.rs", malformed);
+    let actual = parse_ast_with_cfg_and_edition(
+        &source,
+        &quill_cfg::CfgSet::default(),
+        "2021",
+    );
+    assert!(actual.had_error, "malformed syntax was accepted: {malformed}");
+}
+
+fn rustc_parser_accepts(text: &str, edition: &str) -> bool {
+    use std::io::Write;
+
+    let mut rustc = Command::new("rustc")
+        .args(["--edition", edition, "-Z", "unpretty=ast-tree", "-"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("pinned rustc is available for syntax compatibility tests");
+    rustc
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(text.as_bytes())
+        .expect("write Rust fixture");
+    rustc.wait().expect("wait for rustc").success()
+}
+
+/// Compare rustc-accepted parser fixtures with the compiler parser. Rustc's
+/// AST dump also runs early AST validation, so only status-zero sources count
+/// as evidence. Run with `cargo test -p quill-syntax rustc_parser_fixture_corpus
+/// -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn rustc_parser_fixture_corpus() {
+    let cargo_home = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(std::env::var_os("HOME").expect("HOME is set")).join(".cargo")
+        });
+    let roots = std::fs::read_dir(cargo_home.join("registry/src"))
+        .expect("Cargo registry sources are available")
+        .flatten()
+        .map(|entry| entry.path().join("ra_ap_parser-0.0.358/test_data/parser"))
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    let root = roots
+        .first()
+        .expect("pinned ra_ap_parser fixtures are installed");
+    let mut fixtures = Vec::new();
+    rust_files(root, &mut fixtures);
+    fixtures.retain(|path| {
+        let relative = path
+            .strip_prefix(root)
+            .expect("fixture is below corpus root");
+        matches!(
+            relative
+                .components()
+                .next()
+                .and_then(|part| part.as_os_str().to_str()),
+            Some("ok" | "err" | "inline")
+        )
+    });
+    fixtures.sort();
+
+    let mut mismatches = Vec::new();
+    let mut rustc_accepted = 0;
+    for path in &fixtures {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let edition = text
+            .lines()
+            .next()
+            .and_then(|line| {
+                ["//@ edition: ", "// "]
+                    .into_iter()
+                    .find_map(|prefix| line.strip_prefix(prefix))
+            })
+            .map(|value| value.trim().chars().take(4).collect::<String>())
+            .filter(|value| matches!(value.as_str(), "2015" | "2018" | "2021" | "2024"))
+            .unwrap_or_else(|| "2024".to_owned());
+        let source = SourceFile::from_text(path, text.clone());
+        let rustc_accepts = rustc_parser_accepts(&text, &edition);
+        if !rustc_accepts {
+            continue;
+        }
+        rustc_accepted += 1;
+        if let Err(diagnostic) =
+            crate::collect::collect(&source, &quill_cfg::CfgSet::default(), &edition, false)
+        {
+            mismatches.push(format!(
+                "{} ({edition}): Quill rejected rustc-accepted syntax: {} at {:?}",
+                path.strip_prefix(root).unwrap_or(path).display(),
+                diagnostic.message,
+                diagnostic.span
+            ));
+            if mismatches.len() >= 100 {
+                break;
+            }
+        }
+    }
+    eprintln!(
+        "checked {rustc_accepted} rustc-accepted fixtures of {} complete-source fixtures",
+        fixtures.len()
+    );
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
 /// Intentional divergences where the Syn collector was wrong.

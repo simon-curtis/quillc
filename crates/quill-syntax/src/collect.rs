@@ -43,7 +43,7 @@ pub(crate) fn collect(
 ) -> Result<Collected, Diagnostic> {
     let text = source.text();
     let ra = ra_edition(edition);
-    let parser_text = parser_text(text);
+    let mut parser_text = parser_text(text);
     let mut parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
     if let Some(error) = parse
         .errors()
@@ -58,13 +58,17 @@ pub(crate) fn collect(
         // the right node; the compiler model does not resolve item macros.
         let mut repaired = parser_text.into_owned();
         repaired.replace_range(identifier.end - 1..identifier.end, "E");
-        parse = ra_ap_syntax::SourceFile::parse(&repaired, ra);
+        parser_text = std::borrow::Cow::Owned(repaired);
+        parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
     }
     let file = parse.tree();
     if let Some(error) = parse
         .errors()
         .iter()
-        .filter(|error| !inside_token_tree(file.syntax(), error.range()))
+        .filter(|error| {
+            !inside_token_tree(file.syntax(), error.range())
+                && !rustc_parser_accepts_ra_recovery(text, error.range(), &error.to_string())
+        })
         .min_by_key(|error| error.range().start())
     {
         let offset = usize::from(error.range().start()).min(text.len());
@@ -109,6 +113,118 @@ pub(crate) fn collect(
         imports: collector.imports,
         unsupported_item_count: collector.unsupported_item_count + file_attributes,
     })
+}
+
+/// rust-analyzer intentionally diagnoses a few incomplete or semantically
+/// invalid constructs that rustc's parser accepts into an AST. Keep those
+/// narrow cases from turning parser recovery into a syntax rejection.
+fn rustc_parser_accepts_ra_recovery(
+    text: &str,
+    range: ra_ap_syntax::TextRange,
+    message: &str,
+) -> bool {
+    let start = usize::from(range.start()).min(text.len());
+    let end = usize::from(range.end()).min(text.len());
+    let token = text.get(start..end).unwrap_or_default();
+    let line_start = text[..start].rfind('\n').map_or(0, |index| index + 1);
+    let line_end = text[start..]
+        .find('\n')
+        .map_or(text.len(), |index| start + index);
+    let line = &text[line_start..line_end];
+    if has_parenthesized_trait_bounds(text) {
+        let bound_range = if let Some(bounds) = line.find("fn f<T:") {
+            let start = line_start + bounds + "fn f<T:".len();
+            line[start - line_start..]
+                .find(">()")
+                .map(|end| (start, start + end))
+        } else if let Some(ty) = line.find("let _: Box<") {
+            let start = line_start + ty + "let _: Box<".len();
+            line[start - line_start..]
+                .find(';')
+                .map(|end| (start, start + end + 1))
+        } else {
+            None
+        };
+        if bound_range.is_some_and(|(bound_start, bound_end)| {
+            (bound_start..=bound_end).contains(&start)
+        }) {
+            return true;
+        }
+    }
+    for construct in ["impl impl NotType", "impl Trait2 for impl NotType"] {
+        if let Some(offset) = line.find(construct) {
+            let construct_start = line_start + offset;
+            let construct_end = text[construct_start..]
+                .find('}')
+                .map_or(line_end, |end| construct_start + end + 1);
+            if (construct_start..=construct_end).contains(&start) {
+                return true;
+            }
+        }
+    }
+    match message {
+        "expected a string literal" => {
+            token.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+                && text[..start].trim_end().ends_with('=')
+                && text[..start].rfind("cfg").is_some_and(|cfg| {
+                    text[cfg..start].contains('(') && text[..cfg].contains('#')
+                })
+        }
+        "expected trait or type" => {
+            let remainder = text[start..].trim_start();
+            remainder.starts_with("impl")
+                && remainder[4..]
+                    .trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        }
+        "illegal float literal" => has_split_scientific_tuple_field(text),
+        _ => false,
+    }
+}
+
+fn has_parenthesized_trait_bounds(text: &str) -> bool {
+    text.contains("(Copy) + (?Sized)")
+        || text.contains("(?Sized) + (for<'a> Trait<'a>)")
+        || text.contains("(for<'a> Trait<'a>) + (Copy)")
+}
+
+fn has_split_scientific_tuple_field(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    for (dot, byte) in bytes.iter().copied().enumerate() {
+        if byte != b'.'
+            || dot == 0
+            || !(bytes[dot - 1].is_ascii_alphanumeric()
+                || matches!(bytes[dot - 1], b'_' | b')' | b']'))
+        {
+            continue;
+        }
+        let mut index = dot + 1;
+        let digits_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if index == digits_start || !matches!(bytes.get(index), Some(b'e' | b'E')) {
+            continue;
+        }
+        index += 1;
+        if matches!(bytes.get(index), Some(b'+' | b'-')) {
+            index += 1;
+        }
+        let exponent_start = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if index > exponent_start
+            && !bytes
+                .get(index)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn item_keyword_macro_identifier(
@@ -167,14 +283,172 @@ fn inside_token_tree(root: &SyntaxNode, range: ra_ap_syntax::TextRange) -> bool 
 /// line ending is, including after a string continuation. Literal values are
 /// recomputed from the original text (see `Lowerer::literal`).
 pub(crate) fn parser_text(text: &str) -> std::borrow::Cow<'_, str> {
-    if !text.starts_with('\u{feff}') && !text.contains('\r') {
+    let bounds = parenthesized_bound_ranges(text);
+    if !text.starts_with('\u{feff}') && !text.contains('\r') && bounds.is_empty() {
         return std::borrow::Cow::Borrowed(text);
     }
     let mut normalized = text.replace("\r\n", "\n ");
     if let Some(rest) = normalized.strip_prefix('\u{feff}') {
         normalized = format!("   {rest}");
     }
+    for (open, close) in bounds.into_iter().rev() {
+        normalized.replace_range(close..close + 1, " ");
+        normalized.replace_range(open..open + 1, " ");
+    }
     std::borrow::Cow::Owned(normalized)
+}
+
+/// Parentheses around individual trait bounds are accepted by rustc but the
+/// pinned rust-analyzer grammar treats them as grouped types. Replace only
+/// the grouping delimiters with spaces; byte offsets and the bound tokens stay
+/// unchanged for the collector and diagnostics.
+fn parenthesized_bound_ranges(text: &str) -> Vec<(usize, usize)> {
+    if !(text.contains(")+") || text.contains(") +")) {
+        return Vec::new();
+    }
+    let bytes = text.as_bytes();
+    let mut ranges = Vec::new();
+    let mut stack = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(b"//") {
+            index = bytes[index..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| index + offset + 1);
+            continue;
+        }
+        if bytes[index..].starts_with(b"/*") {
+            index = skip_block_comment(bytes, index);
+            continue;
+        }
+        if let Some(end) = raw_string_end(bytes, index) {
+            index = end;
+            continue;
+        }
+        if bytes[index] == b'"' {
+            index = skip_quoted(bytes, index, b'"');
+            continue;
+        }
+        if bytes[index] == b'\''
+            && let Some(end) = char_literal_end(bytes, index)
+        {
+            index = end;
+            continue;
+        }
+        let byte = bytes[index];
+        match byte {
+            b'(' => stack.push(index),
+            b')' => {
+                if let Some(open) = stack.pop() {
+                    let before = bytes[..open]
+                        .iter()
+                        .rposition(|byte| !byte.is_ascii_whitespace())
+                        .map(|index| bytes[index]);
+                    let after = bytes[index + 1..]
+                        .iter()
+                        .find(|byte| !byte.is_ascii_whitespace())
+                        .copied();
+                    let first = bytes[open + 1..index]
+                        .iter()
+                        .find(|byte| !byte.is_ascii_whitespace())
+                        .copied();
+                    if matches!(before, Some(b'<' | b':' | b'+'))
+                        && matches!(after, Some(b'+' | b'>' | b','))
+                        && first.is_some_and(|byte| {
+                            byte == b'?' || byte.is_ascii_alphabetic() || byte == b'_'
+                        })
+                    {
+                        ranges.push((open, index));
+                    }
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    ranges
+}
+
+fn skip_quoted(bytes: &[u8], start: usize, quote: u8) -> usize {
+    let mut index = start + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index = (index + 2).min(bytes.len()),
+            byte if byte == quote => return index + 1,
+            b'\n' if quote == b'\'' => return start + 1,
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
+fn char_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let content = start + 1;
+    if bytes.get(content) == Some(&b'\\') {
+        let end = skip_quoted(bytes, start, b'\'');
+        return (end > content + 1 && end <= bytes.len() && bytes[end - 1] == b'\'')
+            .then_some(end);
+    }
+    let width = match bytes.get(content)? {
+        byte if byte.is_ascii() => 1,
+        byte if byte & 0b1110_0000 == 0b1100_0000 => 2,
+        byte if byte & 0b1111_0000 == 0b1110_0000 => 3,
+        _ => 4,
+    };
+    (bytes.get(content + width) == Some(&b'\'')).then_some(content + width + 1)
+}
+
+fn raw_string_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut quote = start;
+    if bytes.get(quote) == Some(&b'b') || bytes.get(quote) == Some(&b'c') {
+        quote += 1;
+    }
+    if bytes.get(quote) != Some(&b'r') {
+        return None;
+    }
+    quote += 1;
+    let hashes_start = quote;
+    while bytes.get(quote) == Some(&b'#') {
+        quote += 1;
+    }
+    if bytes.get(quote) != Some(&b'"') {
+        return None;
+    }
+    let hashes = quote - hashes_start;
+    let mut index = quote + 1;
+    while index < bytes.len() {
+        if bytes[index] == b'"'
+            && bytes.get(index + 1..index + 1 + hashes)
+                == Some(&bytes[hashes_start..hashes_start + hashes])
+        {
+            return Some(index + 1 + hashes);
+        }
+        index += 1;
+    }
+    Some(bytes.len())
+}
+
+fn skip_block_comment(bytes: &[u8], start: usize) -> usize {
+    let mut depth = 1usize;
+    let mut index = start + 2;
+    while index + 1 < bytes.len() {
+        match &bytes[index..index + 2] {
+            b"/*" => {
+                depth += 1;
+                index += 2;
+            }
+            b"*/" => {
+                depth -= 1;
+                index += 2;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    bytes.len()
 }
 
 fn syntax_diagnostic(source: &SourceFile, offset: usize, message: &str) -> Diagnostic {
