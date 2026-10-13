@@ -88,7 +88,20 @@ pub(crate) fn compare(source: &SourceFile, cfg: &quill_cfg::CfgSet, edition: &st
     let actual = parse_ast_with_cfg_and_edition(source, cfg, edition);
     let mut expected = model(&expected);
     resolve_oracle_self_literals(&mut expected);
-    first_difference(&expected, &model(&actual), "")
+    let actual = model(&actual);
+    first_difference(&expected, &actual, "").map(|difference| {
+        let index = difference
+            .split_once(".functions[")
+            .and_then(|(_, rest)| rest.split_once(']'))
+            .and_then(|(index, _)| index.parse::<usize>().ok());
+        index.map_or(difference.clone(), |index| {
+            format!(
+                "{difference} (functions syn={:?}, ra={:?})",
+                expected["functions"][index]["name"],
+                actual["functions"][index]["name"]
+            )
+        })
+    })
 }
 
 fn rust_files(root: &Path, output: &mut Vec<PathBuf>) {
@@ -218,6 +231,8 @@ const PARITY_FIXTURES: &[&str] = &[
     "struct S; impl S { fn r<'a>(&'a mut self) {} fn s(&'static self) {} fn t(&'_ self) {} }",
     "fn f() -> bool { let a = -1f64; let b = 1f32; let c = 2.0f64; let d = 0x1F_u8; d == 1 }",
     "fn f(x: i32) -> i32 { match x { -1 => 0, -5..=-2 => 1, 0 ... 9 => 2, '0'...'9' => 3, _ => 4 } }",
+    "fn decode(b0: u8) -> u8 { match b0 { b'a'..=b'f' => 10 + (b0 - b'a'), _ => 0 } }",
+    "fn decode(b0: u8) -> u8 { let mut ch = 0; ch += 0x10 * match b0 { b'0'..=b'9' => b0 - b'0', b'a'..=b'f' => 10 + (b0 - b'a'), b'A'..=b'F' => 10 + (b0 - b'A'), _ => return 0 }; ch }",
     "fn f() { while 'w: { let mut c = 0; if c == 1 { break 'w false; } true } {} let v = 'b: { 1 }; let u = unsafe { 2 }; }",
     "fn f() -> f64 { 3.402e+38 + 1e-3 + 2E+5_f64 }",
     "fn f() -> &'static str {\r\n    let s = \"a\\\r\n        b\";\r\n    let t = \"x\r\ny\";\r\n    println!(\"one\\\r\n  two\");\r\n    concat!(\"p\r\nq\", 1)\r\n}\r\n",

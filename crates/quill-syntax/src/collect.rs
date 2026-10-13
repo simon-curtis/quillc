@@ -303,7 +303,7 @@ pub(crate) fn parser_text(text: &str) -> std::borrow::Cow<'_, str> {
 /// the grouping delimiters with spaces; byte offsets and the bound tokens stay
 /// unchanged for the collector and diagnostics.
 fn parenthesized_bound_ranges(text: &str) -> Vec<(usize, usize)> {
-    if !(text.contains(")+") || text.contains(") +")) {
+    if !has_close_then_plus(text.as_bytes()) {
         return Vec::new();
     }
     let bytes = text.as_bytes();
@@ -358,6 +358,8 @@ fn parenthesized_bound_ranges(text: &str) -> Vec<(usize, usize)> {
                         && first.is_some_and(|byte| {
                             byte == b'?' || byte.is_ascii_alphabetic() || byte == b'_'
                         })
+                        && is_type_bound_context(bytes, open)
+                        && !bytes[open + 1..index].contains(&b'-')
                     {
                         ranges.push((open, index));
                     }
@@ -368,6 +370,32 @@ fn parenthesized_bound_ranges(text: &str) -> Vec<(usize, usize)> {
         index += 1;
     }
     ranges
+}
+
+fn has_close_then_plus(bytes: &[u8]) -> bool {
+    bytes.iter().enumerate().any(|(index, byte)| {
+        if *byte != b')' {
+            return false;
+        }
+        let mut next = index + 1;
+        while bytes.get(next).is_some_and(u8::is_ascii_whitespace) {
+            next += 1;
+        }
+        bytes.get(next) == Some(&b'+')
+    })
+}
+
+fn is_type_bound_context(bytes: &[u8], open: usize) -> bool {
+    let mut context_start = 0;
+    for index in 0..open {
+        if matches!(bytes[index], b';' | b'{' | b'}') {
+            context_start = index + 1;
+        } else if bytes.get(index..index + 2) == Some(b"=>") {
+            context_start = index + 2;
+        }
+    }
+    let context = &bytes[context_start..open];
+    context.contains(&b'<') || context.contains(&b':')
 }
 
 fn skip_quoted(bytes: &[u8], start: usize, quote: u8) -> usize {
