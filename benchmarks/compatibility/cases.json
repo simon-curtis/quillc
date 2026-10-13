@@ -662,6 +662,15 @@
     "source": "fn main() { if let Some(value) = Some(42u64) && value == 42 { let _result = value; } }"
   },
   {
+    "id": "builtin-stringify-macro",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "built-in-macros"
+    ],
+    "source": "fn main() { let value = stringify!(answer + value); println!(\"{value}\"); }"
+  },
+  {
     "id": "edition-future-async-parse",
     "kind": "parse",
     "features": [

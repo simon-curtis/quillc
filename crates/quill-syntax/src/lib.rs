@@ -2771,6 +2771,9 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
     let arguments = parsed_arguments
         .as_ref()
         .map(|arguments| {
+            if mac.path.is_ident("stringify") {
+                return Vec::new();
+            }
             arguments
                 .iter()
                 .skip(1)
@@ -2785,10 +2788,8 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
         .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::");
-    let const_expansion = (path == "concat")
-        .then(|| parsed_arguments.as_ref())
-        .flatten()
-        .and_then(|arguments| {
+    let const_expansion = match path.as_str() {
+        "concat" => parsed_arguments.as_ref().and_then(|arguments| {
             arguments
                 .iter()
                 .map(|argument| match argument {
@@ -2804,7 +2805,10 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
                 })
                 .collect::<Option<Vec<_>>>()
                 .map(|parts| parts.concat())
-        });
+        }),
+        "stringify" => Some(mac.tokens.to_string()),
+        _ => None,
+    };
     MacroExpression {
         path,
         tokens: mac.tokens.to_string(),
@@ -4021,6 +4025,30 @@ mod tests {
             macro_expression.const_expansion.as_deref(),
             Some("qui121.5true")
         );
+    }
+
+    #[test]
+    fn computes_stringify_macro_expansion_from_tokens() {
+        let source = SourceFile::from_text(
+            "stringify.rs",
+            "fn value() -> &'static str { stringify!(answer + value) }",
+        );
+        let parsed = parse_ast(&source);
+        assert!(!parsed.had_error);
+        let body = parsed.functions[0].body.as_ref().unwrap();
+        let BodyExprKind::Block {
+            tail: Some(expression),
+            ..
+        } = &body.kind
+        else {
+            panic!("expected the function's stringify expression");
+        };
+        let BodyExprKind::MacroInvocation(macro_expression) = &expression.kind else {
+            panic!("expected a preserved stringify invocation");
+        };
+        assert_eq!(macro_expression.path, "stringify");
+        assert_eq!(macro_expression.const_expansion.as_deref(), Some("answer + value"));
+        assert!(macro_expression.arguments.is_empty());
     }
 
     #[test]

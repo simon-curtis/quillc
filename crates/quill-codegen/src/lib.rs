@@ -6699,9 +6699,15 @@ fn value_from_expression(
                 environment,
             )?))
         }
-        BodyExprKind::MacroInvocation(macro_expression) if macro_expression.path == "concat" => {
+        BodyExprKind::MacroInvocation(macro_expression)
+            if matches!(macro_expression.path.as_str(), "concat" | "stringify") =>
+        {
             let value = macro_expression.const_expansion.as_ref().ok_or(
-                CodegenError::UnsupportedProgram("`concat!` currently requires literal arguments"),
+                CodegenError::UnsupportedProgram(match macro_expression.path.as_str() {
+                    "concat" => "`concat!` currently requires literal arguments",
+                    "stringify" => "`stringify!` could not render its token stream",
+                    _ => unreachable!(),
+                }),
             )?;
             Ok(Value::TextSlice(value.clone()))
         }
