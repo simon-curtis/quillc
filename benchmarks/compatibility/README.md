@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [nested-scope borrow run](results/2026-10-13-nested-scope-borrow-clean.json)
+passes 118/118 curated cases at clean revision `64afcc4`. It catches E0499
+when an inner mutable borrow overlaps a still-live outer mutable borrow and
+accepts the inner borrow after the outer reference's last use. Quill matches
+rustc's checked diagnostic code, message, and primary location. This 100% corpus
+result does not establish overall Rust compatibility.
+
 The [nested-borrow run](results/2026-10-13-nested-borrow-clean.json) passes
 116/116 curated cases at clean revision `4d4140e`. It catches E0505 when a
 borrowed function parameter is moved into a call inside a nested block and
