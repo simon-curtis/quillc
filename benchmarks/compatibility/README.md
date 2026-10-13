@@ -54,7 +54,7 @@ report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
 The current 28-case run passes 24 (85.7%) against clean Quill revision
-`b8308f5` and probes 28 of 29 tracked categories. The local workspace dependency,
+`1e3be71` and probes 28 of 29 tracked categories. The local workspace dependency,
 feature cfg, multiple binary targets, scalar struct clone/equality, and narrow
 unsigned-integer Vec push/iteration cases match rustc. A narrow two-`u64` Rust
 ABI call also links from a Quill object into a rustc host and matches output.

@@ -1,11 +1,11 @@
 {
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
-  "quillc": "/tmp/quillc-compat-use-after-move/target/debug/quillc",
-  "quillc_source_revision": "b8308f5e7ff680e5046ba63efedccc11f7e70c97",
+  "quillc": "/tmp/quillc-clean-verify/target/debug/quillc",
+  "quillc_source_revision": "1e3be71dc0c9aa25f4c12a654f90d5c1e5d4297e",
   "quillc_source_dirty": false,
-  "quillc_artifact_mtime": "2026-10-13T15:31:06.083951+00:00",
-  "quillc_sha256": "5eb24489bad83a77902add168aa97afc0e4289779959b9b0a0d2a4b733e8275e",
+  "quillc_artifact_mtime": "2026-10-13T15:35:41.518648+00:00",
+  "quillc_sha256": "311be1a0aa9a89c68eeea6294506b70bc6945eaa9fbc6a036dc777f626d55f63",
   "passed": 24,
   "total": 28,
   "percent": 85.7,
@@ -222,7 +222,7 @@
           "line": 1,
           "column": 30
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-jsgk32l5/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-vzc1qq0e/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -307,7 +307,7 @@
           "line": 1,
           "column": 78
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-jsgk32l5/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-vzc1qq0e/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
       }
     },
     {
@@ -342,7 +342,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-jsgk32l5/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-vzc1qq0e/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -407,7 +407,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-jsgk32l5/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-jsgk32l5/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-jsgk32l5/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-jsgk32l5/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-vzc1qq0e/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-vzc1qq0e/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-vzc1qq0e/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-vzc1qq0e/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
