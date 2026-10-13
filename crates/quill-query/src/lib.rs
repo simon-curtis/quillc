@@ -945,8 +945,11 @@ mod tests {
         let pool = WorkPool::new(1).unwrap();
         let expected = quill_syntax::parse_ast(&source);
         cache.parse_file(&source);
-        let cache_path =
-            cache.cache_path(&source_path, &quill_cfg::CfgSet::default().fingerprint());
+        let mut cfg_hasher = blake3::Hasher::new();
+        cfg_hasher.update(&quill_cfg::CfgSet::default().fingerprint());
+        cfg_hasher.update(b"2024");
+        let cfg_digest = *cfg_hasher.finalize().as_bytes();
+        let cache_path = cache.cache_path(&source_path, &cfg_digest);
         fs::write(&cache_path, b"not a valid parse cache").unwrap();
 
         let recovered = cache.parse_file(&source);
