@@ -2948,6 +2948,7 @@ fn rewrite_enum_references(
             | MatchPattern::Binding(_)
             | MatchPattern::Range { .. }
             | MatchPattern::EnumVariant { .. }
+            | MatchPattern::Destructure { .. }
             | MatchPattern::Unsupported => {}
         }
     }

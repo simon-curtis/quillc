@@ -3070,6 +3070,7 @@ impl<'a> Lowerer<'a> {
             MatchPattern::Wildcard
             | MatchPattern::Binding(_)
             | MatchPattern::EnumVariant { .. }
+            | MatchPattern::Destructure { .. }
             | MatchPattern::Unsupported => None,
         }
     }
@@ -3255,6 +3256,23 @@ fn lower_binary_operator(operator: ast::BinaryOp) -> BinaryOperator {
 
 fn lower_match_pattern(pattern: &ast::Pat) -> MatchPattern {
     match pattern {
+        ast::Pat::TupleStructPat(pattern) => MatchPattern::Destructure {
+            path: pattern.path().map_or_else(String::new, |path| path_parts(&path).joined()),
+            bindings: pattern
+                .fields()
+                .flat_map(|field| pattern_binding_names(&field))
+                .collect(),
+        },
+        ast::Pat::RecordPat(pattern) => MatchPattern::Destructure {
+            path: pattern.path().map_or_else(String::new, |path| path_parts(&path).joined()),
+            bindings: pattern
+                .record_pat_field_list()
+                .into_iter()
+                .flat_map(|list| list.fields())
+                .flat_map(|field| field.pat().into_iter())
+                .flat_map(|field| pattern_binding_names(&field))
+                .collect(),
+        },
         ast::Pat::OrPat(patterns) => {
             MatchPattern::Or(patterns.pats().map(|p| lower_match_pattern(&p)).collect())
         }
@@ -3309,6 +3327,21 @@ fn lower_match_pattern(pattern: &ast::Pat) -> MatchPattern {
         }
         _ => MatchPattern::Unsupported,
     }
+}
+
+fn pattern_binding_names(pattern: &ast::Pat) -> Vec<String> {
+    pattern
+        .syntax()
+        .descendants()
+        .filter_map(ast::IdentPat::cast)
+        .filter(|binding| {
+            binding.ref_token().is_none()
+                && binding.mut_token().is_none()
+                && binding.at_token().is_none()
+        })
+        .filter_map(|binding| binding.name())
+        .map(|name| unraw(&name.text().to_string()))
+        .collect()
 }
 
 /// Endpoints of a range pattern. Unlike `RangeItem`, this also splits the

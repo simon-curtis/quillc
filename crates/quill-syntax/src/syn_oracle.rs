@@ -2148,6 +2148,30 @@ fn lower_match_pattern(pattern: &syn::Pat) -> MatchPattern {
                 .collect::<Vec<_>>()
                 .join("::"),
         ),
+        syn::Pat::TupleStruct(pattern) if pattern.qself.is_none() => MatchPattern::Destructure {
+            path: pattern
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.unraw().to_string())
+                .collect::<Vec<_>>()
+                .join("::"),
+            bindings: pattern.elems.iter().flat_map(pattern_binding_names).collect(),
+        },
+        syn::Pat::Struct(pattern) if pattern.qself.is_none() => MatchPattern::Destructure {
+            path: pattern
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.unraw().to_string())
+                .collect::<Vec<_>>()
+                .join("::"),
+            bindings: pattern
+                .fields
+                .iter()
+                .flat_map(|field| pattern_binding_names(&field.pat))
+                .collect(),
+        },
         syn::Pat::Lit(literal) => match &literal.lit {
             syn::Lit::Int(value) => MatchPattern::Literal(LiteralKind::Integer {
                 text: value.base10_digits().to_owned(),
@@ -2158,6 +2182,26 @@ fn lower_match_pattern(pattern: &syn::Pat) -> MatchPattern {
             _ => MatchPattern::Unsupported,
         },
         _ => MatchPattern::Unsupported,
+    }
+}
+
+fn pattern_binding_names(pattern: &syn::Pat) -> Vec<String> {
+    match pattern {
+        syn::Pat::Ident(binding)
+            if binding.by_ref.is_none()
+                && binding.mutability.is_none()
+                && binding.subpat.is_none() =>
+        {
+            vec![binding.ident.unraw().to_string()]
+        }
+        syn::Pat::Tuple(tuple) => tuple.elems.iter().flat_map(pattern_binding_names).collect(),
+        syn::Pat::TupleStruct(tuple) => tuple.elems.iter().flat_map(pattern_binding_names).collect(),
+        syn::Pat::Struct(structure) => structure
+            .fields
+            .iter()
+            .flat_map(|field| pattern_binding_names(&field.pat))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -2291,6 +2335,7 @@ fn lower_if_let_pattern_condition(
         MatchPattern::Wildcard
         | MatchPattern::Binding(_)
         | MatchPattern::EnumVariant { .. }
+        | MatchPattern::Destructure { .. }
         | MatchPattern::Unsupported => None,
     }
 }

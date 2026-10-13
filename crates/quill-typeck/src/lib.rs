@@ -554,6 +554,26 @@ fn method_signatures<'a>(
     candidates
 }
 
+fn call_argument_is_borrowed(
+    signatures: &SignatureIndex<'_>,
+    callee: &str,
+    index: usize,
+) -> bool {
+    let candidates = signatures
+        .exact
+        .get(callee)
+        .or_else(|| signatures.suffix.get(callee.rsplit("::").next().unwrap_or(callee)));
+    let Some(candidates) = candidates.filter(|candidates| !candidates.is_empty()) else {
+        return false;
+    };
+    candidates.iter().all(|function| {
+        function
+            .parameters
+            .get(index)
+            .is_some_and(|parameter| parameter.type_text.trim_start().starts_with('&'))
+    })
+}
+
 fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
     let text = text.trim();
     if let Some(value_type) = text.strip_prefix("mut ") {
@@ -1321,6 +1341,7 @@ fn push_move_diagnostic(
 fn move_match_bindings(pattern: &MatchPattern) -> Vec<String> {
     match pattern {
         MatchPattern::Binding(name) => vec![name.clone()],
+        MatchPattern::Destructure { bindings, .. } => bindings.clone(),
         MatchPattern::Or(patterns) => patterns
             .iter()
             .flat_map(move_match_bindings)
@@ -2454,7 +2475,12 @@ fn check_move_expression(
             // when a by-value binding takes ownership of the matched value.
             let consumes_scrutinee = arms
                 .iter()
-                .any(|arm| matches!(&arm.pattern, MatchPattern::Binding(_)));
+                .any(|arm| {
+                    matches!(
+                        &arm.pattern,
+                        MatchPattern::Binding(_) | MatchPattern::Destructure { .. }
+                    )
+                });
             check_move_expression(
                 scrutinee,
                 consumes_scrutinee,
@@ -2486,11 +2512,15 @@ fn check_move_expression(
             }
             *moved = joined;
         }
-        BodyExprKind::Call { arguments, .. } => {
-            for argument in arguments {
+        BodyExprKind::Call {
+            callee,
+            arguments,
+            ..
+        } => {
+            for (index, argument) in arguments.iter().enumerate() {
                 check_move_expression(
                     argument,
-                    true,
+                    !call_argument_is_borrowed(signatures, callee, index),
                     signatures,
                     struct_signatures,
                     locals,
@@ -3830,6 +3860,7 @@ fn infer_with_structs(
             );
             let target = type_from_syntax(type_name, struct_signatures);
             if (source.is_numeric() && target.is_numeric())
+                || (source == Ty::Bool && target.is_integer())
                 || (source == Ty::Char && (target.is_numeric() || target == Ty::Char))
                 || (source.is_numeric() && target == Ty::Char)
                 || matches!((&source, &target), (Ty::RawPointer(_, _), Ty::RawPointer(_, _)))
@@ -5816,20 +5847,22 @@ fn infer_with_structs(
                 locals,
                 signatures,
                 struct_signatures,
-                &Ty::Bool,
+                &Ty::Unknown,
                 diagnostics,
             );
-            if ty != Ty::Bool && ty != Ty::Unknown {
-                diagnostics.push(TypeDiagnostic {
-                    span: expression.span.clone(),
-                    message: format!(
-                        "logical negation requires bool, found `{}`",
-                        ty.display_name()
-                    ),
-                });
-                Ty::Unknown
-            } else {
-                Ty::Bool
+            match ty {
+                Ty::Bool | Ty::Unknown => ty,
+                integer if integer.is_integer() => integer,
+                other => {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "negation requires bool or integer, found `{}`",
+                            other.display_name()
+                        ),
+                    });
+                    Ty::Unknown
+                }
             }
         }
         BodyExprKind::Block { statements, tail } => {
@@ -6456,6 +6489,19 @@ fn infer_with_structs(
                                 );
                             }
                         }
+                        MatchPattern::Destructure { path, .. } => {
+                            if let Some((enumeration, variant)) =
+                                find_enum_variant(struct_signatures, path)
+                            {
+                                let variants =
+                                    enum_patterns.entry(enumeration.path.clone()).or_default();
+                                variants.insert(variant.name.clone());
+                                enum_variant_counts.insert(
+                                    enumeration.path.clone(),
+                                    enumeration.enum_variants.len(),
+                                );
+                            }
+                        }
                         MatchPattern::Unsupported => diagnostics.push(TypeDiagnostic {
                             span: arm.span.clone(),
                             message: "unsupported match pattern".to_owned(),
@@ -6465,6 +6511,9 @@ fn infer_with_structs(
                 let mut arm_locals = locals.clone();
                 if let MatchPattern::Binding(name) = &arm.pattern {
                     arm_locals.insert(name.clone(), scrutinee_ty.clone());
+                }
+                if let MatchPattern::Destructure { bindings, .. } = &arm.pattern {
+                    arm_locals.extend(bindings.iter().cloned().map(|name| (name, Ty::Unknown)));
                 }
                 let arm_ty = infer_with_structs(
                     &arm.body,
@@ -7466,6 +7515,21 @@ mod tests {
         );
         let capture = source.text().find("{value}").unwrap() + 1;
         assert_eq!(diagnostics[0].span, capture..capture + "value".len());
+    }
+
+    #[test]
+    fn passing_a_mutable_reference_to_a_borrowing_function_reborrows_it() {
+        let source = SourceFile::from_text(
+            "mutable-reference-call-reborrow.rs",
+            "fn touch(value: &mut i32) { *value = 1; } fn caller() { let mut value = 0; let reference = &mut value; touch(reference); *reference = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                || diagnostic.message.contains("error[E0505]")
+        }), "{diagnostics:?}");
     }
 
     #[test]
@@ -8521,12 +8585,18 @@ mod tests {
     fn excludes_unreachable_loan_creation_after_loop_break() {
         let source = SourceFile::from_text(
             "unreachable-loop-loan.rs",
-            "fn valid() { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; loop { break; reference = &mut value; } value = 1; *reference = 2; }",
+            "fn valid() { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; loop { break; reference = &mut value; } value = 1; *reference = 2; } fn invalid() { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; loop { reference = &mut value; break; } value = 1; *reference = 2; } fn invalid_branch(condition: bool) { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; loop { if condition { reference = &mut value; break; } else { break; } } value = 1; *reference = 2; }",
         );
         let parsed = parse(&source);
         assert!(!parsed.had_error);
         let diagnostics = check_functions(&parsed.functions);
-        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert!(diagnostics.iter().filter(|diagnostic| {
+            diagnostic.message.contains("error[E0506]")
+                && diagnostic.message.contains("cannot assign to `value` because it is borrowed")
+        }).count() >= 2, "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn invalid").unwrap()
+        }), "{diagnostics:?}");
     }
 
     #[test]

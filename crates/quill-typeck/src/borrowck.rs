@@ -75,9 +75,34 @@ impl Loan {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ExitKind {
+    Break(Option<String>),
+    Continue(Option<String>),
+    Return,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ExitState {
+    kind: ExitKind,
+    loans: Vec<Loan>,
+}
+
+#[derive(Clone, Debug)]
 struct State {
     loans: Vec<Loan>,
+    exits: Vec<ExitState>,
+    reachable: bool,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            loans: Vec::new(),
+            exits: Vec::new(),
+            reachable: true,
+        }
+    }
 }
 
 impl State {
@@ -159,17 +184,51 @@ impl State {
         }));
     }
 
-    fn merge(&mut self, other: State) {
-        for loan in other.loans {
+    fn join(left: &State, right: &State) -> State {
+        let mut joined = State {
+            loans: Vec::new(),
+            exits: Vec::new(),
+            reachable: left.reachable || right.reachable,
+        };
+        if left.reachable {
+            joined.merge_loans(left.loans.iter().cloned());
+        }
+        if right.reachable {
+            joined.merge_loans(right.loans.iter().cloned());
+        }
+        for exit in left.exits.iter().chain(&right.exits) {
+            if !joined.exits.contains(exit) {
+                joined.exits.push(exit.clone());
+            }
+        }
+        joined
+    }
+
+    fn merge_loans(&mut self, loans: impl IntoIterator<Item = Loan>) {
+        for loan in loans {
             if !self.loans.contains(&loan) {
                 self.loans.push(loan);
             }
         }
     }
 
+    fn terminate(&mut self, kind: ExitKind) {
+        let exit = ExitState {
+            kind,
+            loans: self.loans.clone(),
+        };
+        if !self.exits.contains(&exit) {
+            self.exits.push(exit);
+        }
+        self.reachable = false;
+    }
+
     fn same_loans(&self, other: &State) -> bool {
-        self.loans.len() == other.loans.len()
+        self.reachable == other.reachable
+            && self.loans.len() == other.loans.len()
             && self.loans.iter().all(|loan| other.loans.contains(loan))
+            && self.exits.len() == other.exits.len()
+            && self.exits.iter().all(|exit| other.exits.contains(exit))
     }
 
     fn accessed_through(&self, loan: &Loan, through: Option<&Holder>) -> bool {
@@ -650,6 +709,9 @@ impl Checker<'_, '_> {
     }
 
     fn expression(&mut self, expression: &BodyExpr, state: &mut State) -> Vec<Loan> {
+        if !state.reachable {
+            return Vec::new();
+        }
         match &expression.kind {
             BodyExprKind::Path(name) => {
                 let aliases = state.for_holder(name).cloned().collect::<Vec<_>>();
@@ -753,15 +815,14 @@ impl Checker<'_, '_> {
                         }
                     }
                 }
-                then_state.merge(else_state);
-                *state = then_state;
+                *state = State::join(&then_state, &else_state);
                 returned_loans
             }
             BodyExprKind::Match { scrutinee, arms } => {
                 self.check_move_access(scrutinee, state);
                 let scrutinee_loans = self.expression(scrutinee, state);
                 let incoming = state.clone();
-                let mut joined = State::default();
+                let mut joined: Option<State> = None;
                 let mut returned_loans = Vec::new();
                 for arm in arms {
                     let mut arm_state = incoming.clone();
@@ -782,9 +843,11 @@ impl Checker<'_, '_> {
                             .loans
                             .extend(incoming.all_for_holder(&name).cloned());
                     }
-                    joined.merge(arm_state);
+                    joined = Some(joined.map_or(arm_state.clone(), |current| {
+                        State::join(&current, &arm_state)
+                    }));
                 }
-                *state = joined;
+                *state = joined.unwrap_or_default();
                 returned_loans
             }
             BodyExprKind::Call {
@@ -1131,6 +1194,7 @@ impl Checker<'_, '_> {
                         }
                     }
                 }
+                state.terminate(ExitKind::Return);
                 Vec::new()
             }
             BodyExprKind::Unit
@@ -1151,6 +1215,9 @@ impl Checker<'_, '_> {
         let original_types = self.local_types.clone();
         let mut declarations = HashSet::new();
         for (index, statement) in statements.iter().enumerate() {
+            if !state.reachable {
+                break;
+            }
             let current = statement_live_places(statement);
             let mut future = HashSet::new();
             for next in &statements[index + 1..] {
@@ -1159,12 +1226,18 @@ impl Checker<'_, '_> {
             if let Some(tail) = tail {
                 collect_live_expression(tail, &mut future);
             }
+            let control_exit = matches!(
+                statement,
+                BodyStatement::Break { .. } | BodyStatement::Continue { .. }
+            );
             state.loans.retain(|loan| {
                 loan.holder.as_ref().is_none_or(|holder| {
-                    current
-                        .iter()
-                        .chain(future.iter())
-                        .any(|place| holder_projection_live(holder, &loan.holder_projection, place))
+                    (control_exit
+                        && !declarations.contains(holder)
+                        && original.all_for_holder(holder).next().is_some())
+                        || current.iter().chain(future.iter()).any(|place| {
+                            holder_projection_live(holder, &loan.holder_projection, place)
+                        })
                 })
             });
             self.statement(statement, state, &mut declarations);
@@ -1267,16 +1340,68 @@ impl Checker<'_, '_> {
     fn loop_fixed_point(
         &mut self,
         incoming: &State,
+        label: Option<&str>,
+        can_skip: bool,
         mut transfer: impl FnMut(&mut Self, &mut State),
     ) -> State {
         let mut head = incoming.clone();
+        head.exits.clear();
+        head.reachable = true;
+        let mut break_loans = Vec::new();
+        let mut outer_exits = Vec::new();
         loop {
             let mut back_edge = head.clone();
+            back_edge.exits.clear();
+            back_edge.reachable = true;
             transfer(self, &mut back_edge);
-            let mut next = incoming.clone();
-            next.merge(back_edge);
+            let mut next = State {
+                loans: incoming.loans.clone(),
+                exits: Vec::new(),
+                reachable: true,
+            };
+            if back_edge.reachable {
+                next.merge_loans(back_edge.loans.iter().cloned());
+            }
+            for exit in back_edge.exits {
+                match &exit.kind {
+                    ExitKind::Break(target)
+                        if target.as_deref().is_none_or(|target| Some(target) == label) =>
+                    {
+                        for loan in exit.loans {
+                            if !break_loans.contains(&loan) {
+                                break_loans.push(loan);
+                            }
+                        }
+                    }
+                    ExitKind::Continue(target)
+                        if target.as_deref().is_none_or(|target| Some(target) == label) =>
+                    {
+                        next.merge_loans(exit.loans);
+                    }
+                    _ if !outer_exits.contains(&exit) => outer_exits.push(exit),
+                    _ => {}
+                }
+            }
             if next.same_loans(&head) {
-                return next;
+                let mut result = State {
+                    loans: if can_skip {
+                        head.loans.clone()
+                    } else {
+                        Vec::new()
+                    },
+                    exits: incoming.exits.clone(),
+                    reachable: can_skip,
+                };
+                if !break_loans.is_empty() {
+                    result.reachable = true;
+                    result.merge_loans(break_loans);
+                }
+                for exit in outer_exits {
+                    if !result.exits.contains(&exit) {
+                        result.exits.push(exit);
+                    }
+                }
+                return result;
             }
             head = next;
         }
@@ -1421,19 +1546,23 @@ impl Checker<'_, '_> {
                 self.expression(expression, state);
             }
             BodyStatement::While {
-                condition, body, ..
+                label,
+                condition,
+                body,
+                ..
             } => {
-                *state = self.loop_fixed_point(state, |checker, loop_state| {
+                *state = self.loop_fixed_point(state, label.as_deref(), true, |checker, loop_state| {
                     checker.expression(condition, loop_state);
                     checker.expression(body, loop_state);
                 });
             }
-            BodyStatement::Loop { body, .. } => {
-                *state = self.loop_fixed_point(state, |checker, loop_state| {
+            BodyStatement::Loop { label, body, .. } => {
+                *state = self.loop_fixed_point(state, label.as_deref(), false, |checker, loop_state| {
                     checker.expression(body, loop_state);
                 });
             }
             BodyStatement::ForRange {
+                label,
                 name,
                 start,
                 end,
@@ -1446,11 +1575,12 @@ impl Checker<'_, '_> {
                 declarations.insert(name.clone());
                 self.mutable_locals.insert(name.clone(), false);
                 self.local_types.insert(name.clone(), binding_type);
-                *state = self.loop_fixed_point(state, |checker, loop_state| {
+                *state = self.loop_fixed_point(state, label.as_deref(), true, |checker, loop_state| {
                     checker.expression(body, loop_state);
                 });
             }
             BodyStatement::ForEach {
+                label,
                 names,
                 iterator,
                 body,
@@ -1513,7 +1643,7 @@ impl Checker<'_, '_> {
                     }
                     state.replace_holder(name, item_loans);
                 }
-                *state = self.loop_fixed_point(state, |checker, loop_state| {
+                *state = self.loop_fixed_point(state, label.as_deref(), true, |checker, loop_state| {
                     checker.expression(body, loop_state);
                 });
                 for name in names {
@@ -1540,9 +1670,13 @@ impl Checker<'_, '_> {
                     self.expression(argument, state);
                 }
             }
-            BodyStatement::Break { .. }
-            | BodyStatement::Continue { .. }
-            | BodyStatement::Unsupported => {}
+            BodyStatement::Break { label, .. } => {
+                state.terminate(ExitKind::Break(label.clone()));
+            }
+            BodyStatement::Continue { label, .. } => {
+                state.terminate(ExitKind::Continue(label.clone()));
+            }
+            BodyStatement::Unsupported => {}
         }
     }
 
@@ -2319,6 +2453,7 @@ fn format_capture_names(format: &str, names: &mut HashSet<String>) {
 fn pattern_bindings(pattern: &MatchPattern) -> Vec<String> {
     match pattern {
         MatchPattern::Binding(name) => vec![name.clone()],
+        MatchPattern::Destructure { bindings, .. } => bindings.clone(),
         MatchPattern::Or(patterns) => {
             let mut bindings = Vec::new();
             for pattern in patterns {

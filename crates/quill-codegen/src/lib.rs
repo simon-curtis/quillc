@@ -1578,6 +1578,7 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
             | MatchPattern::Literal(_)
             | MatchPattern::Binding(_)
             | MatchPattern::Range { .. }
+            | MatchPattern::Destructure { .. }
             | MatchPattern::Unsupported => {}
         }
     }
@@ -6099,6 +6100,11 @@ fn value_from_expression(
                         MatchPattern::Unsupported => {
                             return Err(CodegenError::UnsupportedExpression(
                                 "match pattern is outside the supported scalar subset".to_owned(),
+                            ));
+                        }
+                        MatchPattern::Destructure { .. } => {
+                            return Err(CodegenError::UnsupportedExpression(
+                                "destructuring match patterns are outside the supported code generation subset".to_owned(),
                             ));
                         }
                     }

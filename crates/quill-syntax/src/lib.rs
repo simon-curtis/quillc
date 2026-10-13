@@ -221,6 +221,10 @@ pub enum MatchPattern {
         discriminant: i32,
         variant_count: usize,
     },
+    Destructure {
+        path: String,
+        bindings: Vec<String>,
+    },
     Unsupported,
 }
 
