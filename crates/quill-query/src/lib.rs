@@ -1010,6 +1010,46 @@ mod tests {
     }
 
     #[test]
+    fn compact_parse_cache_preserves_generic_bodies_and_item_metadata() {
+        let root = temp_root();
+        let source = SourceFile::from_text(
+            root.join("lib.rs").display().to_string(),
+            "use std::fmt; struct Entry { value: i32 } fn plain() -> i32 { 42 } fn identity<T>(value: T) -> T { value }",
+        );
+        let cache = ParseCache::new(root.join("cache"));
+
+        let (first, first_is_compact) = cache.parse_file_summary_with_cfg_and_edition(
+            &source,
+            &quill_cfg::CfgSet::default(),
+            "2024",
+        );
+        assert!(!first_is_compact);
+        assert!(
+            first
+                .functions
+                .iter()
+                .all(|function| function.body.is_some())
+        );
+
+        let (summary, is_compact) = cache.parse_file_summary_with_cfg_and_edition(
+            &source,
+            &quill_cfg::CfgSet::default(),
+            "2024",
+        );
+        assert!(is_compact);
+        assert!(summary.structs.iter().any(|item| item.name == "Entry"));
+        assert_eq!(summary.imports.len(), 1);
+        assert!(summary.functions.iter().any(|function| {
+            function.name == "plain" && function.body.is_none() && function.body_span.is_none()
+        }));
+        assert!(summary.functions.iter().any(|function| {
+            function.name == "identity" && function.body.is_some() && function.body_span.is_some()
+        }));
+        assert_eq!(cache.stats().hits, 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn parse_cache_separates_cfg_configurations() {
         let root = temp_root();
         fs::create_dir_all(&root).unwrap();
