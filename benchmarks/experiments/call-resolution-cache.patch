@@ -1,0 +1,23 @@
+diff --git a/crates/quillc/src/main.rs b/crates/quillc/src/main.rs
+index 3123665..9898f54 100644
+--- a/crates/quillc/src/main.rs
++++ b/crates/quillc/src/main.rs
+@@ -11 +11 @@ type ImportAliasMap = HashMap<String, HashMap<String, String>>;
+-type CallResolutionCache = HashMap<(String, String), Option<String>>;
++type CallResolutionCache = HashMap<String, HashMap<String, Option<String>>>;
+@@ -3369,2 +3369 @@ fn resolve_cached_call(
+-    let key = (context.to_owned(), callee.to_owned());
+-    if let Some(resolution) = cache.get(&key) {
++    if let Some(resolution) = cache.get(context).and_then(|entries| entries.get(callee)) {
+@@ -3374 +3373,4 @@ fn resolve_cached_call(
+-    cache.insert(key, resolution.clone());
++    cache
++        .entry(context.to_owned())
++        .or_default()
++        .insert(callee.to_owned(), resolution.clone());
+@@ -3646 +3648 @@ fn rewrite_calls(
+-    for call in function.qualified_calls.clone() {
++    for call in &function.qualified_calls {
+@@ -3648 +3650 @@ fn rewrite_calls(
+-            &call,
++            call,

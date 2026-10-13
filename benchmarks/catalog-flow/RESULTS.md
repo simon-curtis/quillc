@@ -61,6 +61,15 @@ semantic edit. This run clears the 3× wall-time gate in all four states on
 this fixture, but semantic CPU-time speedup remains below 3×. These results
 do not establish general Rust compiler performance.
 
+A nested call-resolution cache and borrowed qualified-call traversal were
+measured against the same fixture. The candidate did not reduce the semantic
+incremental medians: wall time rose 0.42% and CPU time rose 1.05%, with
+overlapping sample ranges. One phase sample also showed no call-resolution
+reduction, so the change was rejected. The exploratory cold wall-time result
+was 6.25% lower, alongside 5.27% higher peak RSS; the raw comparison,
+limitations, and [rejected patch](../experiments/call-resolution-cache.patch)
+are recorded with the [experiment report](../results/call-resolution-cache-20261013.json).
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
