@@ -1,16 +1,18 @@
-# Benchmark protocol and experiment index
+# Run and interpret benchmarks
 
-## Workload
+Choose the measurement that answers your question:
 
-`catalog-flow` is a checked-in, generated Rust workspace with eight packages
-in a dependency DAG. One independent audit package supports incremental-edit
-measurements. The fixture has about 31,000 source lines and no third-party
-dependencies. Regenerate it with `python3 benchmarks/generate.py`; the script
-reports the Rust line count.
+| Task | Procedure | Evidence |
+|---|---|---|
+| Compare compiler build time and generated binaries | [Paired Catalog Flow run](catalog-flow/RESULTS.md#reproduce) | [Build and runtime report](catalog-flow/RESULTS.md) |
+| Establish the rustc-only Cargo baseline | [Cargo baseline](#reproduce-the-cargo-baseline) | Timestamped baseline JSON |
+| Measure editor response | [LSP latency](#lsp-latency) | Raw request samples and percentiles |
+| Check parser coverage and recovery | [Rust syntax compatibility](#rust-syntax-compatibility) | Parser fixtures and edit equivalence |
+| Compare Rust behavior | [Compatibility corpus](compatibility/README.md) | Acceptance, diagnostics, and runtime checks |
 
-This synthetic workload is a reproducible first gate, not a representative
-sample of Rust crates. The paired Quill and `rustc` results are in
-[`catalog-flow/RESULTS.md`](catalog-flow/RESULTS.md).
+A completed run retains raw samples, toolchain and source provenance, and the
+scope of the comparison. Keep build time, generated-program runtime, LSP
+latency, and compatibility as separate results.
 
 ## Reproduce the Cargo baseline
 
@@ -34,10 +36,29 @@ processes and the small Python wrapper. The script requires a working user
 systemd manager and writable cgroup v2 accounting files, and fails when those
 are unavailable.
 
+## Generated binary runtime
+
+`python3 benchmarks/catalog-flow/measure.py` also times the generated
+`catalog-flow` executables after the build measurements. It warms each binary,
+then alternates 25 measured invocations per compiler. The raw rows are stored
+as `rustc_binary_runtime` and `quill_binary_runtime` in
+`benchmarks/catalog-flow/results.json`; `runtime_medians` records wall and
+child CPU time in seconds. Every measured invocation checks its output against
+the `rustc` output.
+
+These timings include process startup, so they measure the latency of launching
+and running this fixture binary. Compare the two executables on the same host
+and fixture. They are separate from compiler build time and do not establish
+runtime performance for other programs.
+
 Compare medians and ranges across repetitions. Keep the raw rows. A comparison
 must hold source, compiler version, profile, target, linker, and machine
 settings constant. Quill and `rustc` must produce behaviorally equivalent
 binaries with equivalent optimization and debug settings.
+
+Quill's generated binaries are expected to run more slowly than LLVM-backed
+rustc binaries at this stage. Report that cost alongside build-time gains;
+a faster compiler does not imply a faster program.
 
 ## Acceptance gate
 
@@ -47,7 +68,19 @@ memory. A frontend-only profile, a different artifact product, or this single
 synthetic workload cannot establish the target or general Rust compatibility.
 Compatibility also needs a separately curated Rust test suite.
 
-## Current Cargo baseline
+## Workload
+
+`catalog-flow` is a checked-in, generated Rust workspace with eight packages
+in a dependency DAG. One independent audit package supports incremental-edit
+measurements. The fixture has about 31,000 source lines and no third-party
+dependencies. Regenerate it with `python3 benchmarks/generate.py`; the script
+reports the Rust line count.
+
+This synthetic workload is a reproducible first gate, not a representative
+sample of Rust crates. The paired Quill and `rustc` results are in
+[`catalog-flow/RESULTS.md`](catalog-flow/RESULTS.md).
+
+## Recorded Cargo baseline
 
 Five cold/warm/incremental cycles were measured on 2026-10-13 with
 `python3 benchmarks/run.py --rounds 5` on a 30,977-line fixture. These are
@@ -63,6 +96,52 @@ Raw rows and host metadata are in
 [`results/baseline-20261013-080835.json`](results/baseline-20261013-080835.json).
 The paired Quill results, runtime comparison, and artifact-scope limits are in
 [`catalog-flow/RESULTS.md`](catalog-flow/RESULTS.md).
+
+## LSP latency
+
+Run:
+
+```sh
+python3 benchmarks/lsp_latency.py --quillc target/release/quillc \
+  --functions-per-module 50 --rounds 30 --burst-size 20 --burst-rounds 10
+```
+
+The runner
+measures the stdio server against generated Rust source and keeps raw samples
+plus p50/p95.
+The 2026-10-13 release run used 14,163 lines / 430,219 bytes, 30 single-edit
+rounds, and a 20-edit burst on an Intel i7-8700K. It produced no syntax
+diagnostics. Open-to-diagnostics measured 33.48 ms. Single-edit diagnostics
+measured 16.73 ms p50 / 18.06 ms p95; the burst's latest diagnostics took
+56.25 ms p50 / 61.63 ms p95. Document symbols measured 16.43 ms p50 / 17.39
+ms p95 for 2,121 symbols; completion 4.78 / 6.11 ms p50/p95; definition 0.26
+/ 0.31 ms; and hover 0.25 / 0.28 ms. Across ten 20-edit bursts, completion
+returned in 5.81 ms p50 / 7.02 ms p95 using the latest document text and last
+completed symbol index; each provisional result was marked incomplete for
+refresh. `initialize` returned in 0.15 ms p95. Burst duration includes the
+20 sequential changes and is not a single request latency. This synthetic
+source measures LSP latency only; it is not a Rust syntax-compatibility pass or
+a representative workspace claim.
+
+Raw samples and toolchain metadata are in
+[`results/lsp-latency-20261013.json`](results/lsp-latency-20261013.json).
+
+See the [LSP contract](../docs/lsp.md) for request behavior and latency targets.
+
+## Rust syntax compatibility
+
+```sh
+python3 benchmarks/rust_syntax_compat.py --quillc target/release/quillc
+```
+
+The runner exercises the release binary's stdio LSP, accepted and malformed
+source fixtures, edition selection, and incremental edits. It also runs
+crate-level source-reconstruction, tree-equivalence, and grammar-coverage checks.
+The [syntax coverage contract](../docs/rust-syntax-coverage.md) defines the
+pinned corpus, recorded coverage, and remaining recovery work. Keep parser
+acceptance separate from compiler semantic compatibility.
+
+Recorded evidence: [syntax report](results/lsp-rust-syntax-compat-20261013.json).
 
 ## Frontend and Cargo profiles
 

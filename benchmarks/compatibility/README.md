@@ -1,91 +1,81 @@
 # Rust compatibility corpus
 
-This directory holds executable comparisons against the Rust compiler named by
-`rust-toolchain.toml`. It is the evidence source for compatibility work; the
-website compatibility inventory groups the Rust surface by subsystem; it is
-not a test denominator or a conformance score. See
-[the inventory scope](../../docs/rust-compatibility-inventory.md).
+Use this corpus to compare Quill with the pinned rustc. Read [the completion
+target](TARGET.md) before interpreting a pass rate, and [the inventory guide](../../docs/rust-compatibility-inventory.md)
+when updating feature status.
 
-The completion target and evidence required before claiming full compatibility
-are defined in [`TARGET.md`](TARGET.md). The corpus below is an early
-regression suite, not a proxy percentage for that full target.
+## Run the corpus
 
-The runner reads the pinned `channel` and passes it explicitly to every
-`rustc` and `cargo` command. Cases run in temporary directories, so relying on
-rustup's directory-based toolchain override would otherwise silently select
-the machine's default compiler instead.
+1. Build the Quill executable you intend to measure. Set `QUILLC` to select it
+   explicitly; otherwise the runner chooses the newer of `target/release/quillc`
+   and `target/debug/quillc`. It does not build the compiler.
+2. Run from the repository:
 
-Run the corpus with:
+   ```sh
+   python3 benchmarks/compatibility/run.py
+   ```
 
-```sh
-python3 benchmarks/compatibility/run.py
-```
+3. Read the report's exact compiler state and case outcomes. A case passes only
+   when the observed results match. Keep any mismatch tied to its case and target.
+   Use the runner's `--help` for filtering and output options; `--keep` retains
+   temporary sources and artifacts for investigation.
 
-The runner builds each positive case with both compilers, runs both binaries,
-and compares exit status, stdout, and stderr. A Cargo case can list multiple
-`binaries`; the runner compares the output of every generated target.
-Diagnostic cases compare the expected rustc error code, primary message, and
-primary source location recorded in `cases.json`. Passing one diagnostic case
-does not establish broad diagnostic or borrow-checker compatibility.
-
-The report includes the exact `rustc` version, Quill binary, case results, and
-overall pass rate. A case passes only when the observed rustc and Quill results
-match. Never use a small smoke-corpus percentage as a substitute for the
-full-language goal: add cases across syntax, type and borrow rules, diagnostics,
-runtime and standard-library behavior, Cargo workflows, and supported targets.
-Each case also names its compatibility-index feature IDs. The report aggregates
-those probes by feature while preserving the hand-curated status; a passing
-probe does not promote a broad feature category to full compatibility.
-The panic runtime case normalizes rustc's process-specific main-thread ID in
-stderr; it still compares the exit status, payload, source location, and
-remaining panic-hook output.
+The runner reads `channel` from [rust-toolchain.toml](../../rust-toolchain.toml)
+and passes it to every rustc/Cargo invocation. Cases run in temporary directories,
+where relying on rustup's repository override would select the system default.
 
 ## Case format
 
-`cases.json` contains source or Cargo workspace fixtures. `run` and `cargo-run`
-cases compare runtime behavior, `parse` cases compare syntax acceptance,
-`syntax-reject` cases require both compilers to reject source, and `diagnostic`
-cases compare error codes, messages, and primary spans. Each case
-can override edition and rustc flags. Temporary artifacts are removed after
-the run unless `--keep` is supplied.
+[cases.json](cases.json) owns fixtures, expectations, edition/flag overrides,
+and feature IDs.
 
-`QUILLC` may point to a built Quill executable. By default the runner selects
-the most recently built `target/release/quillc` or `target/debug/quillc`; it
-does not build the compiler itself.
+| Kind | Comparison |
+| --- | --- |
+| `run`, `cargo-run` | Compile with both compilers; compare executable exit status, stdout, and stderr. Cargo cases may list multiple `binaries`, all of which are compared. |
+| `parse` | Syntax acceptance. |
+| `syntax-reject` | Both compilers reject the source. |
+| `diagnostic` | Expected rustc error code, primary message, and primary source location. |
+
+The panic case normalizes rustc’s process-specific main-thread ID in stderr.
+Exit status, payload, source location, and the rest of the panic-hook output
+remain part of the comparison.
+
+Broader diagnostic equivalence includes more than these current primary-error
+checks; see [the target](TARGET.md#reference-compiler-and-language-modes).
+
+To extend coverage, add cases across syntax, checking, diagnostics, runtime,
+libraries, Cargo, and required targets. Tag feature IDs so the report aggregates
+probes while retaining the curated status. Passing a case does not promote its
+whole category to fully supported.
 
 ## Initial Linux baseline
 
-On 13 October 2026, the initial report showed 7 of 11 cases passing (63.6%).
-It predates explicit toolchain pinning: it recorded the repository rustc
-version, but ran cases outside the repository where rustup selected the system
-default. Do not treat it as a valid rustc comparison; the corrected current
-report below supersedes it. The saved historical report is
-[`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
+The [initial 7/11 report](results/2026-10-13-initial-linux.json) (63.6%) is
+historical and invalid as a rustc comparison: it recorded the repository
+version but ran outside the repository without explicitly pinning the toolchain.
+Use explicitly pinned reports for comparisons.
 
-The latest clean Linux run passes 51 of 53 cases (96.2%) at revision
-`26b9230`. The report records the exact binary hash and clean source status.
-It covers static-string panic behavior, Rust 2015 `async`, `await`, and `dyn`
-identifiers, and Rust 2024 reserved `gen`, unsafe extern block, and unsafe
-attribute rules:
-[`results/2026-10-13-panic-runtime-clean.json`](results/2026-10-13-panic-runtime-clean.json).
-Borrowed integer slice iteration and `Vec<String>` growth, indexing, cloning,
-and output match rustc in the maintained cases. Windows output remains
-unprobed.
+## Recorded Linux evidence
 
-Two cases fail: generic trait dispatch and rustc's inability to consume
-Quill's object as an `--extern` library. The paired Rust 2015/2018
-tests now match rustc: `async`, `await`, and `dyn` are accepted as Rust 2015
-identifiers where appropriate, while Rust 2018 reserves `async` for async
-syntax. Thirteen edition-scoped cases pass across Rust 2015, 2018, 2021, 2024,
-and experimental `future`, including Rust 2024 `r#gen` and required unsafe
-syntax for extern blocks and attributes. Loop break/continue,
-signed widening, tuple projections, borrowed slice iteration, `Vec<String>`
-indexing, and the tested `Result` status check also match rustc. Build-script support covers the tested native script that emits
-`rustc-cfg`; other directives and build dependencies remain incomplete.
+The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
+at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
+clean source status. This is a named snapshot, not a permanent current count.
 
-The 96.2% rate is only for these curated cases; it is not an overall Rust
-compatibility score. The case count and the grouped website inventory describe
-different things and must not be compared as percentages. The full destination
-remains in [`TARGET.md`](TARGET.md),
-including language, diagnostics, standard library, Cargo, and Linux and
-Windows platforms. Earlier reports remain available for historical runs.
+It includes 13 edition-scoped cases across 2015, 2018, 2021, 2024, and
+experimental `future`: Rust 2015 uses of `async`, `await`, and `dyn`; later
+reserved-keyword behavior; Rust 2024 `gen`/`r#gen`, unsafe extern blocks, and
+unsafe attributes. Maintained cases also cover loop break/continue, signed
+widening, tuple projections, borrowed integer-slice iteration,
+`Vec<String>` growth/indexing/cloning/output, and a `Result` status check.
+Static-string panic behavior also matches in the maintained runtime case.
+The native build-script case emits `rustc-cfg`; other directives and build
+dependencies remain incomplete.
+
+Two cases fail in that snapshot: generic trait dispatch and
+rustc consuming Quill's object as an `--extern` library. Windows remains unprobed.
+New reports retain their own results and provenance under `results/`; the website
+selects reports through [its data loader](../../website/data.mjs).
+
+The 96.2% figure describes those 53 cases only. The [full compatibility target](TARGET.md)
+requires broader suites, real workspaces, and every required platform. Neither
+case counts nor grouped inventory counts are overall Rust percentages.

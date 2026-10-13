@@ -1,18 +1,7 @@
-# Website work
+# Develop and publish the website
 
-Read [visual direction](design.md) before design changes and
-[review standards](../../CODING_STANDARDS.md) before reviewing them.
-
-## File map
-
-- `index.html`: homepage; `compatibility.html`: compatibility index.
-- `project.html`: project documentation landing page.
-- `assets/site.css`: shared foundation and homepage components, grouped by section.
-- `assets/compatibility.css` and `assets/document.css`: page-specific styles.
-- `assets/print-fields.js`: halftone rendering; `assets/motion.js`: shared motion.
-- `vite.config.mjs`: Vite+ development and production configuration.
-- `website/content-plugin.mjs`: Markdown routes, live reload, and publication.
-- `website/data.mjs`: report selection and server-rendered statistics.
+For visual changes, read the [design decisions](design.md). Review work against
+[the website standards](../../CODING_STANDARDS.md).
 
 ## Local preview
 
@@ -28,11 +17,12 @@ host's LAN address on another device. CSS updates in place; changes to docs,
 reports, scripts, and HTML reload open pages. Git revision changes also reload.
 `serve.py` is a compatibility launcher for this same command.
 
-Every non-ignored repository `.md` file is served in the existing document reader
-at its original URL; `?raw=1` returns Markdown. Project notes lists all documents,
-including newly added files. Relative links and images keep their original base.
-Dot-directories, build output, and files resolving outside the repository are
-excluded from publication.
+Every non-ignored repository `.md` and `.json` file is served in the existing
+document reader at its original URL; Markdown is rendered and JSON is
+pretty-printed. `?raw=1` returns the source data. Project notes lists all
+documents, including newly added files. Relative Markdown links and images keep
+their original base. Dot-directories, build output, and files resolving outside
+the repository are excluded from publication.
 
 ## Statistics and publication
 
@@ -42,7 +32,8 @@ HTML, including readable figures with JavaScript disabled. `/site-data.json`
 records the selected reports, documentation index, and current revision.
 
 - Catalog Flow uses `benchmarks/catalog-flow/results.json` for times, ratios,
-  workload size, run count, machine, and source revision. The metric switch reads
+  workload size, run count, machine, source revision, and `runtime_medians` for
+  generated-binary runtime. The metric switch reads
   that same report.
 - Compiler checks select the newest report in `benchmarks/compatibility/results/`.
   Report category coverage remains distinct from the current documentation index.
@@ -109,3 +100,14 @@ Tooling is development-only. At setup, npm reported a transitive `braces`
 stack-exhaustion advisory through Stylelint; the available audit fix downgraded
 Stylelint to an obsolete major. Our commands use fixed local globs. Reassess the
 advisory when updating dependencies; do not apply that downgrade automatically.
+
+## File map
+
+- `index.html`: homepage; `compatibility.html`: compatibility index.
+- `project.html`: project documentation landing page.
+- `assets/site.css`: shared foundation and homepage components, grouped by section.
+- `assets/compatibility.css` and `assets/document.css`: page-specific styles.
+- `assets/print-fields.js`: halftone rendering; `assets/motion.js`: shared motion.
+- `vite.config.mjs`: Vite+ development and production configuration.
+- `website/content-plugin.mjs`: Markdown routes, live reload, and publication.
+- `website/data.mjs`: report selection and server-rendered statistics.

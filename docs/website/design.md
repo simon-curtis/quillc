@@ -1,48 +1,48 @@
-# Website visual direction
+# Website design decisions
 
-## Print treatment
+Use this record when changing the composition. Follow the
+[website workflow](README.md#review-a-change) for visual review and the
+[review standards](../../CODING_STANDARDS.md) for completion criteria.
+
+## Visual foundation
 
 ![Original lithographic style reference](references/lithographic-print.png)
 
-The reference is for halftone ink, paper, and typographic confidence. The animals,
-knot, and three-card arrangement are not Quill motifs or a requested layout.
+Translate the reference's halftone ink, paper, and confident typography into
+Quill's own composition. Warm paper, charcoal type, restrained rust-red artwork,
+and local Geist fonts form the palette. Exact values belong in
+[`assets/site.css`](../../assets/site.css); halftone rendering belongs in
+[`assets/print-fields.js`](../../assets/print-fields.js). Geist Mono supports
+code and small labels.
 
-Use warm paper, charcoal type, and restrained rust-red halftone artwork. The
-palette and local Geist fonts are defined in `assets/site.css`; keep that file
-the source of truth for exact values. Geist Mono supports code and small labels.
-Halftone rendering lives in `assets/print-fields.js`.
+## Composition
 
-## Decisions from the design review
+- Explain the product in plain language: a Rust compiler aiming for full
+  compatibility on Linux and Windows. Distinguish that goal from present support.
+- Keep hero copy left aligned and the compact, vertical getting-started section
+  to its right on desktop. Use the small flame-feather mark in navigation and
+  the footer; the large hero feather was removed.
+- Separate sections with equally compact halftone impressions aligned to the
+  content container. Their wave motion should be slow and subtle, with a
+  stationary treatment for reduced motion.
+- Keep useful content close together. Give headings, explanations, and evidence
+  a readable hierarchy without oversized empty columns or decorative labels.
+- Keep measured performance beside its provenance. Present build speed,
+  generated-binary runtime, and LSP latency as distinct measurements.
+- Separate documented feature status from differential compiler-check evidence.
 
-- Explain the compiler in plain language. Its ambition is full Rust compatibility
-  on Linux and Windows; its current implementation is still developing.
-- Keep hero text left aligned, with a compact vertical getting-started section
-  on its right at desktop sizes. The large hero feather was removed; small
-  flame-feather identity marks remain in navigation and footer.
-- Section separators are small, consistent halftone impressions constrained to
-  the same content container as the text. They should not expand into large
-  landscape sweeps or bleed across the viewport.
-- Preserve useful density. Avoid giant slogans paired with small text across
-  mostly empty space, generic feature-card grids, and decorative technical labels.
-- Arbitrary animals and abstract shapes were rejected. The printing-press and
-  factory concepts were explored and scrapped. Do not revive them as defaults.
-- The “Taking shape” section was removed. Tinted section bands and isolated
-  straight rules were rejected as the main way to separate homepage sections.
+## Current baseline
 
-## Current implementation baseline
+Architecture uses a text-based Parse / Check / Generate / Link interaction.
+Inspiration pairs halftone language names with concise research notes. The LSP
+section explains editor support and measured latency. These are starting points
+for scoped changes, not permanent approval of every detail.
 
-The architecture section uses a text-based Parse / Check / Generate / Link
-interaction. Inspiration pairs halftone language names with concise research
-notes. Performance shows measured data with provenance. Compatibility keeps
-documented feature status separate from differential test evidence.
+## Previous explorations
 
-These are the current baseline, not permanent approvals of every detail. For a
-new design request, change the named area deliberately and carry forward the
-explicit decisions above unless the user changes direction.
-
-## Visual review questions
-
-Does the visitor understand what Quill is? Is the important content immediately
-readable? Does the halftone treatment belong to the composition? Are separators
-equally compact and aligned to the content edges? Does the section still work
-with its neighbours and on a phone? Is every numeric claim described accurately?
+The reference's animals, knot, and three-card arrangement were style examples,
+not requested motifs. Arbitrary animals and abstract shapes, printing presses,
+factory scenes, generic feature-card grids, large hero feathers, and the
+“Taking shape” section were rejected or removed. Tinted section bands and lone
+straight rules also failed as the main section separators. Carry those decisions
+forward unless the user explicitly changes direction.

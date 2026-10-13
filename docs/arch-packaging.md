@@ -1,34 +1,10 @@
-# Arch Linux package
+# Install and publish the Arch package
 
-Quill's package is `quillc`, currently `0.0.1-1`, for baseline x86-64 Linux.
-The signed repository is served at
-`https://quill.simoncurtis.dev/packages/x86_64`.
-The existing website has its own Cloudflare Worker; only `/packages/*` is
-handled by the `quill-packages` static-assets Worker.
-
-## GitHub builds
-
-The **Arch package** Actions workflow builds on compiler and packaging changes
-to `main`, and can also be run manually on `main`. A fresh Arch Linux container
-installs the build dependencies, imports the signing key from the encrypted
-`ARCH_SIGNING_KEY` repository secret, and runs `scripts/build-arch.sh` as an
-unprivileged user. Each run uploads a signed package, its source archive,
-generated recipe, and repository databases as `quillc-arch-<commit>`.
-Download that artifact from the workflow run's page; artifacts are retained
-for 30 days. Builds have no deployment dependency on the website workflow.
-
-The **Website** workflow independently builds and publishes the website on
-website or documentation changes to `main`. It preserves the existing pages
-and Markdown reader and forwards existing blog routes to `quill-devlog`.
-`CLOUDFLARE_API_TOKEN` is an encrypted repository secret scoped to Worker
-deployments in the Quill account and routes in the `simoncurtis.dev` zone.
-Each deployment checks that the live site reports the exact Git commit.
-Both workflows can be started from GitHub's Actions page.
-
-Website staging is available locally with `python3 scripts/build-website.py`;
-deployment uses `npx wrangler@4.150.0 deploy --config website/wrangler.jsonc`.
-`target/website/` contains only selected public assets, documents, and results.
-Compiler builds, Git metadata, and signing keys are excluded.
+The signed `quillc` repository targets baseline x86-64 Linux. Use the
+[compatibility inventory](rust-compatibility-inventory.md) to check language
+support before choosing a workload. The workspace version is in
+[`Cargo.toml`](../Cargo.toml); the package revision is in
+[`packaging/arch/PKGBUILD`](../packaging/arch/PKGBUILD).
 
 ## Install with pacman
 
@@ -70,7 +46,7 @@ quillc --version
 The package installs `/usr/bin/quillc`, the license, implementation notes,
 and source provenance under `/usr/share/doc/quillc`. It depends on the system
 linker and Cargo because Quill's native and Cargo commands invoke them.
-Compiler compatibility remains limited to the subset described in the README.
+
 
 ## Build from source
 
@@ -127,3 +103,26 @@ only `quillc.asc` and the fingerprint belong in the repository or deployment.
 To remove the package hosting route, delete only the
 `quill.simoncurtis.dev/packages/*` route in Cloudflare. The `quill-devlog`
 custom domain continues to serve the existing site.
+
+## GitHub builds
+
+The **Arch package** Actions workflow builds on compiler and packaging changes
+to `main`, and can also be run manually on `main`. A fresh Arch Linux container
+installs the build dependencies, imports the signing key from the encrypted
+`ARCH_SIGNING_KEY` repository secret, and runs `scripts/build-arch.sh` as an
+unprivileged user. Each run uploads a signed package, its source archive,
+generated recipe, and repository databases as `quillc-arch-<commit>`.
+Download that artifact from the workflow run's page; artifacts are retained
+for 30 days. Builds have no deployment dependency on the website workflow.
+
+
+## Hosting boundaries
+
+The `quill-packages` Worker serves `/packages/*`; the website has its own
+Worker and forwards blog routes to `quill-devlog`. The website deployment is
+independent of package builds. Its workflow uses `CLOUDFLARE_API_TOKEN`, scoped
+to the Quill account's Worker deployments and the `simoncurtis.dev` zone's routes,
+and checks the deployed Git revision. Both workflows can be launched from Actions.
+
+For website builds and publication, follow the [website guide](website/README.md).
+Public output excludes compiler builds, Git metadata, and private signing keys.

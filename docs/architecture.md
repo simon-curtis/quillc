@@ -1,117 +1,118 @@
 # Architecture and implementation boundaries
 
-## Design constraints
-
-- The first native target is x86-64 Linux ELF. Quill selects instructions,
-  emits machine code, and creates relocations itself. LLVM and Cranelift must
-  not enter its dependency graph or output path. `object` serializes ELF data;
-  `ld` links it.
-- `rustc` is a comparison compiler and a source of target `cfg` values. Report
-  its profile, target, linker, and machine settings with every comparison.
-- Rust compatibility is the destination, not the bootstrap contract. Each
-  command must state and enforce its supported subset.
-- Check every body required by Rust diagnostics, including unreachable code.
-  Reachability may remove downstream monomorphization, optimization, lowering,
-  and emission work; it must not skip required type or borrow checking.
-- Keep the `quillc` driver user-facing. Split crates when they expose a useful
-  contract that can be built or measured independently, not for each internal
-  type.
-
-## Target crate boundaries
-
-These are architectural boundaries, not a claim that each package exists
-today. The workspace currently includes `quill-cfg`; `quill-mir` and
-`quill-object` are not separate crates yet.
-
-1. `quill-source`: immutable source files, interned file identities, byte
-   spans, and line/column mapping.
-2. `quill-syntax`: tokens, parsing, and source-spanned diagnostics.
-3. `quill-hir`: resolved items and bodies with source identity and stable item
-   keys.
-4. `quill-query`: memoized immutable results, dependency tracking, persistent
-   fingerprints, and invalidation.
-5. `quill-typeck`: type inference, trait solving, and borrow checking. Keep
-   generic definitions shared; instantiate only demanded uses and deduplicate
-   by canonical instance key.
-6. `quill-mir`: explicit control flow and per-body optimization.
-7. `quill-codegen` and `quill-object`: target-independent low-level IR,
-   x86-64 lowering, register allocation, and ELF object emission, without LLVM
-   or Cranelift interfaces.
-8. `quill-link`: system-linker invocation. Replace it only if end-to-end
-   measurements identify linking as a bottleneck.
-
-`quill-cargo` is the Cargo integration boundary. It uses `cargo metadata` to
-resolve packages, default members, features, and normal/build dependency
-edges. `cargo-plan` reports dependency waves; `cargo-parse` discovers module
-trees, parses target roots, builds per-target HIR, and resolves supported
-public calls through workspace dependency aliases. `cargo-check-subset` adds
-primitive checks using local and workspace signatures. `cargo-build-subset`
-can compile supported default-member binary targets with at most one
-same-package library and workspace-local ordinary library dependencies. A
-single binary is written to the requested output file; multiple binaries are
-written to matching names in the requested output directory, and `--bin`
-selects one target. Outputs are ELF executables, not Cargo-compatible `.rlib`
-files. External dependencies in the selected closure and build scripts remain
-unsupported.
-
-## Current implementation boundary
-
-The driver parses files with Syn and retains a custom lexer for the `lex`
-command and token spans. It discovers conventional external modules and
-supported `#[path]` modules, evaluates supported target/feature `cfg`
-predicates, and parses independent files in parallel. HIR retains module and
-target ownership, imports, struct fields, impl ownership, and selected
-qualified call paths. It does not expand macros or implement Rust's complete
-name resolution, visibility, or type namespaces. The frontend constant-folds
-literal-only `concat!` invocations and expands zero-argument, single-arm
-`macro_rules!` definitions whose bodies are literals. General declarative and
-procedural macro expansion remains unsupported.
-
-Parse queries are keyed by canonical path, content, and `cfg` fingerprint.
-Type-check queries have whole-file and per-body cache entries; body entries
-include source and callable-interface fingerprints, with separate strict and
-permissive results. Struct field interfaces participate in invalidation.
-Cross-file semantic invalidation is still incomplete. `quill-parallel` uses a
-bounded Rayon work-stealing pool for independent file and body work and
-preserves diagnostic order. Semantic queries do not yet suspend and resume
-continuations on dependencies, and wait-for cycle detection remains planned.
-
-The checker accepts a primitive subset, including selected scalar operations,
-control flow, structs, generics, references, collections, and iterator
-closures. Passing a checker command does not establish Rust type or borrow
-compatibility. The x86-64 backend supports selected expressions, loops,
-functions, tuples, strings, slices, enums, `Option`/`Result` layouts, and
-collection operations. Those features work only in documented combinations;
-the backend does not provide the full Rust ABI, allocator, panic behavior, or
-standard-library runtime.
-
-`cargo-build-subset` currently builds and runs the `catalog-flow` fixture with
-output matching `rustc`. Its output is one executable while `cargo build`
-produces per-crate artifacts. Read [the paired report](../benchmarks/catalog-flow/RESULTS.md)
-before using this fixture as performance or compatibility evidence.
+Use this guide when changing compiler stages, crate contracts, or scheduling.
+For language-completion criteria, read [the compatibility target](../benchmarks/compatibility/TARGET.md).
+For the editor pipeline, read [the LSP guide](lsp.md).
 
 ## Completing a vertical slice
 
-Add behavior through an end-to-end path: driver input, source spans,
-diagnostics, semantic handling, output, and a focused correctness case. State
-the accepted syntax and rejected cases. Measure performance only after the
-correctness gate passes. A crate boundary is ready when its contract can be
-used by the next stage and independently validated.
+1. State the input forms the command accepts and the cases it rejects.
+2. Carry the behavior through driver input, source spans, diagnostics, semantic
+   handling, and output. Each affected stage must preserve source identity.
+3. Add a focused correctness case for the complete path. A slice is complete
+   when its accepted and rejected cases behave as specified, not merely when a
+   frontend stage recognizes the syntax.
+4. Evaluate a performance claim through [the benchmark protocol](../benchmarks/README.md)
+   after the correctness gate passes. A crate boundary is ready when the next
+   stage can use its contract and that contract can be validated independently.
 
+<a id="constraints"></a>
+## Design constraints
+
+- **Native output:** the first target is x86-64 Linux ELF. Quill selects
+  instructions, emits bytes, and creates relocations. `object` serializes ELF;
+  the system linker completes the executable. LLVM and Cranelift must remain
+  outside the dependency graph and output path.
+- **Comparison:** `rustc` supplies the reference behavior and target `cfg`
+  values. Record its profile, target, linker, and host with comparisons.
+- **Diagnostics:** check every body required by Rust, including unreachable
+  code. Reachability may prune downstream monomorphization, optimization,
+  lowering, and emission; it must not skip required type or borrow checking.
+- **Boundaries:** keep `quillc` user-facing. Split crates around independently
+  usable contracts rather than individual internal types.
+- **Scope:** every command states and enforces its current subset. Staging
+  implementation does not narrow the compatibility destination.
+
+## Target crate boundaries
+
+This table describes intended responsibilities. Read the workspace manifest
+for current membership: `quill-cfg` exists; `quill-mir` and `quill-object` are
+not yet separate crates.
+
+| Boundary | Contract |
+| --- | --- |
+| `quill-source` | Immutable files, interned identities, byte spans, and line/column mapping. |
+| `quill-syntax` | Tokens, parsing, and source-spanned diagnostics. |
+| `quill-hir` | Resolved items and bodies with source identity and stable item keys. |
+| `quill-query` | Memoized immutable results, dependencies, persistent fingerprints, and invalidation. |
+| `quill-typeck` | Inference, trait solving, and borrow checking; shared generic definitions and demanded instances deduplicated by canonical key. |
+| `quill-mir` | Explicit control flow and per-body optimization. |
+| `quill-codegen` / `quill-object` | Low-level IR, x86-64 lowering, register allocation, and ELF emission. |
+| `quill-link` | System-linker invocation; replace only if end-to-end measurements identify a bottleneck. |
+| `quill-cargo` | Workspace metadata, target selection, dependency planning, and compiler integration. |
+
+## Current implementation boundary
+
+### Frontend and Cargo
+
+The driver uses Syn for compiler parsing and retains a custom lexer for `lex`
+and token spans. It discovers conventional and supported `#[path]` modules,
+applies supported target/feature `cfg`, and parses independent files in parallel.
+HIR records module/target ownership, imports, struct fields, impl ownership,
+and selected qualified calls. Complete Rust name resolution, visibility, type
+namespaces, and general macro expansion remain incomplete. Exact supported
+forms belong in the [feature inventory](../compatibility.html), not a second
+feature list here.
+
+`quill-cargo` uses `cargo metadata` for packages, default members, features,
+and normal/build dependency edges:
+
+| Command | Current role |
+| --- | --- |
+| `cargo-plan` | Report dependency waves. |
+| `cargo-parse` | Discover target module trees, build per-target HIR, and resolve supported public calls through workspace dependency aliases. |
+| `cargo-check-subset` | Check the primitive subset using local and workspace signatures. |
+| `cargo-build-subset` | Build supported default-member binaries with at most one same-package library and workspace-local ordinary library dependencies. |
+
+A single selected binary uses the requested output file. Multiple binaries use
+matching names in the requested output directory; `--bin` selects one. Output
+is ELF executables, not Cargo-compatible `.rlib` files. External dependencies
+and general build-script support remain incomplete; consult the inventory for
+supported exceptions and the [corpus](../benchmarks/compatibility/README.md)
+for observed behavior.
+
+### Queries and scheduling
+
+Parse keys include canonical path, content, and `cfg` fingerprint. Whole-file
+and per-body type-check entries use source and callable-interface fingerprints,
+with separate strict and permissive results. Struct interfaces participate in
+invalidation; cross-file semantic invalidation is still incomplete.
+
+`quill-parallel` uses a bounded Rayon work-stealing pool and preserves diagnostic
+order. Dependency-driven continuation suspension/resumption and wait-for cycle
+detection remain planned. Reusing cached work must preserve the diagnostic
+contract above.
+
+### Checking and output
+
+The checker and backend implement selected combinations of scalar operations,
+control flow, structs, generics, references, collections, iterator closures,
+functions, tuples, strings, slices, enums, and `Option`/`Result` layouts. They
+do not provide complete Rust type/borrow behavior, ABI, allocator, panics, or
+standard-library semantics.
+
+Catalog Flow demonstrates a supported end-to-end path with output matching
+`rustc`. Quill emits one executable; Cargo also produces per-crate artifacts.
+Read [the paired report](../benchmarks/catalog-flow/RESULTS.md#scope) before
+using it as performance or compatibility evidence.
+
+<a id="scientific-method"></a>
 ## Benchmark method
 
-For each optimization, record one hypothesis, a correctness gate, one code
-change, repeated cold/warm/incremental measurements, and the compiler revision.
-Keep raw rows. Reject a claimed gain when behavior differs, peak memory exceeds
-the target, or ranges do not support the conclusion. The 3× goal is an
-acceptance target: every required workload and build mode must pass the
-behavior check, reach at least 3× median wall-time speedup over pinned
-`rustc`, and use no more peak memory.
-
-See [the benchmark protocol](../benchmarks/README.md) for the workload,
-measurement method, and experiment index. One synthetic workload cannot
-establish broad Rust compatibility. Later gates need diverse real workspaces,
-Cargo profiles, diagnostics, and executable behavior comparisons.
+Use [the benchmark protocol](../benchmarks/README.md#acceptance-gate) for the
+correctness, throughput, and memory gates. Keep a single hypothesis per change
+and preserve raw rows. Isolated frontend profiles and overlapping timing ranges
+cannot establish a general compiler speedup.
 
 ## Research references
 

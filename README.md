@@ -1,46 +1,46 @@
 # Quill
 
-Quill is an experimental Rust compiler written in Rust. Its long-term targets
-are Rust compatibility and at least 3× the pinned `rustc` throughput on the
-same workloads without higher peak memory. These are acceptance goals; only
-the results in the benchmark reports are measured.
+Quill is an experimental Rust compiler written in Rust. The goal is full Rust
+compatibility on Linux and Windows, with at least 3× the pinned `rustc` build
+throughput and no increase in peak memory. These are acceptance targets;
+[benchmark reports](benchmarks/README.md) describe measured results.
 
-The workspace uses the pinned toolchain in `rust-toolchain.toml`.
+## Start here
 
-## Arch Linux
+- **Install on Arch Linux:** [signed package and source build](docs/arch-packaging.md).
+- **Work on the compiler:** [architecture and implementation boundaries](docs/architecture.md).
+- **Use the editor server:** [LSP setup and behavior](docs/lsp.md).
+- **Run the website:** [Vite+ development workflow](docs/website/README.md).
+- **Evaluate compatibility:** [full target](benchmarks/compatibility/TARGET.md),
+  [feature inventory](compatibility.html), and [differential corpus](benchmarks/compatibility/README.md).
+- **Measure performance:** [protocol](benchmarks/README.md) and
+  [Catalog Flow results](benchmarks/catalog-flow/RESULTS.md).
 
-Quill is available as the signed `quillc` pacman package, starting at version
-`0.0.1`. See [Arch installation and packaging](docs/arch-packaging.md) for the
-public signing key, repository configuration, and build commands.
+Use the toolchain in [rust-toolchain.toml](rust-toolchain.toml) for repository
+work. [AGENTS.md](AGENTS.md) routes implementation tasks to their detailed guides.
 
-Quill owns its x86-64 code generator. LLVM and Cranelift are not dependencies
-or backends. The `object` crate serializes Quill's machine code and
-relocations, and the system linker links the resulting ELF objects.
-
+<a id="current-state"></a>
 ## Current implementation
 
-The workspace has source, syntax, HIR, query, cfg, type-checking, parallel,
-code-generation, linking, and Cargo integration crates, plus the `quillc`
-driver. The frontend uses Syn to parse Rust files, discovers module trees,
-builds partial HIR, and caches parse and type-check results. Cargo commands
-read workspace metadata, apply supported target and feature `cfg` predicates,
-and resolve some public calls across workspace packages.
+The native backend targets x86-64 Linux ELF and compiles a growing subset of
+Rust. Quill emits its own machine code and relocations; `object` serializes ELF
+objects and the system linker links them. LLVM and Cranelift are not backends
+or dependencies.
 
-The native backend targets x86-64 Linux ELF and supports a growing subset of
-Rust syntax and runtime behavior. `cargo-build-subset` builds the checked-in
-`catalog-flow` workspace into one executable. Its output matches the `rustc`
-binary for that fixture. This demonstrates the measured fixture only; it does
-not establish general Rust or Cargo compatibility.
+The compiler frontend, caches, scheduler, and Cargo integration are described
+in [architecture](docs/architecture.md#current-implementation-boundary). The
+editor uses a separate full-fidelity parser; its [syntax contract](docs/rust-syntax-coverage.md)
+does not imply compiler semantic support.
+
+`cargo-build-subset` builds the Catalog Flow fixture with output matching
+`rustc`. That result applies to the fixture and documented command subset.
+Type and borrow checking, trait solving, macros, libraries, Cargo integration,
+and artifact compatibility still have gaps. Consult the [feature inventory](compatibility.html)
+for the exact supported forms and remaining limits.
 
 ## Limits and evidence
 
-This is not a full Rust compiler. Type and borrow checking, trait solving,
-macros, standard-library behavior, external dependencies, build scripts,
-procedural macros, and Cargo artifact formats are incomplete or unsupported.
-Each command accepts only its documented subset; unsupported input is not
-evidence of compiler compatibility.
-
-See [the architecture and current boundaries](docs/architecture.md) for the
-design and implementation scope. See [the benchmark protocol](benchmarks/README.md)
-and [catalog-flow results](benchmarks/catalog-flow/RESULTS.md) for reproduction
-steps, measurements, and their limits.
+Read each measurement with its workload, compiler state, and artifact scope.
+Build throughput, generated-program runtime, editor latency, parser coverage,
+and Rust conformance are separate results. We expect generated-program runtime
+to lag LLVM-backed `rustc`; faster builds do not imply faster executables.
