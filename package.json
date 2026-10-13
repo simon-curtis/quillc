@@ -1,0 +1,13 @@
+{
+  "name": "quill-website-tools",
+  "private": true,
+  "scripts": {
+    "lint:css": "stylelint 'assets/*.css'",
+    "format:css": "prettier --write 'assets/*.css'",
+    "check:css": "npm run lint:css && prettier --check 'assets/*.css'"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "stylelint": "17.16.0"
+  }
+}

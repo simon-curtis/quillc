@@ -17,7 +17,18 @@ ROOT = Path(__file__).resolve().parent
 
 
 class SiteHandler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # This server is for local editing. Every response must be fresh,
+        # including CSS, scripts, fonts, images, and error responses.
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
     def send_head(self):
+        # An already-cached browser can still send validators after an edit.
+        # Ignore them so SimpleHTTPRequestHandler returns the current body.
+        for header in ('If-Modified-Since', 'If-None-Match'):
+            if header in self.headers:
+                del self.headers[header]
         url = urlsplit(self.path)
         if url.path == '/project-status.json':
             try:
@@ -31,7 +42,6 @@ class SiteHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             return io.BytesIO(data)
         path = Path(self.translate_path(url.path))
@@ -45,7 +55,6 @@ class SiteHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
-            self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
             return io.BytesIO(data)
         return super().send_head()
