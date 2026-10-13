@@ -350,6 +350,27 @@
     "source": "fn check(flag: bool) { let value = String::from(\"owned\"); let selected = match flag { true => { let moved = value; 1u64 }, false => { println!(\"{value}\"); 0u64 } }; } fn main() { check(true); }"
   },
   {
+    "id": "diagnostic-overlapping-mutable-borrows",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let second = &mut value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "mutable-borrow-ends-at-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let observed = &*first; let second = &mut value; println!(\"{second}\"); }"
+  },
+  {
     "id": "rust-syntax-async-lifetimes-macros",
     "kind": "parse",
     "features": [

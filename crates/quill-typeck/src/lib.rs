@@ -1047,6 +1047,7 @@ fn check_one_function(
         function_structs,
         &mut diagnostics,
     );
+    check_mutable_borrow_conflicts(body, &mut diagnostics);
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
     check_loop_control(body, 0, &mut diagnostics);
     if strict_calls {
@@ -1090,6 +1091,334 @@ fn check_move_uses(
         &mut moved,
         diagnostics,
     );
+}
+
+/// Diagnose overlapping mutable borrows held by named locals in a block.
+/// Liveness is approximated by whether the first reference is used after the
+/// second borrow; this preserves Rust's non-lexical end of borrow for simple
+/// straight-line bodies.
+fn check_mutable_borrow_conflicts(body: &BodyExpr, diagnostics: &mut Vec<TypeDiagnostic>) {
+    check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+}
+
+fn check_mutable_borrow_conflicts_in_expression(
+    expression: &BodyExpr,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    match &expression.kind {
+        BodyExprKind::Block { statements, tail } => {
+            let mut mutable_borrows = Vec::<(String, String)>::new();
+            for (index, statement) in statements.iter().enumerate() {
+                if let BodyStatement::Let {
+                    name: Some(name),
+                    initializer: Some(initializer),
+                    ..
+                } = statement
+                    && let Some(place) = mutable_borrowed_path(initializer)
+                {
+                    if mutable_borrows.iter().any(|(borrower, borrowed_place)| {
+                        borrowed_place == place
+                            && local_used_after(borrower, &statements[index + 1..], tail.as_deref())
+                    }) {
+                        diagnostics.push(TypeDiagnostic {
+                            span: initializer.span.clone(),
+                            message: format!(
+                                "error[E0499]: cannot borrow `{place}` as mutable more than once at a time"
+                            ),
+                        });
+                    }
+                    mutable_borrows.push((name.clone(), place.to_owned()));
+                }
+                check_mutable_borrow_conflicts_in_statement(statement, diagnostics);
+            }
+            if let Some(tail) = tail {
+                check_mutable_borrow_conflicts_in_expression(tail, diagnostics);
+            }
+        }
+        BodyExprKind::Reference { expression, .. }
+        | BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::Dereference(expression) => {
+            check_mutable_borrow_conflicts_in_expression(expression, diagnostics)
+        }
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => {
+            for argument in arguments {
+                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            check_mutable_borrow_conflicts_in_expression(receiver, diagnostics);
+            for argument in arguments {
+                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+            }
+        }
+        BodyExprKind::Closure { body, .. } => {
+            check_mutable_borrow_conflicts_in_expression(body, diagnostics)
+        }
+        BodyExprKind::StructLiteral { fields, .. } => {
+            for (_, value) in fields {
+                check_mutable_borrow_conflicts_in_expression(value, diagnostics);
+            }
+        }
+        BodyExprKind::FieldAccess { base, .. } => {
+            check_mutable_borrow_conflicts_in_expression(base, diagnostics)
+        }
+        BodyExprKind::Index { base, index, .. } => {
+            check_mutable_borrow_conflicts_in_expression(base, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(index, diagnostics);
+        }
+        BodyExprKind::Binary { left, right, .. } => {
+            check_mutable_borrow_conflicts_in_expression(left, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(right, diagnostics);
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_mutable_borrow_conflicts_in_expression(condition, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(then_branch, diagnostics);
+            if let Some(else_branch) = else_branch {
+                check_mutable_borrow_conflicts_in_expression(else_branch, diagnostics);
+            }
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            check_mutable_borrow_conflicts_in_expression(scrutinee, diagnostics);
+            for arm in arms {
+                check_mutable_borrow_conflicts_in_expression(&arm.body, diagnostics);
+            }
+        }
+        BodyExprKind::MacroInvocation(macro_expression) => {
+            for argument in &macro_expression.arguments {
+                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+            }
+        }
+        BodyExprKind::Return(Some(value)) => {
+            check_mutable_borrow_conflicts_in_expression(value, diagnostics)
+        }
+        BodyExprKind::Unit
+        | BodyExprKind::Literal(_)
+        | BodyExprKind::EmptySliceReference
+        | BodyExprKind::Path(_)
+        | BodyExprKind::Return(None)
+        | BodyExprKind::Unsupported => {}
+    }
+}
+
+fn check_mutable_borrow_conflicts_in_statement(
+    statement: &BodyStatement,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    match statement {
+        BodyStatement::Let { initializer, .. } => {
+            if let Some(initializer) = initializer {
+                check_mutable_borrow_conflicts_in_expression(initializer, diagnostics);
+            }
+        }
+        BodyStatement::LetTuple { initializer, .. }
+        | BodyStatement::Assign {
+            value: initializer, ..
+        }
+        | BodyStatement::Expression {
+            expression: initializer,
+            ..
+        } => check_mutable_borrow_conflicts_in_expression(initializer, diagnostics),
+        BodyStatement::While {
+            condition, body, ..
+        } => {
+            check_mutable_borrow_conflicts_in_expression(condition, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+        }
+        BodyStatement::Loop { body, .. } => {
+            check_mutable_borrow_conflicts_in_expression(body, diagnostics)
+        }
+        BodyStatement::ForRange {
+            start, end, body, ..
+        } => {
+            check_mutable_borrow_conflicts_in_expression(start, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(end, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+        }
+        BodyStatement::ForEach { iterator, body, .. } => {
+            check_mutable_borrow_conflicts_in_expression(iterator, diagnostics);
+            check_mutable_borrow_conflicts_in_expression(body, diagnostics);
+        }
+        BodyStatement::MacroInvocation {
+            arguments,
+            ..
+        } => {
+            for argument in arguments {
+                check_mutable_borrow_conflicts_in_expression(argument, diagnostics);
+            }
+        }
+        BodyStatement::Break { .. }
+        | BodyStatement::Continue { .. }
+        | BodyStatement::Unsupported => {}
+    }
+}
+
+fn mutable_borrowed_path(expression: &BodyExpr) -> Option<&str> {
+    match &expression.kind {
+        BodyExprKind::Reference {
+            mutable: true,
+            expression,
+        } => match &expression.kind {
+            BodyExprKind::Path(name) => Some(name),
+            _ => None,
+        },
+        BodyExprKind::Parenthesized(inner) => mutable_borrowed_path(inner),
+        _ => None,
+    }
+}
+
+fn local_used_after(
+    name: &str,
+    statements: &[BodyStatement],
+    tail: Option<&BodyExpr>,
+) -> bool {
+    statements
+        .iter()
+        .any(|statement| statement_uses_local(statement, name))
+        || tail.is_some_and(|tail| expression_uses_local(tail, name))
+}
+
+fn statement_uses_local(statement: &BodyStatement, name: &str) -> bool {
+    match statement {
+        BodyStatement::Let { initializer, .. } => initializer
+            .as_ref()
+            .is_some_and(|initializer| expression_uses_local(initializer, name)),
+        BodyStatement::LetTuple { initializer, .. } => expression_uses_local(initializer, name),
+        BodyStatement::Assign {
+            name: assigned,
+            value,
+            ..
+        } => assigned == name || expression_uses_local(value, name),
+        BodyStatement::While {
+            condition, body, ..
+        } => expression_uses_local(condition, name) || expression_uses_local(body, name),
+        BodyStatement::Loop { body, .. } => expression_uses_local(body, name),
+        BodyStatement::ForRange {
+            start, end, body, ..
+        } => {
+            expression_uses_local(start, name)
+                || expression_uses_local(end, name)
+                || expression_uses_local(body, name)
+        }
+        BodyStatement::ForEach { iterator, body, .. } => {
+            expression_uses_local(iterator, name) || expression_uses_local(body, name)
+        }
+        BodyStatement::MacroInvocation {
+            arguments,
+            format_string,
+            ..
+        } => {
+            arguments
+                .iter()
+                .any(|argument| expression_uses_local(argument, name))
+                || format_string
+                    .as_deref()
+                    .is_some_and(|format| format_uses_capture(format, name))
+        }
+        BodyStatement::Expression { expression, .. } => expression_uses_local(expression, name),
+        BodyStatement::Break { .. }
+        | BodyStatement::Continue { .. }
+        | BodyStatement::Unsupported => false,
+    }
+}
+
+fn expression_uses_local(expression: &BodyExpr, name: &str) -> bool {
+    match &expression.kind {
+        BodyExprKind::Path(path) => path == name,
+        BodyExprKind::Reference { expression, .. }
+        | BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::Dereference(expression) => expression_uses_local(expression, name),
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => arguments
+            .iter()
+            .any(|argument| expression_uses_local(argument, name)),
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            expression_uses_local(receiver, name)
+                || arguments
+                    .iter()
+                    .any(|argument| expression_uses_local(argument, name))
+        }
+        BodyExprKind::Closure { body, .. } => expression_uses_local(body, name),
+        BodyExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|(_, value)| expression_uses_local(value, name)),
+        BodyExprKind::FieldAccess { base, .. } => expression_uses_local(base, name),
+        BodyExprKind::Index { base, index, .. } => {
+            expression_uses_local(base, name) || expression_uses_local(index, name)
+        }
+        BodyExprKind::Binary { left, right, .. } => {
+            expression_uses_local(left, name) || expression_uses_local(right, name)
+        }
+        BodyExprKind::Block { statements, tail } => {
+            local_used_after(name, statements, tail.as_deref())
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expression_uses_local(condition, name)
+                || expression_uses_local(then_branch, name)
+                || else_branch
+                    .as_deref()
+                    .is_some_and(|branch| expression_uses_local(branch, name))
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            expression_uses_local(scrutinee, name)
+                || arms
+                    .iter()
+                    .any(|arm| expression_uses_local(&arm.body, name))
+        }
+        BodyExprKind::MacroInvocation(macro_expression) => {
+            macro_expression
+                .arguments
+                .iter()
+                .any(|argument| expression_uses_local(argument, name))
+                || macro_expression
+                    .format_string
+                    .as_deref()
+                    .is_some_and(|format| format_uses_capture(format, name))
+        }
+        BodyExprKind::Return(Some(value)) => expression_uses_local(value, name),
+        BodyExprKind::Unit
+        | BodyExprKind::Literal(_)
+        | BodyExprKind::EmptySliceReference
+        | BodyExprKind::Return(None)
+        | BodyExprKind::Unsupported => false,
+    }
+}
+
+fn format_uses_capture(format: &str, name: &str) -> bool {
+    format.split('{').skip(1).any(|field| {
+        field
+            .split('}')
+            .next()
+            .is_some_and(|field| field.split(':').next().unwrap_or(field) == name)
+    })
 }
 
 fn check_move_expression(
