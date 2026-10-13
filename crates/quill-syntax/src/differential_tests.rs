@@ -43,6 +43,78 @@ fn first_difference(left: &serde_json::Value, right: &serde_json::Value, path: &
     }
 }
 
+/// Compare functions by source identity before their list positions. A single
+/// parser-only item can shift every later function index and hide the actual
+/// differing function body.
+fn model_difference(expected: &serde_json::Value, actual: &serde_json::Value) -> Option<String> {
+    let expected_functions = expected["functions"].as_array()?;
+    let actual_functions = actual["functions"].as_array()?;
+    let mut matched_actual = vec![false; actual_functions.len()];
+    let mut missing = Vec::new();
+    for expected_function in expected_functions {
+        let key = function_identity(expected_function);
+        let Some((index, actual_function)) = actual_functions
+            .iter()
+            .enumerate()
+            .find(|(index, function)| {
+                !matched_actual[*index] && function_identity(function) == key
+            })
+        else {
+            missing.push(key);
+            continue;
+        };
+        matched_actual[index] = true;
+        if let Some(difference) = first_difference(
+            expected_function,
+            actual_function,
+            &format!(".functions[{key}]"),
+        ) {
+            return Some(difference);
+        }
+    }
+    let extra = actual_functions
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !matched_actual[*index])
+        .map(|(_, function)| function_identity(function))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() || !extra.is_empty() {
+        return Some(format!(
+            ".functions missing from RA: {missing:?}; extra in RA: {extra:?}"
+        ));
+    }
+    let expected_order = expected_functions
+        .iter()
+        .map(function_identity)
+        .collect::<Vec<_>>();
+    let actual_order = actual_functions
+        .iter()
+        .map(function_identity)
+        .collect::<Vec<_>>();
+    if expected_order != actual_order {
+        return Some(format!(
+            ".functions order: Syn={expected_order:?}; RA={actual_order:?}"
+        ));
+    }
+
+    let mut expected_without_functions = expected.clone();
+    let mut actual_without_functions = actual.clone();
+    if let Some(object) = expected_without_functions.as_object_mut() {
+        object.remove("functions");
+    }
+    if let Some(object) = actual_without_functions.as_object_mut() {
+        object.remove("functions");
+    }
+    first_difference(&expected_without_functions, &actual_without_functions, "")
+}
+
+fn function_identity(function: &serde_json::Value) -> String {
+    format!(
+        "{}::{}@{}",
+        function["scope"], function["name"], function["name_span"]["start"]
+    )
+}
+
 /// The rust-analyzer collector resolves `Self { .. }` struct literals inside
 /// impls to the impl's type, which the Syn collector never did. Apply the
 /// same rule to the oracle model before comparing.
@@ -86,21 +158,17 @@ fn resolve_oracle_self_literals(model: &mut serde_json::Value) {
 pub(crate) fn compare(source: &SourceFile, cfg: &quill_cfg::CfgSet, edition: &str) -> Option<String> {
     let expected = syn_oracle::parse_ast_with_cfg_and_edition(source, cfg, edition);
     let actual = parse_ast_with_cfg_and_edition(source, cfg, edition);
+    let parse_error_differs = expected.had_error != actual.had_error;
+    let actual_diagnostics = actual.diagnostics.clone();
     let mut expected = model(&expected);
     resolve_oracle_self_literals(&mut expected);
     let actual = model(&actual);
-    first_difference(&expected, &actual, "").map(|difference| {
-        let index = difference
-            .split_once(".functions[")
-            .and_then(|(_, rest)| rest.split_once(']'))
-            .and_then(|(index, _)| index.parse::<usize>().ok());
-        index.map_or(difference.clone(), |index| {
-            format!(
-                "{difference} (functions syn={:?}, ra={:?})",
-                expected["functions"][index]["name"],
-                actual["functions"][index]["name"]
-            )
-        })
+    model_difference(&expected, &actual).map(|difference| {
+        if parse_error_differs {
+            format!("{difference}; Quill diagnostics: {actual_diagnostics:?}")
+        } else {
+            difference
+        }
     })
 }
 

@@ -1,18 +1,19 @@
 # Compiler parser migration
 
-## Decision
+## Migration status
 
-Keep Syn as the compiler's AST and lowering input until an equivalent
-rust-analyzer AST adapter exists. Use `ra_ap_syntax` as the LSP syntax parser
-and keep the parser comparison benchmark as the migration performance gate.
+The compiler frontend now uses `ra_ap_syntax` 0.0.358. `quill-syntax` builds
+Quill's existing `Parse` model and lowers supported function bodies from
+rust-analyzer syntax nodes; `quill-cfg` evaluates attributes from those same
+nodes. Syn and proc-macro2 are development dependencies for the parser
+benchmark and test-only differential oracle. The compiler does not use Syn's
+AST or visitors in its production parsing path.
 
-The compiler parser is not a single call that can be swapped. `quill-syntax`
-parses into `syn::File`, then `AstCollector` visits Syn nodes to build Quill's
-`Parse` model and lower function bodies. `quill-cfg` separately uses Syn's
-`Meta` tree to evaluate attributes. The query cache calls
-`parse_ast_with_cfg_and_edition` and persists the resulting Quill model.
-Replacing the parser therefore requires an adapter from rust-analyzer syntax
-nodes to the same Quill model, plus a separate migration for cfg metadata.
+The public `parse_ast_with_cfg_and_edition` API is unchanged. The parse-cache
+key and query-cache schema were bumped so stored results from the old parser
+are discarded. `parse()` still builds the public lexer's token trees before
+using the rust-analyzer collector for semantic items; the compiler driver uses
+`parse_ast` and does not build that token tree.
 
 ## Parser-only performance evidence
 
@@ -23,11 +24,11 @@ cargo bench -p quill-syntax --bench parser_compare
 ```
 
 The workload matches the LSP benchmark: 14,163 lines and 430,219 bytes of
-Rust 2024 source. Syn is timed through Quill's current parser operation:
-`proc_macro2::TokenStream` tokenization followed by `syn::parse2::<syn::File>`.
-The rust-analyzer measurement parses the same text with
-`SourceFile::parse`, producing a lossless syntax tree. Both parsers accept the
-workload without syntax errors. The benchmark also compares one ranged edit:
+Rust 2024 source. The Syn baseline tokenizes with
+`proc_macro2::TokenStream` and then calls `syn::parse2::<syn::File>`. The
+rust-analyzer measurement parses the same text with `SourceFile::parse`,
+producing a lossless syntax tree. Both parsers accept the workload without
+syntax errors. The benchmark also compares one ranged edit:
 rust-analyzer incrementally reparses from the prior tree while Syn reparses the
 edited file from scratch.
 
@@ -47,23 +48,34 @@ numbers as evidence for the parser layer, not a compiler throughput claim. The
 checked-in benchmark prints all samples and p50/p95 values for reruns on the
 target machine.
 
-## Migration sequence
+## Validation and limits
 
-1. Add a rust-analyzer backed collector that returns the existing Quill
-   `Parse` model from `SourceFile` nodes. Keep the public
-   `parse_ast_with_cfg_and_edition` contract stable during this work.
-2. Add a test-only differential mode that runs both collectors over the
-   compiler's supported-source fixtures and compares item models, spans,
-   diagnostics, cfg behavior, and edition behavior.
-3. Port body lowering and cfg metadata deliberately. Keep Syn for any custom
-   token or metadata parsers that do not yet have a parity-tested replacement.
-4. Switch the compiler default only after differential tests pass and the
-   end-to-end compile benchmark has no material regression. Keep the Syn path
-   available through the migration period for bisecting behavior changes.
-5. Remove Syn only after the compiler no longer depends on Syn AST nodes,
-   visitors, or attribute parsing.
+`cargo test -p quill-cfg -p quill-syntax` passes (10 cfg tests and 41 syntax
+tests; one large corpus test is ignored by default). Workspace source files
+and focused fixtures are compared against the test-only Syn oracle, including
+edition behavior, cfg filtering, byte spans, macro handling, CRLF, and
+malformed input. `cargo test -p quill-query` passes its 9 cache tests, and
+`cargo check -p quillc` passes.
 
-Adding a second full parser to the production compiler before the collector is
-ready would duplicate work. The benchmark depends on `ra_ap_syntax` only as a
-development dependency, so this benchmark adds no production dependency edge
-from `quill-syntax`.
+The broader `cargo test -p quill-hir -p quill-typeck -p quill-codegen` suite
+passes (111 tests). `cargo test -p quillc` currently has two failures in
+borrow-checking scenarios: an `if let` move check and mutable vector calls.
+The syntax, query, HIR, type-checking, and codegen test suites pass; these two
+binary integration cases still need borrow-checker follow-up.
+
+The last opt-in comparison over 38,349 Rust files from the local Cargo
+registry reported 136 differences from Syn. A follow-up fixed 52 enum
+collection discrepancies in generated expected-output fixtures, but the full
+corpus has not been rerun after that fix. Remaining known differences include
+cases where rust-analyzer rejects
+some malformed or unsupported forms Syn recovered, and Syn mishandles some
+valid macro argument lists. Other differences include opaque pattern syntax
+inside `matches!` macro arguments. One concrete rust-analyzer grammar gap is an
+item-position macro named `safe!`, which rust-analyzer can interpret as an item
+modifier. The corpus therefore supports broad real-world coverage but does not
+prove literal 100% Rust grammar compatibility. Run the ignored corpus test to
+repeat the comparison.
+
+The benchmark numbers above are parser-only evidence. They do not establish a
+full compiler throughput improvement: an end-to-end compile benchmark has not
+yet been run after the migration.

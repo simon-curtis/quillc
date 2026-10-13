@@ -538,6 +538,8 @@ impl<'a> AstCollector<'a> {
             .map(|argument| match argument {
                 syn::FnArg::Receiver(receiver) => ParameterItem {
                     name: Some("self".to_owned()),
+                    mutable: matches!(receiver.kind, syn::ReceiverKind::Value)
+                        && receiver.mutability.is_some(),
                     type_text: match &receiver.kind {
                         syn::ReceiverKind::Value => {
                             if receiver.mutability.is_some() {
@@ -569,6 +571,7 @@ impl<'a> AstCollector<'a> {
                         syn::Pat::Ident(pattern) => Some(pattern.ident.unraw().to_string()),
                         _ => None,
                     },
+                    mutable: matches!(&*argument.pat, syn::Pat::Ident(pattern) if pattern.mutability.is_some()),
                     type_text: self
                         .source
                         .slice(span_range(self.source, argument.ty.span()))
@@ -1577,16 +1580,26 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                 });
             }
             syn::Stmt::Expr(expression, semicolon) => match expression {
-                syn::Expr::Break(expr) if expr.label.is_none() && expr.expr.is_none() => statements
+                syn::Expr::Break(expr) if expr.expr.is_none() => statements
                     .push(BodyStatement::Break {
+                        label: expr.label.as_ref().map(|label| {
+                            source
+                                .slice(span_range(source, label.span()))
+                                .to_owned()
+                        }),
                         span: span_range(source, expr.span()),
                     }),
-                syn::Expr::Continue(expr) if expr.label.is_none() => {
+                syn::Expr::Continue(expr) => {
                     statements.push(BodyStatement::Continue {
+                        label: expr.label.as_ref().map(|label| {
+                            source
+                                .slice(span_range(source, label.span()))
+                                .to_owned()
+                        }),
                         span: span_range(source, expr.span()),
                     })
                 }
-                syn::Expr::Break(_) | syn::Expr::Continue(_) => {
+                syn::Expr::Break(_) => {
                     statements.push(BodyStatement::Unsupported)
                 }
                 syn::Expr::Assign(assign) => {
@@ -1622,12 +1635,22 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                     statements.push(BodyStatement::Unsupported);
                 }
                 syn::Expr::While(while_expr) => statements.push(BodyStatement::While {
+                    label: while_expr.label.as_ref().map(|label| {
+                        source
+                            .slice(span_range(source, label.name.span()))
+                            .to_owned()
+                    }),
                     condition: lower_expr(&while_expr.cond, source),
                     body: lower_block(&while_expr.body, source),
                     span: span_range(source, while_expr.span()),
                 }),
-                syn::Expr::Loop(loop_expr) if loop_expr.label.is_none() => {
+                syn::Expr::Loop(loop_expr) => {
                     statements.push(BodyStatement::Loop {
+                        label: loop_expr.label.as_ref().map(|label| {
+                            source
+                                .slice(span_range(source, label.name.span()))
+                                .to_owned()
+                        }),
                         body: lower_block(&loop_expr.body, source),
                         span: span_range(source, loop_expr.span()),
                     });
@@ -1654,6 +1677,11 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                         range.and_then(|range| range.end.as_deref()),
                     ) {
                         statements.push(BodyStatement::ForRange {
+                            label: for_expr.label.as_ref().map(|label| {
+                                source
+                                    .slice(span_range(source, label.name.span()))
+                                    .to_owned()
+                            }),
                             name,
                             start: lower_expr(start, source),
                             end: lower_expr(end, source),
@@ -1684,6 +1712,11 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                         };
                         if let Some(names) = names {
                             statements.push(BodyStatement::ForEach {
+                                label: for_expr.label.as_ref().map(|label| {
+                                    source
+                                        .slice(span_range(source, label.name.span()))
+                                        .to_owned()
+                                }),
                                 names,
                                 iterator: lower_expr(&for_expr.expr, source),
                                 body: lower_block(&for_expr.body, source),
@@ -1916,6 +1949,16 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 .map(|element| lower_expr(element, source))
                 .collect(),
         ),
+        syn::Expr::Repeat(repeat) => BodyExprKind::ArrayRepeat {
+            element: Box::new(lower_expr(&repeat.expr, source)),
+            length: match &*repeat.len {
+                syn::Expr::Lit(literal) => match &literal.lit {
+                    syn::Lit::Int(length) => length.base10_parse::<usize>().ok(),
+                    _ => None,
+                },
+                _ => None,
+            },
+        },
         syn::Expr::Binary(binary) => BodyExprKind::Binary {
             operator: lower_binary_operator(&binary.op),
             left: Box::new(lower_expr(&binary.left, source)),
@@ -2274,7 +2317,11 @@ fn lower_binary_operator(operator: &syn::BinOp) -> BinaryOperator {
         syn::BinOp::Mul(_) => BinaryOperator::Multiply,
         syn::BinOp::Div(_) => BinaryOperator::Divide,
         syn::BinOp::Rem(_) => BinaryOperator::Remainder,
+        syn::BinOp::Shl(_) => BinaryOperator::ShiftLeft,
+        syn::BinOp::Shr(_) => BinaryOperator::ShiftRight,
         syn::BinOp::BitXor(_) => BinaryOperator::BitXor,
+        syn::BinOp::BitOr(_) => BinaryOperator::BitOr,
+        syn::BinOp::BitAnd(_) => BinaryOperator::BitAnd,
         syn::BinOp::Eq(_) => BinaryOperator::Equal,
         syn::BinOp::Ne(_) => BinaryOperator::NotEqual,
         syn::BinOp::Lt(_) => BinaryOperator::Less,

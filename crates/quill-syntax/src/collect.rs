@@ -1228,6 +1228,7 @@ impl Collector<'_> {
                 };
                 parameters.push(ParameterItem {
                     name: Some("self".to_owned()),
+                    mutable: type_text.starts_with("mut "),
                     type_text,
                     span: self.span(receiver.syntax()),
                 });
@@ -1242,6 +1243,7 @@ impl Collector<'_> {
                         Some(ast::Pat::IdentPat(pattern)) => Some(unraw(&name_text(pattern.name()))),
                         _ => None,
                     },
+                    mutable: matches!(parameter.pat(), Some(ast::Pat::IdentPat(pattern)) if pattern.mut_token().is_some()),
                     type_text: self.slice(ty.syntax()),
                     span: self.span(parameter.syntax()),
                 });
@@ -2303,13 +2305,23 @@ impl<'a> Lowerer<'a> {
     ) -> Option<BodyStatement> {
         let span = self.span(expression.syntax());
         Some(match expression {
-            ast::Expr::BreakExpr(expr) if expr.lifetime().is_none() && expr.expr().is_none() => {
-                BodyStatement::Break { span }
+            ast::Expr::BreakExpr(expr) if expr.expr().is_none() => {
+                BodyStatement::Break {
+                    label: expr
+                        .lifetime()
+                        .map(|lifetime| lifetime.syntax().text().to_string()),
+                    span,
+                }
             }
-            ast::Expr::ContinueExpr(expr) if expr.lifetime().is_none() => {
-                BodyStatement::Continue { span }
+            ast::Expr::ContinueExpr(expr) => {
+                BodyStatement::Continue {
+                    label: expr
+                        .lifetime()
+                        .map(|lifetime| lifetime.syntax().text().to_string()),
+                    span,
+                }
             }
-            ast::Expr::BreakExpr(_) | ast::Expr::ContinueExpr(_) => BodyStatement::Unsupported,
+            ast::Expr::BreakExpr(_) => BodyStatement::Unsupported,
             ast::Expr::BinExpr(binary)
                 if binary.op_kind() == Some(ast::BinaryOp::Assignment { op: None }) =>
             {
@@ -2340,11 +2352,19 @@ impl<'a> Lowerer<'a> {
                 }
             }
             ast::Expr::WhileExpr(while_expr) => BodyStatement::While {
+                label: while_expr
+                    .label()
+                    .and_then(|label| label.lifetime())
+                    .map(|lifetime| lifetime.syntax().text().to_string()),
                 condition: self.lower_opt_expr(while_expr.condition(), while_expr.syntax()),
                 body: self.lower_opt_block(while_expr.loop_body(), while_expr.syntax()),
                 span,
             },
-            ast::Expr::LoopExpr(loop_expr) if loop_expr.label().is_none() => BodyStatement::Loop {
+            ast::Expr::LoopExpr(loop_expr) => BodyStatement::Loop {
+                label: loop_expr
+                    .label()
+                    .and_then(|label| label.lifetime())
+                    .map(|lifetime| lifetime.syntax().text().to_string()),
                 body: self.lower_opt_block(loop_expr.loop_body(), loop_expr.syntax()),
                 span,
             },
@@ -2374,6 +2394,10 @@ impl<'a> Lowerer<'a> {
         ) && let (Some(start), Some(end)) = (range.start(), range.end())
         {
             return BodyStatement::ForRange {
+                label: for_expr
+                    .label()
+                    .and_then(|label| label.lifetime())
+                    .map(|lifetime| lifetime.syntax().text().to_string()),
                 name,
                 start: self.lower_expr(&start),
                 end: self.lower_expr(&end),
@@ -2392,6 +2416,10 @@ impl<'a> Lowerer<'a> {
         };
         match (names, for_expr.iterable()) {
             (Some(names), Some(iterator)) => BodyStatement::ForEach {
+                label: for_expr
+                    .label()
+                    .and_then(|label| label.lifetime())
+                    .map(|lifetime| lifetime.syntax().text().to_string()),
                 names,
                 iterator: self.lower_expr(&iterator),
                 body,
@@ -2582,7 +2610,16 @@ impl<'a> Lowerer<'a> {
                 ast::ArrayExprKind::ElementList(elements) => {
                     BodyExprKind::FixedArrayLiteral(self.lower_exprs(elements))
                 }
-                ast::ArrayExprKind::Repeat { .. } => return None,
+                ast::ArrayExprKind::Repeat { initializer, repeat } => {
+                    let element = Box::new(self.lower_opt_expr(initializer, array.syntax()));
+                    let length = repeat.and_then(|repeat| {
+                        self.slice(repeat.syntax())
+                            .replace('_', "")
+                            .parse::<usize>()
+                            .ok()
+                    });
+                    BodyExprKind::ArrayRepeat { element, length }
+                }
             },
             ast::Expr::BinExpr(binary) => {
                 let operator = match binary.op_kind()? {
@@ -2692,10 +2729,24 @@ impl<'a> Lowerer<'a> {
                                 BodyExprKind::ArrayLiteral(elements)
                             }
                         }
-                        ast::ArrayExprKind::Repeat { .. } => BodyExprKind::Reference {
-                            mutable: reference.mut_token().is_some(),
-                            expression: Box::new(self.unsupported(array.syntax())),
-                        },
+                        ast::ArrayExprKind::Repeat { initializer, repeat } => {
+                            let element = Box::new(
+                                self.lower_opt_expr(initializer, array.syntax()),
+                            );
+                            let length = repeat.and_then(|repeat| {
+                                self.slice(repeat.syntax())
+                                    .replace('_', "")
+                                    .parse::<usize>()
+                                    .ok()
+                            });
+                            BodyExprKind::Reference {
+                                mutable: reference.mut_token().is_some(),
+                                expression: Box::new(BodyExpr {
+                                    kind: BodyExprKind::ArrayRepeat { element, length },
+                                    span: self.span(array.syntax()),
+                                }),
+                            }
+                        }
                     },
                     expression => BodyExprKind::Reference {
                         mutable: reference.mut_token().is_some(),
@@ -2952,7 +3003,11 @@ fn lower_binary_operator(operator: ast::BinaryOp) -> BinaryOperator {
         BinaryOp::ArithOp(ArithOp::Mul) => BinaryOperator::Multiply,
         BinaryOp::ArithOp(ArithOp::Div) => BinaryOperator::Divide,
         BinaryOp::ArithOp(ArithOp::Rem) => BinaryOperator::Remainder,
+        BinaryOp::ArithOp(ArithOp::Shl) => BinaryOperator::ShiftLeft,
+        BinaryOp::ArithOp(ArithOp::Shr) => BinaryOperator::ShiftRight,
         BinaryOp::ArithOp(ArithOp::BitXor) => BinaryOperator::BitXor,
+        BinaryOp::ArithOp(ArithOp::BitOr) => BinaryOperator::BitOr,
+        BinaryOp::ArithOp(ArithOp::BitAnd) => BinaryOperator::BitAnd,
         BinaryOp::CmpOp(CmpOp::Eq { negated: false }) => BinaryOperator::Equal,
         BinaryOp::CmpOp(CmpOp::Eq { negated: true }) => BinaryOperator::NotEqual,
         BinaryOp::CmpOp(CmpOp::Ord {

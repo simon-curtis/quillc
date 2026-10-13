@@ -177,6 +177,7 @@ pub struct FunctionItem {
 pub struct ParameterItem {
     pub name: Option<String>,
     pub type_text: String,
+    pub mutable: bool,
     pub span: Range<usize>,
 }
 
@@ -257,6 +258,10 @@ pub enum BodyExprKind {
     Tuple(Vec<BodyExpr>),
     ArrayLiteral(Vec<BodyExpr>),
     FixedArrayLiteral(Vec<BodyExpr>),
+    ArrayRepeat {
+        element: Box<BodyExpr>,
+        length: Option<usize>,
+    },
     StructLiteral {
         path: String,
         fields: Vec<(String, BodyExpr)>,
@@ -317,7 +322,11 @@ pub enum BinaryOperator {
     Multiply,
     Divide,
     Remainder,
+    ShiftLeft,
+    ShiftRight,
     BitXor,
+    BitOr,
+    BitAnd,
     Equal,
     PatternEqual,
     NotEqual,
@@ -350,15 +359,18 @@ pub enum BodyStatement {
         span: Range<usize>,
     },
     While {
+        label: Option<String>,
         condition: BodyExpr,
         body: BodyExpr,
         span: Range<usize>,
     },
     Loop {
+        label: Option<String>,
         body: BodyExpr,
         span: Range<usize>,
     },
     ForRange {
+        label: Option<String>,
         name: String,
         start: BodyExpr,
         end: BodyExpr,
@@ -367,15 +379,18 @@ pub enum BodyStatement {
         span: Range<usize>,
     },
     ForEach {
+        label: Option<String>,
         names: Vec<String>,
         iterator: BodyExpr,
         body: BodyExpr,
         span: Range<usize>,
     },
     Break {
+        label: Option<String>,
         span: Range<usize>,
     },
     Continue {
+        label: Option<String>,
         span: Range<usize>,
     },
     MacroInvocation {
@@ -480,7 +495,7 @@ pub fn parse(source: &SourceFile) -> Parse {
 
 pub fn parse_files(pool: &quill_parallel::WorkPool, sources: &[SourceFile]) -> Vec<Parse> {
     // The compiler driver needs semantic items, not the lossless bootstrap
-    // token tree. Avoid lexing and grouping every byte before Syn parses it.
+    // token tree. Avoid lexing and grouping every byte before RA parses it.
     pool.map(sources, parse_ast)
 }
 
