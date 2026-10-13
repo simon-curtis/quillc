@@ -42,37 +42,45 @@ def measure(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    root_process = psutil.Process(process.pid)
     peak_rss = 0
+    if label.endswith("_warm"):
+        # These cache-hit commands finish in a few milliseconds. A psutil
+        # polling thread can contend with them and inflate wall time several
+        # fold. They launch no compiler children, so wait4 gives peak RSS.
+        waited_pid, status, process_usage = os.wait4(process.pid, 0)
+        finished = time.perf_counter()
+        peak_rss = process_usage.ru_maxrss * 1024
+    else:
+        root_process = psutil.Process(process.pid)
 
-    def sample_process_tree() -> None:
-        nonlocal peak_rss
-        try:
-            tree = [root_process, *root_process.children(recursive=True)]
-            peak_rss = max(
-                peak_rss,
-                sum(child.memory_info().rss for child in tree if child.is_running()),
-            )
-        except psutil.Error:
-            pass
+        def sample_process_tree() -> None:
+            nonlocal peak_rss
+            try:
+                tree = [root_process, *root_process.children(recursive=True)]
+                peak_rss = max(
+                    peak_rss,
+                    sum(child.memory_info().rss for child in tree if child.is_running()),
+                )
+            except psutil.Error:
+                pass
 
-    sample_process_tree()
-    stop_sampling = threading.Event()
+        sample_process_tree()
+        stop_sampling = threading.Event()
 
-    def sample_until_stopped() -> None:
-        while not stop_sampling.wait(0.002):
-            sample_process_tree()
+        def sample_until_stopped() -> None:
+            while not stop_sampling.wait(0.002):
+                sample_process_tree()
 
-    sampler = threading.Thread(target=sample_until_stopped, daemon=True)
-    sampler.start()
-    waited_pid, status, process_usage = os.wait4(process.pid, 0)
-    finished = time.perf_counter()
-    stop_sampling.set()
-    sampler.join()
+        sampler = threading.Thread(target=sample_until_stopped, daemon=True)
+        sampler.start()
+        waited_pid, status, process_usage = os.wait4(process.pid, 0)
+        finished = time.perf_counter()
+        stop_sampling.set()
+        sampler.join()
+        peak_rss = max(peak_rss, process_usage.ru_maxrss * 1024)
     if waited_pid != process.pid:
         raise RuntimeError(f"{label}: wait4 returned unexpected pid {waited_pid}")
     process.returncode = os.waitstatus_to_exitcode(status)
-    peak_rss = max(peak_rss, process_usage.ru_maxrss * 1024)
     return_code = process.returncode
     wall = finished - started
     after_children = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -248,7 +256,10 @@ def main() -> None:
         ),
         "runtime_output": rustc_run.stdout.strip(),
         "semantic_edit_runtime_output": changed_runtime_output.strip(),
-        "memory_metric": "peak sampled RSS summed over each build process tree",
+        "memory_metric": (
+            "peak process-tree RSS sampled every 2 ms for cold/incremental builds; "
+            "warm cache hits use wait4 process RSS because they launch no compiler child"
+        ),
         "results": results,
         "medians": {
             label: {
