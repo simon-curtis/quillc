@@ -1263,6 +1263,7 @@ fn check_move_expression(
                             &mut loop_moved,
                             diagnostics,
                         );
+                        moved.extend(loop_moved);
                     }
                     BodyStatement::ForRange {
                         start, end, body, ..
