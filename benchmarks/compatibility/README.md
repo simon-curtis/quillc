@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [parameter-borrow run](results/2026-10-13-parameter-borrow-clean.json)
+passes 114/114 curated cases at clean revision `71059d2`. Borrow checking now
+uses function parameter types, catching E0505 when a borrowed non-`Copy`
+parameter is moved into a call and E0502 when a live shared borrow conflicts
+with a mutable method call. It accepts those operations after the borrow's last
+use. This 100% corpus result does not establish overall Rust compatibility.
+
 The [method-borrow run](results/2026-10-13-method-borrow-clean.json) passes
 111/111 curated cases at clean revision `62a806e`. It catches E0502 when a
 shared or mutable borrow conflicts with supported String and Vec method
