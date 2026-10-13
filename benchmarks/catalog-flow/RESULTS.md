@@ -88,6 +88,18 @@ time rose 0.57%; all wall-time ranges overlapped. No stable CPU reduction was
 measured, so this candidate was rejected too. The [patch](../experiments/struct-table-ownership.patch)
 and [raw comparison](../results/struct-table-ownership-20261013.json) are retained.
 
+A compact parse-summary cache keeps module declarations, item signatures, and
+generic bodies while omitting non-generic function bodies for targets whose
+package object is reusable. On the same fixture, five paired rounds at
+`3f0c376` reduced comment-only incremental median wall time from 25.0 ms to
+12.9 ms and process CPU from 83 ms to 29.1 ms. Semantic incremental time
+changed from 82.0 ms to 77.9 ms (CPU 175 ms to 129 ms). Cold wall time rose
+from 331 ms to 349 ms and CPU from 1.823 s to 1.895 s; peak RSS stayed below
+the rustc baseline in all states. Both semantic-edit runs produced identical
+program output. This is an initial candidate measurement, so the feature stays
+under evaluation pending repeated confirmation and broader compatibility
+checks. Raw samples: [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
