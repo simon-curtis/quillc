@@ -283,6 +283,27 @@
     "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(19); values.push(23); let mut total: u64 = 0; for value in values { total = total + value; } println!(\"{total}\"); }"
   },
   {
+    "id": "vec-u64-growth-index-and-iteration",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "iterators-and-traits"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); values.push(20); values.push(30); values.push(40); values.push(50); values.push(60); values.push(70); values.push(80); values.push(90); let first = values[0]; let mut total = first; for value in values { total = total + value; } println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-i32-local-index",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<i32> = Vec::new(); values.push(7); values.push(2); values.push(5); let first = values[0]; let output = first as u64; println!(\"{output}\"); }"
+  },
+  {
     "id": "builtin-env-macro",
     "kind": "run",
     "features": [

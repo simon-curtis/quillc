@@ -4117,6 +4117,54 @@ fn lower_statements(
                     });
                     continue;
                 }
+                if let BodyExprKind::Index { base, index } = &initializer.kind
+                    && let BodyExprKind::Path(collection_name) = &base.kind
+                    && let Some(Value::CollectionLocal {
+                        pointer_slot,
+                        kind: CollectionKind::Vector,
+                        element_type: Some(element_type),
+                        ..
+                    }) = environment.get(collection_name)
+                    && (is_word_type(element_type) || element_type == "i32")
+                {
+                    let index = value_from_expression(index, environment, functions)?;
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let value = Value::SliceElement {
+                        pointer_slot: *pointer_slot,
+                        index_slot,
+                        element_size: if is_word_type(element_type) { 8 } else { 4 },
+                        element_offset: 0,
+                        element_stride: 8,
+                    };
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    environment.insert(
+                        name.clone(),
+                        if is_word_type(element_type) {
+                            Value::TypedWordLocal {
+                                slot,
+                                type_name: element_type.clone(),
+                            }
+                        } else {
+                            Value::Local(slot)
+                        },
+                    );
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
+                        initializer: value,
+                    });
+                    continue;
+                }
                 if let Some(function) =
                     function_for_call_expression(initializer, environment, functions)
                     && let Some(return_type) = function.return_type.as_deref()
