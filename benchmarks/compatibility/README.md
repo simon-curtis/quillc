@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [if-expression short-circuit run](results/2026-10-13-ifexpr-short-circuit-clean.json)
+passes 87/87 curated cases at clean revision `fc2049f`. It adds value-producing
+`if` initializers whose skipped borrowed-slice index reads stay lazy and whose
+reached out-of-bounds read matches rustc's panic output. This 100% corpus result
+does not establish overall Rust compatibility.
+
 The [slice short-circuit run](results/2026-10-13-slice-short-circuit-clean.json)
 passes 85/85 cases at clean revision `ee8d02d`. It verifies skipped indexed
 operands do not panic under `false &&` or `true ||`, reached operands do panic,
