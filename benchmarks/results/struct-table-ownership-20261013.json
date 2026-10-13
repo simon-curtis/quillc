@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "experiment": "Transfer the combined struct table into target parses instead of cloning it once",
+  "decision": "rejected; benchmark did not establish a throughput improvement",
+  "workload": {
+    "name": "Catalog Flow",
+    "rust_source_lines": 30992,
+    "rounds": 5
+  },
+  "toolchain": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "host": {
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpu_count": 12
+  },
+  "control": {
+    "compiler_revision": "798c9df91b2369ac2ef1fa7599ccb4efabfcb7fe",
+    "compiler_sha256": "24b879dae82868f9cda1b8997ba075f2e710a6577a3947cb77a533d270644d67",
+    "source_clean": true
+  },
+  "candidate": {
+    "base_revision": "547b393524425314c0a57efc04efbdaf46a08cff",
+    "compiler_sha256": "edc67f65fca21eea522878c3165211bbb0d41b4e951dc6aac74cf842db9a69ef",
+    "source_dirty_paths": [
+      "crates/quillc/src/main.rs"
+    ],
+    "patch_path": "benchmarks/experiments/struct-table-ownership.patch"
+  },
+  "change": "When workspace targets exist, move combined.structs with std::mem::take; the no-target fallback keeps the original table intact.",
+  "validation": {
+    "rustfmt": "passed",
+    "release_build": "passed",
+    "quillc_tests": "72 passed",
+    "paired_runtime_output": "matched rustc for unchanged and semantic edit"
+  },
+  "measurement_method": "Five runs per compiler state with the checked-in paired measurement harness. Control and candidate runs were sequential, not interleaved.",
+  "results": {
+    "quill_cold": {
+      "wall_seconds": {
+        "control_median": 0.34254,
+        "candidate_median": 0.329904,
+        "delta_percent": -3.69,
+        "control_samples": [
+          0.339753,
+          0.357372,
+          0.371489,
+          0.333298,
+          0.34254
+        ],
+        "candidate_samples": [
+          0.329904,
+          0.326725,
+          0.355199,
+          0.338251,
+          0.329554
+        ]
+      },
+      "cpu_seconds": {
+        "control_median": 1.816891,
+        "candidate_median": 1.832513,
+        "delta_percent": 0.86,
+        "control_samples": [
+          1.816891,
+          1.844413,
+          1.851368,
+          1.770365,
+          1.762178
+        ],
+        "candidate_samples": [
+          1.827928,
+          1.832513,
+          1.896388,
+          1.852706,
+          1.827318
+        ]
+      },
+      "peak_process_tree_rss_mib": {
+        "control_median": 129.1,
+        "candidate_median": 129.0,
+        "delta_percent": -0.08,
+        "control_samples": [
+          129.2,
+          127.5,
+          135.3,
+          127.9,
+          129.1
+        ],
+        "candidate_samples": [
+          138.7,
+          129.0,
+          127.4,
+          135.2,
+          128.6
+        ]
+      }
+    },
+    "quill_warm": {
+      "wall_seconds": {
+        "control_median": 0.001313,
+        "candidate_median": 0.00133,
+        "delta_percent": 1.29,
+        "control_samples": [
+          0.001307,
+          0.001387,
+          0.00141,
+          0.001245,
+          0.001313
+        ],
+        "candidate_samples": [
+          0.001327,
+          0.001354,
+          0.001318,
+          0.001331,
+          0.00133
+        ]
+      },
+      "cpu_seconds": {
+        "control_median": 0.001137,
+        "candidate_median": 0.001148,
+        "delta_percent": 0.97,
+        "control_samples": [
+          0.001125,
+          0.001191,
+          0.001189,
+          0.001076,
+          0.001137
+        ],
+        "candidate_samples": [
+          0.001144,
+          0.001181,
+          0.00114,
+          0.001148,
+          0.00115
+        ]
+      },
+      "peak_process_tree_rss_mib": {
+        "control_median": 21.7,
+        "candidate_median": 21.9,
+        "delta_percent": 0.92,
+        "control_samples": [
+          21.7,
+          21.7,
+          21.7,
+          21.7,
+          21.7
+        ],
+        "candidate_samples": [
+          21.6,
+          21.7,
+          21.9,
+          22.0,
+          22.0
+        ]
+      }
+    },
+    "quill_incremental": {
+      "wall_seconds": {
+        "control_median": 0.025967,
+        "candidate_median": 0.024369,
+        "delta_percent": -6.15,
+        "control_samples": [
+          0.023274,
+          0.025967,
+          0.028837,
+          0.023926,
+          0.026805
+        ],
+        "candidate_samples": [
+          0.023713,
+          0.024369,
+          0.026255,
+          0.023938,
+          0.026403
+        ]
+      },
+      "cpu_seconds": {
+        "control_median": 0.082004,
+        "candidate_median": 0.083094,
+        "delta_percent": 1.33,
+        "control_samples": [
+          0.082004,
+          0.081847,
+          0.076368,
+          0.084371,
+          0.092285
+        ],
+        "candidate_samples": [
+          0.086337,
+          0.083094,
+          0.082789,
+          0.082543,
+          0.091572
+        ]
+      },
+      "peak_process_tree_rss_mib": {
+        "control_median": 34.4,
+        "candidate_median": 34.4,
+        "delta_percent": 0.0,
+        "control_samples": [
+          34.4,
+          34.5,
+          34.4,
+          34.3,
+          34.5
+        ],
+        "candidate_samples": [
+          34.3,
+          34.4,
+          34.3,
+          34.4,
+          34.4
+        ]
+      }
+    },
+    "quill_semantic_incremental": {
+      "wall_seconds": {
+        "control_median": 0.084596,
+        "candidate_median": 0.082936,
+        "delta_percent": -1.96,
+        "control_samples": [
+          0.083507,
+          0.092474,
+          0.084596,
+          0.085743,
+          0.081894
+        ],
+        "candidate_samples": [
+          0.09878,
+          0.082731,
+          0.081462,
+          0.084118,
+          0.082936
+        ]
+      },
+      "cpu_seconds": {
+        "control_median": 0.176324,
+        "candidate_median": 0.177335,
+        "delta_percent": 0.57,
+        "control_samples": [
+          0.176324,
+          0.176737,
+          0.171263,
+          0.177461,
+          0.170033
+        ],
+        "candidate_samples": [
+          0.190488,
+          0.177256,
+          0.177335,
+          0.172363,
+          0.180529
+        ]
+      },
+      "peak_process_tree_rss_mib": {
+        "control_median": 50.2,
+        "candidate_median": 50.5,
+        "delta_percent": 0.6,
+        "control_samples": [
+          50.2,
+          57.4,
+          50.0,
+          51.6,
+          49.6
+        ],
+        "candidate_samples": [
+          51.0,
+          49.1,
+          50.5,
+          50.2,
+          50.9
+        ]
+      }
+    }
+  },
+  "limitations": "All semantic-edit wall-time sample ranges overlap. The candidate lowered semantic-edit wall median 1.96% while CPU rose 0.57%; cold and incremental wall medians also fell while CPU medians rose. No mode showed a stable CPU reduction, so this change was not retained."
+}

@@ -1,0 +1,11 @@
+diff --git a/crates/quillc/src/main.rs b/crates/quillc/src/main.rs
+index 3123665..b33c40f 100644
+--- a/crates/quillc/src/main.rs
++++ b/crates/quillc/src/main.rs
+@@ -2507 +2507,5 @@ fn compile_parsed_sources(
+-        let all_structs = combined.structs.clone();
++        let all_structs = if target_order.is_empty() {
++            Vec::new()
++        } else {
++            std::mem::take(&mut combined.structs)
++        };

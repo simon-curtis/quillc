@@ -70,6 +70,12 @@ was 6.25% lower, alongside 5.27% higher peak RSS; the raw comparison,
 limitations, and [rejected patch](../experiments/call-resolution-cache.patch)
 are recorded with the [experiment report](../results/call-resolution-cache-20261013.json).
 
+A follow-up moved the combined struct table into target parses instead of
+cloning it once. On the semantic edit, median wall time fell 1.96% while CPU
+time rose 0.57%; all wall-time ranges overlapped. No stable CPU reduction was
+measured, so this candidate was rejected too. The [patch](../experiments/struct-table-ownership.patch)
+and [raw comparison](../results/struct-table-ownership-20261013.json) are retained.
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
