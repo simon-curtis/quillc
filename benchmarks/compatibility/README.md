@@ -101,6 +101,10 @@ The [post-move-flow run](results/2026-10-13-post-move-flow.json) also passes
 the report. The only mismatch remains Rust consuming Quill's `.o` object via
 `rustc --extern`; this corpus result is not a full compatibility claim.
 
+The [four-worker run](results/2026-10-13-four-worker.json) reproduces 57/58
+cases with the release binary at revision `39a4424` after the worker-cap
+change. Its only mismatch is still the `.o` artifact passed to `rustc --extern`.
+
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
 through a generic bound to a concrete named struct. It records a modified
