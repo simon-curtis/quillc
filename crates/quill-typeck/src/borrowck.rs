@@ -205,6 +205,7 @@ pub(super) fn check(
         struct_signatures,
         local_types: local_types.clone(),
         expected_return_lifetimes: return_lifetime_contract(function),
+        enclosing_live_places: Vec::new(),
     };
     let mut state = State::default();
     for parameter in &function.parameters {
@@ -270,6 +271,7 @@ struct Checker<'a, 'b> {
     struct_signatures: &'a [StructSignature],
     local_types: HashMap<String, Ty>,
     expected_return_lifetimes: Option<Vec<String>>,
+    enclosing_live_places: Vec<HashSet<Place>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -676,13 +678,25 @@ impl Checker<'_, '_> {
                 self.expression(condition, state);
                 let incoming = state.clone();
                 let mut then_state = incoming.clone();
+                let then_returns = expression_always_returns(then_branch);
+                let then_live_places = then_returns
+                    .then(|| std::mem::take(&mut self.enclosing_live_places));
                 let mut returned_loans = self.expression(then_branch, &mut then_state);
+                if let Some(live_places) = then_live_places {
+                    self.enclosing_live_places = live_places;
+                }
                 let mut else_state = incoming;
                 if let Some(otherwise) = else_branch {
+                    let else_returns = expression_always_returns(otherwise);
+                    let else_live_places = else_returns
+                        .then(|| std::mem::take(&mut self.enclosing_live_places));
                     for loan in self.expression(otherwise, &mut else_state) {
                         if !returned_loans.contains(&loan) {
                             returned_loans.push(loan);
                         }
+                    }
+                    if let Some(live_places) = else_live_places {
+                        self.enclosing_live_places = live_places;
                     }
                 }
                 then_state.merge(else_state);
@@ -701,10 +715,16 @@ impl Checker<'_, '_> {
                     for name in &bindings {
                         arm_state.replace_holder(name, scrutinee_loans.clone());
                     }
+                    let arm_returns = expression_always_returns(&arm.body);
+                    let arm_live_places = arm_returns
+                        .then(|| std::mem::take(&mut self.enclosing_live_places));
                     for loan in self.expression(&arm.body, &mut arm_state) {
                         if !returned_loans.contains(&loan) {
                             returned_loans.push(loan);
                         }
+                    }
+                    if let Some(live_places) = arm_live_places {
+                        self.enclosing_live_places = live_places;
                     }
                     for name in bindings {
                         arm_state
@@ -1041,6 +1061,7 @@ impl Checker<'_, '_> {
                 loans
             }
             BodyExprKind::Return(value) => {
+                let enclosing_live_places = std::mem::take(&mut self.enclosing_live_places);
                 if let Some(value) = value {
                     self.check_move_access(value, state);
                     for loan in self.expression(value, state) {
@@ -1062,6 +1083,7 @@ impl Checker<'_, '_> {
                         }
                     }
                 }
+                self.enclosing_live_places = enclosing_live_places;
                 Vec::new()
             }
             BodyExprKind::Unit
@@ -1083,13 +1105,12 @@ impl Checker<'_, '_> {
         let mut declarations = HashSet::new();
         for (index, statement) in statements.iter().enumerate() {
             let current = statement_live_places(statement);
-            let mut future = HashSet::new();
-            for next in &statements[index + 1..] {
-                collect_live_statement(next, &mut future);
-            }
-            if let Some(tail) = tail {
-                collect_live_expression(tail, &mut future);
-            }
+            let mut future = live_places_after(&statements[index + 1..], tail);
+            future.extend(
+                self.enclosing_live_places
+                    .iter()
+                    .flat_map(|places| places.iter().cloned()),
+            );
             state.loans.retain(|loan| {
                 loan.holder.as_ref().is_none_or(|holder| {
                     current
@@ -1098,7 +1119,9 @@ impl Checker<'_, '_> {
                         .any(|place| holder_projection_live(holder, &loan.holder_projection, place))
                 })
             });
+            self.enclosing_live_places.push(future);
             self.statement(statement, state, &mut declarations);
+            self.enclosing_live_places.pop();
         }
         let result = tail.map_or_else(Vec::new, |tail| self.expression(tail, state));
         for loan in &result {
@@ -1785,6 +1808,34 @@ fn is_direct_binding(text: &str) -> bool {
     !text.trim().is_empty() && !text.contains(['.', '[', ']', '*', '(', ')'])
 }
 
+fn expression_always_returns(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Return(_) => true,
+        BodyExprKind::Block { statements, tail } => {
+            tail.as_deref().is_some_and(expression_always_returns)
+                || statements.last().is_some_and(|statement| match statement {
+                    BodyStatement::Expression { expression, .. } => {
+                        expression_always_returns(expression)
+                    }
+                    _ => false,
+                })
+        }
+        BodyExprKind::If {
+            then_branch,
+            else_branch: Some(else_branch),
+            ..
+        } => expression_always_returns(then_branch) && expression_always_returns(else_branch),
+        BodyExprKind::Match { arms, .. } => {
+            !arms.is_empty() && arms.iter().all(|arm| expression_always_returns(&arm.body))
+        }
+        _ => false,
+    }
+}
+
+fn statement_always_returns(statement: &BodyStatement) -> bool {
+    matches!(statement, BodyStatement::Expression { expression, .. } if expression_always_returns(expression))
+}
+
 fn simple_path(expression: &BodyExpr) -> Option<String> {
     match &expression.kind {
         BodyExprKind::Path(name) => Some(name.clone()),
@@ -1913,6 +1964,33 @@ fn statement_live_places(statement: &BodyStatement) -> HashSet<Place> {
     places
 }
 
+fn live_places_after(statements: &[BodyStatement], tail: Option<&BodyExpr>) -> HashSet<Place> {
+    let mut places = HashSet::new();
+    let mut shadowed = HashSet::new();
+    let mut terminated = false;
+    for statement in statements {
+        let current = statement_live_places(statement);
+        places.extend(current.into_iter().filter(|place| !shadowed.contains(&place.root)));
+        if statement_always_returns(statement) {
+            terminated = true;
+            break;
+        }
+        match statement {
+            BodyStatement::Let { name: Some(name), .. } => {
+                shadowed.insert(name.clone());
+            }
+            BodyStatement::LetTuple { names, .. } => shadowed.extend(names.iter().cloned()),
+            _ => {}
+        }
+    }
+    if !terminated && let Some(tail) = tail {
+        let mut tail_places = HashSet::new();
+        collect_live_expression(tail, &mut tail_places);
+        places.extend(tail_places.into_iter().filter(|place| !shadowed.contains(&place.root)));
+    }
+    places
+}
+
 fn holder_projection_live(holder: &str, projection: &[String], live: &Place) -> bool {
     holder == live.root
         && projection
@@ -1943,6 +2021,7 @@ fn collect_live_statement(statement: &BodyStatement, places: &mut HashSet<Place>
         }
         BodyStatement::Loop { body, .. } => collect_live_expression(body, places),
         BodyStatement::ForRange {
+            name,
             start,
             end,
             body,
@@ -1950,11 +2029,24 @@ fn collect_live_statement(statement: &BodyStatement, places: &mut HashSet<Place>
         } => {
             collect_live_expression(start, places);
             collect_live_expression(end, places);
-            collect_live_expression(body, places);
+            let mut body_places = HashSet::new();
+            collect_live_expression(body, &mut body_places);
+            places.extend(body_places.into_iter().filter(|place| place.root != *name));
         }
-        BodyStatement::ForEach { iterator, body, .. } => {
+        BodyStatement::ForEach {
+            names,
+            iterator,
+            body,
+            ..
+        } => {
             collect_live_expression(iterator, places);
-            collect_live_expression(body, places);
+            let mut body_places = HashSet::new();
+            collect_live_expression(body, &mut body_places);
+            places.extend(
+                body_places
+                    .into_iter()
+                    .filter(|place| !names.contains(&place.root)),
+            );
         }
         BodyStatement::MacroInvocation {
             arguments,
@@ -2062,11 +2154,29 @@ fn collect_live_expression(expression: &BodyExpr, places: &mut HashSet<Place>) {
             collect_live_expression(right, places);
         }
         BodyExprKind::Block { statements, tail } => {
+            let mut shadowed = HashSet::new();
+            let mut terminated = false;
             for statement in statements {
-                collect_live_statement(statement, places);
+                let current = statement_live_places(statement);
+                places.extend(current.into_iter().filter(|place| !shadowed.contains(&place.root)));
+                if statement_always_returns(statement) {
+                    terminated = true;
+                    break;
+                }
+                match statement {
+                    BodyStatement::Let { name: Some(name), .. } => {
+                        shadowed.insert(name.clone());
+                    }
+                    BodyStatement::LetTuple { names, .. } => {
+                        shadowed.extend(names.iter().cloned());
+                    }
+                    _ => {}
+                }
             }
-            if let Some(tail) = tail {
-                collect_live_expression(tail, places);
+            if !terminated && let Some(tail) = tail {
+                let mut tail_places = HashSet::new();
+                collect_live_expression(tail, &mut tail_places);
+                places.extend(tail_places.into_iter().filter(|place| !shadowed.contains(&place.root)));
             }
         }
         BodyExprKind::If {
@@ -2083,7 +2193,14 @@ fn collect_live_expression(expression: &BodyExpr, places: &mut HashSet<Place>) {
         BodyExprKind::Match { scrutinee, arms } => {
             collect_live_expression(scrutinee, places);
             for arm in arms {
-                collect_live_expression(&arm.body, places);
+                let mut arm_places = HashSet::new();
+                collect_live_expression(&arm.body, &mut arm_places);
+                let bindings = pattern_bindings(&arm.pattern);
+                places.extend(
+                    arm_places
+                        .into_iter()
+                        .filter(|place| !bindings.contains(&place.root)),
+                );
             }
         }
         BodyExprKind::Return(value) => {

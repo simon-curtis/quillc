@@ -210,12 +210,13 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         rustc_link = invoke(
             ["rustc", "--edition", "2024", str(main_source), "--extern",
              f"probe_lib={rust_lib}", "-o", str(rust_binary)], case_dir)
-        quill_object = case_dir / "libprobe_lib.o"
+        quill_rlib = case_dir / "libprobe_lib.rlib"
         quill_library = invoke(
-            [str(quill), "build-lib-object", str(lib_source), "-o", str(quill_object)], case_dir)
+            [str(quill), "build-lib-rlib", str(lib_source), "--crate-name", "probe_lib",
+             "-o", str(quill_rlib)], case_dir)
         quill_link = invoke(
             ["rustc", "--edition", "2024", str(main_source), "--extern",
-             f"probe_lib={quill_object}", "-o", str(quill_binary)], case_dir)
+             f"probe_lib={quill_rlib}", "-o", str(quill_binary)], case_dir)
         if rustc_library.returncode or rustc_link.returncode:
             return Result(case["id"], case["kind"], False, False, False,
                           "rustc reference rlib case failed", rustc_link.returncode,
@@ -223,7 +224,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         if quill_library.returncode or quill_link.returncode:
             detail = (quill_library.stderr + quill_link.stderr).decode("utf-8", "replace").strip()
             return Result(case["id"], case["kind"], False, True, False,
-                          f"Quill artifact is not consumable through rustc --extern: {detail}",
+                          f"Quill rlib is not consumable through rustc --extern: {detail}",
                           rustc_link.returncode, quill_link.returncode)
         rust_run = invoke([str(rust_binary)], case_dir)
         quill_run = invoke([str(quill_binary)], case_dir)
@@ -305,7 +306,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                   "runtime status or output differs for: " + ", ".join(mismatches))
         return Result(case["id"], case["kind"], passed, True, True, reason,
                       rustc_result.returncode, quill_status, passed)
-    elif case["kind"] in {"parse", "syntax-reject"}:
+    elif case["kind"] in {"parse", "syntax-reject", "check"}:
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
         rust_meta = case_dir / "rustc.rmeta"
@@ -314,7 +315,8 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
              "--crate-type", "lib", "--emit=metadata", *case.get("rustc_args", []),
              str(source), "-o", str(rust_meta)],
             case_dir, compile_environment)
-        quill_args = [str(quill), "parse", str(source)]
+        quill_command = "check-subset" if case["kind"] == "check" else "parse"
+        quill_args = [str(quill), quill_command, str(source)]
     else:
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
@@ -342,6 +344,16 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
     if case["kind"] == "parse":
         passed = rustc_accepted and quill_accepted
         reason = "both accept source syntax" if passed else "parser acceptance differs"
+        return Result(case["id"], case["kind"], passed, rustc_accepted,
+                      quill_accepted, reason, rustc_result.returncode,
+                      quill_result.returncode, passed)
+    if case["kind"] == "check":
+        quill_diagnostics = quill_result.stdout + quill_result.stderr
+        quill_accepted = quill_accepted and not re.search(
+            rb"\berror\[E\d{4}\]:", quill_diagnostics
+        )
+        passed = rustc_accepted and quill_accepted
+        reason = "both accept semantic check" if passed else "semantic acceptance differs"
         return Result(case["id"], case["kind"], passed, rustc_accepted,
                       quill_accepted, reason, rustc_result.returncode,
                       quill_result.returncode, passed)
@@ -416,7 +428,18 @@ def main() -> int:
             raise RuntimeError("no compatibility cases selected")
         if len({case["id"] for case in cases}) != len(cases):
             raise RuntimeError("case ids must be unique")
-        if any(case.get("kind") not in {"run", "cargo-check", "cargo-run", "parse", "syntax-reject", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
+        supported_kinds = {
+            "run",
+            "cargo-check",
+            "cargo-run",
+            "parse",
+            "syntax-reject",
+            "check",
+            "diagnostic",
+            "abi-link",
+            "extern-artifact",
+        }
+        if any(case.get("kind") not in supported_kinds for case in cases):
             raise RuntimeError("unsupported case kind")
         tracker_html = (ROOT / "compatibility.html").read_text(encoding="utf-8")
         feature_rows = re.findall(
