@@ -3617,6 +3617,11 @@ fn is_native_tagged_result_type(type_text: &str) -> bool {
         })
 }
 
+fn is_null_pointer_result_type(type_text: &str) -> bool {
+    ResultLayout::parse(type_text)
+        .is_some_and(|layout| matches!(layout.encoding, ResultEncoding::NullPointerNiche { .. }))
+}
+
 fn tagged_result_payload_is_word(type_text: &str) -> bool {
     let normalized = type_text
         .chars()
@@ -6397,12 +6402,16 @@ fn value_from_expression(
                 arguments,
                 returns_word: function
                     .and_then(|function| function.return_type.as_deref())
-                    .is_some_and(is_word_type)
+                    .is_some_and(|return_type| {
+                        is_word_type(return_type) || is_null_pointer_result_type(return_type)
+                    })
                     || generic_return_type.as_deref().is_some_and(is_word_type),
                 word_type: generic_return_type.or_else(|| {
                     function
                         .and_then(|function| function.return_type.as_deref())
-                        .filter(|return_type| is_word_type(return_type))
+                        .filter(|return_type| {
+                            is_word_type(return_type) || is_null_pointer_result_type(return_type)
+                        })
                         .map(str::to_owned)
                 }),
                 returns_pair: function
@@ -6530,28 +6539,28 @@ fn value_from_expression(
             method,
             arguments,
         } if matches!(method.as_str(), "is_ok" | "is_err") && arguments.is_empty() => {
-            let Some(callee) = receiver_call_name(receiver, environment) else {
-                return Err(CodegenError::UnsupportedProgram(
-                    "Result status checks require a supported Result call",
-                ));
-            };
-            let result_function = functions
-                .iter()
-                .find(|function| function.name == callee)
+            let return_type = direct_call_callee(receiver)
+                .and_then(|callee| {
+                    functions
+                        .iter()
+                        .find(|function| function.name == callee)
+                        .and_then(|function| function.return_type.clone())
+                })
+                .or_else(|| match &receiver.kind {
+                    BodyExprKind::Path(name) => {
+                        environment.get(name).and_then(generic_argument_type)
+                    }
+                    _ => None,
+                })
                 .ok_or(CodegenError::UnsupportedProgram(
-                    "`.is_ok()` call target is unresolved",
+                    "Result status checks require a supported Result value",
                 ))?;
-            let layout = result_function
-                .return_type
-                .as_deref()
-                .and_then(ResultLayout::parse)
-                .ok_or(CodegenError::UnsupportedProgram(
+            let layout =
+                ResultLayout::parse(&return_type).ok_or(CodegenError::UnsupportedProgram(
                     "`.is_ok()` requires a supported `Result` return type",
                 ))?;
             if !matches!(layout.encoding, ResultEncoding::NullPointerNiche { .. })
-                && !is_native_tagged_result_type(
-                    result_function.return_type.as_deref().unwrap_or(""),
-                )
+                && !is_native_tagged_result_type(&return_type)
             {
                 return Err(CodegenError::UnsupportedProgram(
                     "Result status checks require a supported native Result layout",
@@ -11925,6 +11934,21 @@ mod tests {
         )
         .unwrap();
         let output = std::env::temp_dir().join(format!("quill-pair-local-{}", std::process::id()));
+        quill_link::link_elf_executable(&object, &output, "_start").unwrap();
+        let result = std::process::Command::new(&output).output().unwrap();
+        let _ = std::fs::remove_file(&output);
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"42\n");
+    }
+
+    #[test]
+    fn checks_status_of_a_locally_stored_niche_result() {
+        let object = emit(
+            "fn check(value: u64) -> Result<(), &'static str> { if value == 42 { Ok(()) } else { Err(\"wrong\") } } fn main() { let result = check(42); let answer = if result.is_ok() { 42u64 } else { 0u64 }; println!(\"{answer}\"); }",
+        )
+        .unwrap();
+        let output =
+            std::env::temp_dir().join(format!("quill-result-local-{}", std::process::id()));
         quill_link::link_elf_executable(&object, &output, "_start").unwrap();
         let result = std::process::Command::new(&output).output().unwrap();
         let _ = std::fs::remove_file(&output);
