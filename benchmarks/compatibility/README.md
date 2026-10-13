@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [reborrow run](results/2026-10-13-reborrow-clean.json) passes 100/100
+curated cases at clean revision `741cbf4`. It detects a live shared reborrow
+that conflicts with a new borrow of its origin, matching rustc's E0499 code,
+message, and primary location; it also accepts reuse of the parent reference
+after the reborrow's last use. This 100% corpus result does not establish
+overall Rust compatibility.
+
 The [shared/mutable borrow run](results/2026-10-13-shared-mut-borrow-clean.json)
 passes 98/98 curated cases at clean revision `9a710b9`. It checks E0499 for
 overlapping named mutable references, E0502 for overlapping shared/mutable
