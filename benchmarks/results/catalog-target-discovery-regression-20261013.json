@@ -1,0 +1,454 @@
+{
+  "toolchain": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+  "logical_cpu_count": 12,
+  "quill_profile": "release",
+  "rust_lines": 30992,
+  "runtime_output": "catalog-flow records=128 digest=0000a53352b1a3d7",
+  "semantic_edit_runtime_output": "catalog-flow records=127 digest=000002dca8b2f100",
+  "memory_metric": "peak sampled RSS summed over each build process tree",
+  "results": [
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.66,
+      "user_seconds": 5.186,
+      "system_seconds": 0.425,
+      "cpu_seconds": 5.611,
+      "peak_process_tree_rss_mib": 564.6,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019,
+      "user_seconds": 0.011,
+      "system_seconds": 0.009,
+      "cpu_seconds": 0.019,
+      "peak_process_tree_rss_mib": 18.6,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.395,
+      "user_seconds": 1.748,
+      "system_seconds": 0.21,
+      "cpu_seconds": 1.959,
+      "peak_process_tree_rss_mib": 164.0,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.006,
+      "user_seconds": 0.0,
+      "system_seconds": 0.002,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 17.8,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.282,
+      "user_seconds": 0.283,
+      "system_seconds": 0.116,
+      "cpu_seconds": 0.399,
+      "peak_process_tree_rss_mib": 225.3,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.085,
+      "user_seconds": 0.079,
+      "system_seconds": 0.061,
+      "cpu_seconds": 0.141,
+      "peak_process_tree_rss_mib": 45.5,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.3,
+      "user_seconds": 0.306,
+      "system_seconds": 0.118,
+      "cpu_seconds": 0.423,
+      "peak_process_tree_rss_mib": 236.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.166,
+      "user_seconds": 0.164,
+      "system_seconds": 0.097,
+      "cpu_seconds": 0.261,
+      "peak_process_tree_rss_mib": 79.7,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.693,
+      "user_seconds": 5.244,
+      "system_seconds": 0.413,
+      "cpu_seconds": 5.657,
+      "peak_process_tree_rss_mib": 564.3,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019,
+      "user_seconds": 0.013,
+      "system_seconds": 0.007,
+      "cpu_seconds": 0.02,
+      "peak_process_tree_rss_mib": 18.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.392,
+      "user_seconds": 1.728,
+      "system_seconds": 0.212,
+      "cpu_seconds": 1.941,
+      "peak_process_tree_rss_mib": 156.5,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.006,
+      "user_seconds": 0.0,
+      "system_seconds": 0.002,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 17.9,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.284,
+      "user_seconds": 0.271,
+      "system_seconds": 0.139,
+      "cpu_seconds": 0.409,
+      "peak_process_tree_rss_mib": 226.5,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.083,
+      "user_seconds": 0.081,
+      "system_seconds": 0.058,
+      "cpu_seconds": 0.139,
+      "peak_process_tree_rss_mib": 45.5,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.301,
+      "user_seconds": 0.296,
+      "system_seconds": 0.129,
+      "cpu_seconds": 0.425,
+      "peak_process_tree_rss_mib": 228.0,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.162,
+      "user_seconds": 0.182,
+      "system_seconds": 0.064,
+      "cpu_seconds": 0.246,
+      "peak_process_tree_rss_mib": 79.0,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.671,
+      "user_seconds": 5.229,
+      "system_seconds": 0.391,
+      "cpu_seconds": 5.62,
+      "peak_process_tree_rss_mib": 566.8,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019,
+      "user_seconds": 0.013,
+      "system_seconds": 0.006,
+      "cpu_seconds": 0.019,
+      "peak_process_tree_rss_mib": 18.8,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.388,
+      "user_seconds": 1.701,
+      "system_seconds": 0.233,
+      "cpu_seconds": 1.934,
+      "peak_process_tree_rss_mib": 155.9,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.006,
+      "user_seconds": 0.0,
+      "system_seconds": 0.002,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 17.9,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.289,
+      "user_seconds": 0.272,
+      "system_seconds": 0.142,
+      "cpu_seconds": 0.414,
+      "peak_process_tree_rss_mib": 234.4,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.085,
+      "user_seconds": 0.092,
+      "system_seconds": 0.052,
+      "cpu_seconds": 0.144,
+      "peak_process_tree_rss_mib": 45.4,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.311,
+      "user_seconds": 0.324,
+      "system_seconds": 0.117,
+      "cpu_seconds": 0.441,
+      "peak_process_tree_rss_mib": 227.5,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.167,
+      "user_seconds": 0.175,
+      "system_seconds": 0.089,
+      "cpu_seconds": 0.264,
+      "peak_process_tree_rss_mib": 79.7,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.669,
+      "user_seconds": 5.183,
+      "system_seconds": 0.426,
+      "cpu_seconds": 5.609,
+      "peak_process_tree_rss_mib": 568.8,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019,
+      "user_seconds": 0.015,
+      "system_seconds": 0.005,
+      "cpu_seconds": 0.02,
+      "peak_process_tree_rss_mib": 18.8,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.403,
+      "user_seconds": 1.776,
+      "system_seconds": 0.204,
+      "cpu_seconds": 1.98,
+      "peak_process_tree_rss_mib": 156.4,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.006,
+      "user_seconds": 0.0,
+      "system_seconds": 0.002,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 18.0,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.29,
+      "user_seconds": 0.28,
+      "system_seconds": 0.131,
+      "cpu_seconds": 0.411,
+      "peak_process_tree_rss_mib": 236.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.084,
+      "user_seconds": 0.077,
+      "system_seconds": 0.066,
+      "cpu_seconds": 0.143,
+      "peak_process_tree_rss_mib": 45.3,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.301,
+      "user_seconds": 0.299,
+      "system_seconds": 0.126,
+      "cpu_seconds": 0.425,
+      "peak_process_tree_rss_mib": 224.0,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.162,
+      "user_seconds": 0.19,
+      "system_seconds": 0.062,
+      "cpu_seconds": 0.252,
+      "peak_process_tree_rss_mib": 79.6,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.642,
+      "user_seconds": 5.177,
+      "system_seconds": 0.38,
+      "cpu_seconds": 5.557,
+      "peak_process_tree_rss_mib": 574.0,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019,
+      "user_seconds": 0.013,
+      "system_seconds": 0.006,
+      "cpu_seconds": 0.019,
+      "peak_process_tree_rss_mib": 18.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.396,
+      "user_seconds": 1.768,
+      "system_seconds": 0.208,
+      "cpu_seconds": 1.976,
+      "peak_process_tree_rss_mib": 154.9,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.006,
+      "user_seconds": 0.0,
+      "system_seconds": 0.002,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 18.0,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.285,
+      "user_seconds": 0.273,
+      "system_seconds": 0.136,
+      "cpu_seconds": 0.408,
+      "peak_process_tree_rss_mib": 223.4,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.084,
+      "user_seconds": 0.083,
+      "system_seconds": 0.061,
+      "cpu_seconds": 0.144,
+      "peak_process_tree_rss_mib": 45.4,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.306,
+      "user_seconds": 0.292,
+      "system_seconds": 0.139,
+      "cpu_seconds": 0.431,
+      "peak_process_tree_rss_mib": 222.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.164,
+      "user_seconds": 0.168,
+      "system_seconds": 0.087,
+      "cpu_seconds": 0.256,
+      "peak_process_tree_rss_mib": 79.8,
+      "command": "/home/simon/git/quillc/target/release/quillc cargo-build-subset /home/simon/git/quillc/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    }
+  ],
+  "medians": {
+    "rustc_cold": {
+      "wall_seconds": 2.669,
+      "cpu_seconds": 5.611,
+      "peak_process_tree_rss_mib": 566.8
+    },
+    "quill_cold": {
+      "wall_seconds": 0.395,
+      "cpu_seconds": 1.959,
+      "peak_process_tree_rss_mib": 156.4
+    },
+    "rustc_warm": {
+      "wall_seconds": 0.019,
+      "cpu_seconds": 0.019,
+      "peak_process_tree_rss_mib": 18.7
+    },
+    "quill_warm": {
+      "wall_seconds": 0.006,
+      "cpu_seconds": 0.002,
+      "peak_process_tree_rss_mib": 17.9
+    },
+    "rustc_incremental": {
+      "wall_seconds": 0.285,
+      "cpu_seconds": 0.409,
+      "peak_process_tree_rss_mib": 226.5
+    },
+    "quill_incremental": {
+      "wall_seconds": 0.084,
+      "cpu_seconds": 0.143,
+      "peak_process_tree_rss_mib": 45.4
+    },
+    "rustc_semantic_incremental": {
+      "wall_seconds": 0.301,
+      "cpu_seconds": 0.425,
+      "peak_process_tree_rss_mib": 227.5
+    },
+    "quill_semantic_incremental": {
+      "wall_seconds": 0.164,
+      "cpu_seconds": 0.256,
+      "peak_process_tree_rss_mib": 79.7
+    }
+  }
+}

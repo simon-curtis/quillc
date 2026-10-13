@@ -132,6 +132,77 @@
   font: inherit;
   padding: 0;
 }
+.json-document {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.json-tree,
+.json-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.json-tree > li {
+  min-width: 0;
+}
+.json-node > summary {
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  padding: 7px 10px 7px 2px;
+}
+.json-node > summary::marker {
+  color: var(--rust);
+}
+.json-summary {
+  overflow-wrap: anywhere;
+}
+.json-key {
+  color: var(--ink);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.json-summary .json-key {
+  margin-right: 12px;
+  font-weight: 550;
+}
+.json-type {
+  color: var(--muted);
+  font-size: 0.88em;
+}
+.json-children {
+  margin: 0 0 5px 8px;
+  padding-left: 18px;
+  border-left: 1px solid var(--line);
+}
+.json-children > li {
+  margin-block: 2px;
+}
+.json-value-row {
+  display: grid;
+  grid-template-columns: minmax(100px, max-content) minmax(0, 1fr);
+  gap: 18px;
+  padding: 5px 10px;
+}
+.json-value {
+  overflow-wrap: anywhere;
+  font-family: "Geist Mono", monospace;
+  font-size: 0.9em;
+}
+.json-string {
+  color: var(--forest);
+}
+.json-number {
+  color: var(--rust);
+}
+.json-boolean {
+  color: #756027;
+}
+.json-null {
+  color: var(--muted);
+  font-style: italic;
+}
 .markdown blockquote {
   margin: 25px 0;
   border-left: 2px solid var(--rust);
@@ -223,5 +294,24 @@
   }
   .markdown .heading-anchor {
     opacity: 0.6;
+  }
+}
+@media (max-width: 600px) {
+  .json-value-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 7px 6px;
+  }
+  .json-value {
+    padding-left: 8px;
+  }
+  .json-document h1 {
+    font-size: clamp(30px, 8vw, 38px);
+    line-height: 1.12;
+    margin-bottom: 27px;
+  }
+  .json-children {
+    margin-left: 4px;
+    padding-left: 10px;
   }
 }

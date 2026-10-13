@@ -1,0 +1,215 @@
+{
+  "recorded_at": "2026-10-13",
+  "purpose": "real-crate parser and primitive-checker compatibility probes",
+  "performance_comparison": false,
+  "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)",
+  "quill_binary": {
+    "path": "target/release/quillc",
+    "sha256": "91242d1a3b65d2e1fa9da1238c96896d3bd1d004c40c08251968158d5370178e",
+    "last_modified_utc": "2026-10-13T17:45:48Z",
+    "source_revision": null,
+    "source_revision_note": "unknown; release rebuild failed in the concurrently modified checkout"
+  },
+  "measurement_note": "Single wall-time observations, retained for provenance only. Cargo full checking and Quill primitive-subset checking do different work; do not compare these timings.",
+  "packages": [
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "rust_source_files": 2,
+      "rust_source_lines": 488,
+      "rustc_cargo_check": {
+        "exit_code": 0,
+        "wall_seconds": 0.114043
+      },
+      "quill_cargo_parse": {
+        "exit_code": 0,
+        "wall_seconds": 0.080426,
+        "parsed_files": 2,
+        "function_items": 12
+      },
+      "quill_cargo_check_subset": {
+        "exit_code": 1,
+        "wall_seconds": 0.081105,
+        "checked_bodies": 10
+      }
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "rust_source_files": 45,
+      "rust_source_lines": 15824,
+      "rustc_cargo_check": {
+        "exit_code": 0,
+        "wall_seconds": 0.287811
+      },
+      "quill_cargo_parse": {
+        "exit_code": 0,
+        "wall_seconds": 0.0778,
+        "parsed_files": 27,
+        "function_items": 388
+      },
+      "quill_cargo_check_subset": {
+        "exit_code": 1,
+        "wall_seconds": 0.101329,
+        "checked_bodies": 370
+      }
+    },
+    {
+      "name": "base64",
+      "version": "0.23.1",
+      "rust_source_files": 22,
+      "rust_source_lines": 8891,
+      "rustc_cargo_check": {
+        "exit_code": 0,
+        "wall_seconds": 0.232131
+      },
+      "quill_cargo_parse": {
+        "exit_code": 0,
+        "wall_seconds": 0.131554,
+        "parsed_files": 17,
+        "function_items": 140
+      },
+      "quill_cargo_check_subset": {
+        "exit_code": 1,
+        "wall_seconds": 0.118986,
+        "checked_bodies": 131
+      }
+    },
+    {
+      "name": "byteorder",
+      "version": "1.5.0",
+      "rust_source_files": 2,
+      "rust_source_lines": 5567,
+      "rustc_cargo_check": {
+        "exit_code": 0,
+        "wall_seconds": 0.170947
+      },
+      "quill_cargo_parse": {
+        "exit_code": 0,
+        "wall_seconds": 0.113039,
+        "parsed_files": 2,
+        "function_items": 183
+      },
+      "quill_cargo_check_subset": {
+        "exit_code": 1,
+        "wall_seconds": 0.102404,
+        "checked_bodies": 157
+      }
+    },
+    {
+      "name": "fastrand",
+      "version": "2.5.0",
+      "rust_source_files": 2,
+      "rust_source_lines": 970,
+      "rustc_cargo_check": {
+        "exit_code": 0,
+        "wall_seconds": 0.137926
+      },
+      "quill_cargo_parse": {
+        "exit_code": 0,
+        "wall_seconds": 0.116795,
+        "parsed_files": 2,
+        "function_items": 51
+      },
+      "quill_cargo_check_subset": {
+        "exit_code": 1,
+        "wall_seconds": 0.133777,
+        "checked_bodies": 51
+      }
+    }
+  ],
+  "follow_ups": [
+    {
+      "recorded_at": "2026-10-13T18:34:33Z",
+      "compiler_binary_sha256": "7fe29619b5fe4386782841a188966ccbe24215b5c51ce9bbaf6ffc5df49798e4",
+      "branch_head": "7e2ee8e2e77fef67a7ab4e9d56c77ba96fe90d40",
+      "working_tree_modified": true,
+      "cache": "fresh QUILL_CACHE_DIR per crate",
+      "packages": [
+        {
+          "name": "itoa",
+          "version": "1.0.18",
+          "exit_code": 1,
+          "diagnostic_lines": 31
+        },
+        {
+          "name": "memchr",
+          "version": "2.8.3",
+          "exit_code": 1,
+          "diagnostic_lines": 1546
+        },
+        {
+          "name": "base64",
+          "version": "0.23.1",
+          "exit_code": 1,
+          "diagnostic_lines": 1040
+        },
+        {
+          "name": "byteorder",
+          "version": "1.5.0",
+          "exit_code": 1,
+          "diagnostic_lines": 93
+        },
+        {
+          "name": "fastrand",
+          "version": "2.5.0",
+          "exit_code": 1,
+          "diagnostic_lines": 119
+        }
+      ],
+      "byteorder_resolved_diagnostic_families": [
+        "Read::read_exact method resolution",
+        "Write::write_all method resolution",
+        "std::io::Result and one-argument Result alias propagation with ?",
+        "Ok payload inference and nested Result type compatibility"
+      ],
+      "performance_comparison": false
+    },
+    {
+      "recorded_at": "2026-10-13T19:25:37Z",
+      "compiler_binary_sha256": "7c7210ad637bbb20e9b4987424ba220cf1aa5962492f7b4cc460c9161187a908",
+      "branch_head": "415ab44b7e50f866ac88ec1ab4a55c13828c9e3b",
+      "working_tree_modified": true,
+      "cache": "fresh QUILL_CACHE_DIR per crate",
+      "packages": [
+        {
+          "name": "itoa",
+          "version": "1.0.18",
+          "exit_code": 1,
+          "diagnostic_lines": 28
+        },
+        {
+          "name": "memchr",
+          "version": "2.8.3",
+          "exit_code": 1,
+          "diagnostic_lines": 930
+        },
+        {
+          "name": "base64",
+          "version": "0.23.1",
+          "exit_code": 1,
+          "diagnostic_lines": 971
+        },
+        {
+          "name": "byteorder",
+          "version": "1.5.0",
+          "exit_code": 1,
+          "diagnostic_lines": 57
+        },
+        {
+          "name": "fastrand",
+          "version": "2.5.0",
+          "exit_code": 1,
+          "diagnostic_lines": 103
+        }
+      ],
+      "implemented_typeck_support": [
+        "tuple struct positional fields and construction",
+        "integer byte-order, wrapping, bit-count, and rotation methods",
+        "raw pointer types, casts, and common pointer/slice methods"
+      ],
+      "all_crates_still_rejected": true,
+      "performance_comparison": false
+    }
+  ]
+}

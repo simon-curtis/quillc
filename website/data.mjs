@@ -26,7 +26,7 @@ export async function publicFiles() {
     (name) =>
       name &&
       !name.split("/").some((part) => part.startsWith(".")) &&
-      (/\.md$/i.test(name) ||
+      (/\.(md|json)$/i.test(name) ||
         name === "LICENSE" ||
         name.startsWith("assets/") ||
         (/^(docs|benchmarks)\//.test(name) &&
@@ -112,10 +112,12 @@ export async function siteData() {
   });
   const docs = await Promise.all(
     files
-      .filter((n) => /\.md$/i.test(n))
+      .filter((n) => /\.(md|json)$/i.test(n))
       .map(async (name) => ({
         path: name,
-        title: (await read(name)).match(/^#\s+(.+)$/m)?.[1] || name,
+        title: /\.md$/i.test(name)
+          ? (await read(name)).match(/^#\s+(.+)$/m)?.[1] || name
+          : name,
       })),
   );
   const [catalog, compatibility, lsp, syntax, crates] = await Promise.all([

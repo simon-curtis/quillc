@@ -582,26 +582,43 @@ fn rustc_parser_fixture_corpus() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
-/// Run with `cargo test -p quill-syntax --lib rustc_core_source_corpus
-/// -- --ignored --nocapture` to compare rustc's accepted core sources with the
-/// syntax collector. Rustc's AST dump can reject sources during early AST
-/// validation, so rejected files are not treated as parser evidence.
+/// Run with `cargo test -p quill-syntax --lib rustc_library_source_corpus
+/// -- --ignored --nocapture` to compare rustc's accepted standard-library
+/// sources with the syntax collector. Rustc's AST dump can reject sources
+/// during early AST validation, so rejected files are not parser evidence.
 #[test]
 #[ignore]
-fn rustc_core_source_corpus() {
+fn rustc_library_source_corpus() {
     let sysroot = Command::new("rustc")
         .args(["--print", "sysroot"])
         .output()
         .expect("rustc sysroot is available");
-    let root = PathBuf::from(String::from_utf8(sysroot.stdout).expect("sysroot is UTF-8").trim())
-        .join("lib/rustlib/src/rust/library/core/src");
-    if !root.is_dir() {
-        eprintln!("rust-src core sources are not installed; skipping {}", root.display());
+    let library_root =
+        PathBuf::from(String::from_utf8(sysroot.stdout).expect("sysroot is UTF-8").trim())
+            .join("lib/rustlib/src/rust/library");
+    let roots = [
+        "core",
+        "alloc",
+        "std",
+        "test",
+        "proc_macro",
+        "panic_abort",
+        "panic_unwind",
+        "std_detect",
+    ]
+    .map(|crate_name| library_root.join(crate_name).join("src"))
+    .into_iter()
+    .filter(|path| path.is_dir())
+    .collect::<Vec<_>>();
+    if roots.is_empty() {
+        eprintln!("rust-src library sources are not installed; skipping {}", library_root.display());
         return;
     }
 
     let mut files = Vec::new();
-    rust_files(&root, &mut files);
+    for root in &roots {
+        rust_files(root, &mut files);
+    }
     files.sort();
     let mut rustc_accepted = 0;
     let mut mismatches = Vec::new();
@@ -623,7 +640,7 @@ fn rustc_core_source_corpus() {
         ) {
             mismatches.push(format!(
                 "{} ({edition}): Quill rejected rustc-accepted syntax: {} at {:?}",
-                path.strip_prefix(&root).unwrap_or(&path).display(),
+                path.strip_prefix(&library_root).unwrap_or(&path).display(),
                 diagnostic.message,
                 diagnostic.span
             ));
@@ -633,8 +650,9 @@ fn rustc_core_source_corpus() {
         }
     }
     eprintln!(
-        "checked {rustc_accepted} rustc-accepted files in {}",
-        root.display()
+        "checked {rustc_accepted} rustc-accepted files from {} crates under {}",
+        roots.len(),
+        library_root.display()
     );
     assert!(rustc_accepted > 0, "no rustc-accepted core sources found");
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));

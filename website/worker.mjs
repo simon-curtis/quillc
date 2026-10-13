@@ -1,4 +1,4 @@
-// Keep Markdown reader URLs equivalent to the local serve.py behavior.
+// Keep document reader URLs equivalent to the local Vite+ behavior.
 // Missing assets continue to the existing blog through a service binding.
 export default {
   async fetch(request, env) {
@@ -12,7 +12,7 @@ export default {
         headers: request.headers,
       }));
     }
-    if (url.pathname.endsWith('.md')) {
+    if (/\.(md|json)$/i.test(url.pathname) && !['/site-data.json', '/project-status.json'].includes(url.pathname)) {
       const markdown = await env.ASSETS.fetch(request);
       if (!markdown.ok) return markdown;
       if (url.searchParams.get('raw') === '1') {

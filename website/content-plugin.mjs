@@ -39,7 +39,7 @@ export function quillContent() {
             : JSON.stringify(await data());
           return send(value, "application/json");
         }
-        if (!pathname.toLowerCase().endsWith(".md")) return next();
+        if (!/\.(md|json)$/i.test(pathname)) return next();
         const base = preview ? output() : root;
         const name = pathname.slice(1);
         if (!preview && !(await publicFiles()).includes(name)) {

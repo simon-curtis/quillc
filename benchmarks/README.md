@@ -14,6 +14,15 @@ A completed run retains raw samples, toolchain and source provenance, and the
 scope of the comparison. Keep build time, generated-program runtime, LSP
 latency, and compatibility as separate results.
 
+## Real-crate probes
+
+The initial pinned crate probes cover `itoa`, `memchr`, `base64`, `byteorder`,
+and `fastrand`. They separate Cargo parse acceptance from primitive-subset
+checking; they are compatibility probes, not paired build-time measurements.
+The recorded compiler binary parsed all five crates, while the primitive
+checker rejected all five. See the [crate probe report](crates/RESULTS.md) for
+versions, source sizes, outcomes, and the binary provenance limitation.
+
 ## Reproduce the Cargo baseline
 
 Run on an otherwise idle machine:
@@ -127,6 +136,23 @@ Raw samples and toolchain metadata are in
 [`results/lsp-latency-20261013.json`](results/lsp-latency-20261013.json).
 
 See the [LSP contract](../docs/lsp.md) for request behavior and latency targets.
+
+## Compiler parser comparison
+
+```sh
+cargo bench -p quill-syntax --bench parser_compare
+```
+
+The release benchmark compares `ra_ap_syntax` source parsing with the
+compiler's Syn tokenization-plus-parse path on a 14,163-line, 430,219-byte Rust
+2024 workload. It also compares one rust-analyzer incremental reparse with Syn
+parsing the edited file from scratch. Three 31-round runs measured median-of-run
+medians of 26.308 ms vs 41.009 ms for full parses and 8.693 ms vs 42.251 ms for
+the edit case. This isolates parsing; it excludes Quill AST collection, body
+lowering, cfg evaluation, and end-to-end compilation. See the
+[migration contract](../docs/compiler-parser-migration.md) for the integration
+boundary and correctness gates. Raw samples are in
+[`results/parser-comparison-20261013.json`](results/parser-comparison-20261013.json).
 
 ## Rust syntax compatibility
 

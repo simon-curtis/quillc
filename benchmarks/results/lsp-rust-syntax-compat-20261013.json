@@ -1,0 +1,33 @@
+{
+  "benchmark": "quill-lsp-rust-syntax-compatibility",
+  "lsp_executable": "/home/simon/git/quillc/target/release/quillc",
+  "parser_version": "0.0.358",
+  "fixture_root": "/home/simon/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ra_ap_parser-0.0.358/test_data/parser",
+  "fixture_count": 440,
+  "accepted_fixtures": 326,
+  "error_fixtures": 114,
+  "edition_probe_count": 9,
+  "recovery_probe_count": 7,
+  "crate_contract_fixture_count": 440,
+  "crate_contract_varied_edits_checked": 2200,
+  "crate_contract_tests_passed": true,
+  "grammar_production_count": 190,
+  "concrete_source_node_production_count": 170,
+  "concrete_source_node_productions_observed": 170,
+  "fragment_only_productions": [
+    "MacroItems",
+    "MacroStmts"
+  ],
+  "unobserved_grammar_productions": [],
+  "cases_checked": 456,
+  "incremental_roundtrips_checked": 456,
+  "incremental_mismatch_count": 0,
+  "incremental_mismatches": [],
+  "recovery_edit_sequences_checked": 7,
+  "recovery_edit_mismatch_count": 0,
+  "recovery_edit_mismatches": [],
+  "elapsed_seconds": 0.094,
+  "passed": true,
+  "mismatch_count": 0,
+  "mismatches": []
+}

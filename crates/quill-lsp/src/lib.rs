@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::str::FromStr;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::time::Duration;
+
+use crossbeam_channel::{Receiver, Sender, unbounded};
 
 use ra_ap_syntax::{Edition, SourceFile, TextRange, TextSize};
 use serde_json::{Value, json};
@@ -14,22 +15,49 @@ struct Document {
     text: String,
     line_starts: Vec<usize>,
     version: i64,
-    edition: Edition,
+    generation: u64,
     parsed: ra_ap_syntax::Parse<SourceFile>,
     symbols: Option<Vec<Symbol>>,
+    symbol_response: Option<Vec<Value>>,
 }
 
-struct DiagnosticJob {
-    uri: String,
-    version: i64,
+struct LiveDocument {
     text: String,
     line_starts: Vec<usize>,
+    version: i64,
+    generation: u64,
+    edition: Edition,
+    edition_warning: Option<String>,
+}
+
+struct ParseJob {
+    uri: String,
+    version: i64,
+    generation: u64,
+    text: String,
+    line_starts: Vec<usize>,
+    edition: Edition,
+    edition_warning: Option<String>,
+}
+
+struct EditionResolution {
+    edition: Edition,
+    warning: Option<String>,
+}
+
+struct AnalysisResult {
+    uri: String,
+    version: i64,
+    generation: u64,
+    text: String,
+    line_starts: Vec<usize>,
+    params: Value,
     parsed: ra_ap_syntax::Parse<SourceFile>,
 }
 
-struct DiagnosticResult {
-    uri: String,
-    version: i64,
+struct DeferredRequest {
+    id: Value,
+    method: String,
     params: Value,
 }
 
@@ -42,16 +70,29 @@ struct Symbol {
 }
 
 impl Document {
-    fn new(text: String, version: i64, edition: Edition) -> Self {
-        let parsed = SourceFile::parse(&text, edition);
+    fn from_result(result: AnalysisResult) -> Self {
+        Self {
+            text: result.text,
+            line_starts: result.line_starts,
+            version: result.version,
+            generation: result.generation,
+            parsed: result.parsed,
+            symbols: None,
+            symbol_response: None,
+        }
+    }
+}
+
+impl LiveDocument {
+    fn new(text: String, version: i64, resolution: EditionResolution, generation: u64) -> Self {
         let line_starts = line_starts(&text);
         Self {
             text,
             line_starts,
             version,
-            edition,
-            parsed,
-            symbols: None,
+            generation,
+            edition: resolution.edition,
+            edition_warning: resolution.warning,
         }
     }
 
@@ -63,9 +104,7 @@ impl Document {
         let Some(range) = change.get("range") else {
             self.text.clear();
             self.text.push_str(replacement);
-            self.parsed = SourceFile::parse(&self.text, self.edition);
             self.line_starts = line_starts(&self.text);
-            self.symbols = None;
             return;
         };
 
@@ -84,11 +123,8 @@ impl Document {
         } else {
             (end, start)
         };
-        let deleted = TextRange::new(TextSize::from(start as u32), TextSize::from(end as u32));
-        self.parsed = self.parsed.reparse(deleted, replacement, self.edition);
+        update_line_starts(&mut self.line_starts, start, end, replacement);
         self.text.replace_range(start..end, replacement);
-        self.line_starts = line_starts(&self.text);
-        self.symbols = None;
     }
 }
 
@@ -96,7 +132,7 @@ pub fn run_stdio() -> io::Result<()> {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut output = BufWriter::new(stdout.lock());
-    let (input_tx, input_rx) = mpsc::channel::<io::Result<Option<Value>>>();
+    let (input_tx, input_rx) = unbounded::<io::Result<Option<Value>>>();
     thread::spawn(move || {
         let mut input = BufReader::new(stdin.lock());
         loop {
@@ -108,23 +144,45 @@ pub fn run_stdio() -> io::Result<()> {
         }
     });
 
-    let (diagnostic_job_tx, diagnostic_job_rx) = mpsc::channel::<DiagnosticJob>();
-    let (diagnostic_result_tx, diagnostic_result_rx) = mpsc::channel::<DiagnosticResult>();
-    start_diagnostic_worker(diagnostic_job_rx, diagnostic_result_tx);
+    let (analysis_result_tx, analysis_result_rx) = unbounded::<AnalysisResult>();
+    let pending_analysis = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+    start_analysis_worker(pending_analysis.clone(), analysis_result_tx);
 
     let mut documents = HashMap::<String, Document>::new();
+    let mut live_documents = HashMap::<String, LiveDocument>::new();
+    let mut deferred_requests = Vec::<DeferredRequest>::new();
+    let mut next_generation = 1u64;
     let mut running = true;
 
     while running {
-        let message = match input_rx.recv_timeout(Duration::from_millis(5)) {
-            Ok(Ok(Some(message))) => message,
-            Ok(Ok(None)) => break,
-            Ok(Err(error)) => return Err(error),
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                publish_ready_diagnostics(&mut output, &documents, &diagnostic_result_rx)?;
+        let message = crossbeam_channel::select_biased! {
+            recv(input_rx) -> incoming => match incoming {
+                Ok(Ok(Some(message))) => message,
+                Ok(Ok(None)) | Err(_) => break,
+                Ok(Err(error)) => return Err(error),
+            },
+            recv(analysis_result_rx) -> result => {
+                let Ok(result) = result else { break };
+                publish_analysis_result(
+                    &mut output,
+                    &mut documents,
+                    &live_documents,
+                    result,
+                )?;
+                publish_ready_analysis(
+                    &mut output,
+                    &mut documents,
+                    &live_documents,
+                    &analysis_result_rx,
+                )?;
+                respond_ready_requests(
+                    &mut output,
+                    &mut deferred_requests,
+                    &mut documents,
+                    &live_documents,
+                )?;
                 continue;
             }
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
         };
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             continue;
@@ -160,9 +218,11 @@ pub fn run_stdio() -> io::Result<()> {
                         .unwrap_or_default();
                     let version = document.get("version").and_then(Value::as_i64).unwrap_or(0);
                     let edition = edition_for_uri(uri);
-                    let state = Document::new(text.to_owned(), version, edition);
-                    let _ = diagnostic_job_tx.send(state.diagnostic_job(uri));
-                    documents.insert(uri.to_owned(), state);
+                    let state =
+                        LiveDocument::new(text.to_owned(), version, edition, next_generation);
+                    next_generation = next_generation.wrapping_add(1).max(1);
+                    queue_parse_job(&pending_analysis, state.parse_job(uri));
+                    live_documents.insert(uri.to_owned(), state);
                 }
             }
             "textDocument/didChange" => {
@@ -171,7 +231,7 @@ pub fn run_stdio() -> io::Result<()> {
                         .get("uri")
                         .and_then(Value::as_str)
                         .unwrap_or_default();
-                    if let Some(state) = documents.get_mut(uri) {
+                    if let Some(state) = live_documents.get_mut(uri) {
                         let version = document
                             .get("version")
                             .and_then(Value::as_i64)
@@ -187,13 +247,15 @@ pub fn run_stdio() -> io::Result<()> {
                             }
                         }
                         state.version = version;
-                        let _ = diagnostic_job_tx.send(state.diagnostic_job(uri));
+                        queue_parse_job(&pending_analysis, state.parse_job(uri));
                     }
                 }
             }
             "textDocument/didClose" => {
                 if let Some(uri) = params.pointer("/textDocument/uri").and_then(Value::as_str) {
                     documents.remove(uri);
+                    live_documents.remove(uri);
+                    queue_close_job(&pending_analysis, uri);
                     send_notification(
                         &mut output,
                         "textDocument/publishDiagnostics",
@@ -205,22 +267,71 @@ pub fn run_stdio() -> io::Result<()> {
                 }
             }
             "textDocument/documentSymbol" => {
-                let symbols = params
-                    .pointer("/textDocument/uri")
-                    .and_then(Value::as_str)
-                    .and_then(|uri| documents.get_mut(uri))
-                    .map(document_symbols)
-                    .unwrap_or_default();
-                response = Some(Value::Array(symbols));
+                if request_analysis_is_current(params, &documents, &live_documents) {
+                    let symbols = params
+                        .pointer("/textDocument/uri")
+                        .and_then(Value::as_str)
+                        .and_then(|uri| documents.get_mut(uri))
+                        .map(document_symbols)
+                        .unwrap_or_default();
+                    response = Some(Value::Array(symbols));
+                } else if let Some(id) = id.as_ref() {
+                    deferred_requests.push(DeferredRequest {
+                        id: id.clone(),
+                        method: method.to_owned(),
+                        params: params.clone(),
+                    });
+                }
             }
             "textDocument/completion" => {
-                response = Some(completions(params, &mut documents));
+                if request_analysis_is_current(params, &documents, &live_documents) {
+                    let live = params
+                        .pointer("/textDocument/uri")
+                        .and_then(Value::as_str)
+                        .and_then(|uri| live_documents.get(uri));
+                    response = Some(completions(params, &mut documents, live, false));
+                } else if let Some(live) = params
+                    .pointer("/textDocument/uri")
+                    .and_then(Value::as_str)
+                    .and_then(|uri| {
+                        documents
+                            .contains_key(uri)
+                            .then(|| live_documents.get(uri))
+                            .flatten()
+                    })
+                {
+                    // Reuse the last completed symbol index while deriving the prefix from live
+                    // text. Mark this provisional list incomplete so the client can refresh it.
+                    response = Some(completions(params, &mut documents, Some(live), true));
+                } else if let Some(id) = id.as_ref() {
+                    deferred_requests.push(DeferredRequest {
+                        id: id.clone(),
+                        method: method.to_owned(),
+                        params: params.clone(),
+                    });
+                }
             }
             "textDocument/definition" => {
-                response = Some(definition(params, &mut documents));
+                if request_analysis_is_current(params, &documents, &live_documents) {
+                    response = Some(definition(params, &mut documents));
+                } else if let Some(id) = id.as_ref() {
+                    deferred_requests.push(DeferredRequest {
+                        id: id.clone(),
+                        method: method.to_owned(),
+                        params: params.clone(),
+                    });
+                }
             }
             "textDocument/hover" => {
-                response = Some(hover(params, &mut documents));
+                if request_analysis_is_current(params, &documents, &live_documents) {
+                    response = Some(hover(params, &mut documents));
+                } else if let Some(id) = id.as_ref() {
+                    deferred_requests.push(DeferredRequest {
+                        id: id.clone(),
+                        method: method.to_owned(),
+                        params: params.clone(),
+                    });
+                }
             }
             "$/cancelRequest" | "initialized" | "workspace/didChangeConfiguration" => {}
             _ if id.is_some() => {
@@ -240,28 +351,51 @@ pub fn run_stdio() -> io::Result<()> {
                 &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
             )?;
         }
-        publish_ready_diagnostics(&mut output, &documents, &diagnostic_result_rx)?;
+        respond_ready_requests(
+            &mut output,
+            &mut deferred_requests,
+            &mut documents,
+            &live_documents,
+        )?;
     }
     Ok(())
 }
 
-impl Document {
-    fn diagnostic_job(&self, uri: &str) -> DiagnosticJob {
-        DiagnosticJob {
+impl LiveDocument {
+    fn parse_job(&self, uri: &str) -> ParseJob {
+        ParseJob {
             uri: uri.to_owned(),
             version: self.version,
+            generation: self.generation,
             text: self.text.clone(),
             line_starts: self.line_starts.clone(),
-            parsed: self.parsed.clone(),
+            edition: self.edition,
+            edition_warning: self.edition_warning.clone(),
         }
     }
 }
 
-impl DiagnosticJob {
-    fn run(self) -> Value {
-        let diagnostics = self
-            .parsed
-            .errors()
+impl ParseJob {
+    fn run(
+        self,
+        previous: Option<(u64, String, ra_ap_syntax::Parse<SourceFile>)>,
+    ) -> (AnalysisResult, String, ra_ap_syntax::Parse<SourceFile>) {
+        let parsed = match previous {
+            Some((generation, old_text, old_parse)) if generation == self.generation => {
+                reparse_latest(&old_text, &self.text, old_parse, self.edition)
+            }
+            _ => SourceFile::parse(&self.text, self.edition),
+        };
+        let mut syntax_errors = parsed.errors();
+        syntax_errors.sort_by_key(|error| {
+            let range = error.range();
+            (
+                u32::from(range.start()),
+                u32::from(range.end()),
+                error.to_string(),
+            )
+        });
+        let mut diagnostics = syntax_errors
             .into_iter()
             .map(|error| {
                 let range = error.range();
@@ -278,73 +412,250 @@ impl DiagnosticJob {
                 })
             })
             .collect::<Vec<_>>();
-        json!({ "uri": self.uri, "version": self.version, "diagnostics": diagnostics })
+        if let Some(warning) = self.edition_warning {
+            diagnostics.push(json!({
+                "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 0 } },
+                "severity": 2,
+                "source": "quill",
+                "message": warning,
+            }));
+        }
+        let uri = self.uri;
+        let version = self.version;
+        let generation = self.generation;
+        let params = json!({ "uri": uri.clone(), "version": version, "diagnostics": diagnostics });
+        let result = AnalysisResult {
+            uri,
+            version,
+            generation,
+            text: self.text.clone(),
+            line_starts: self.line_starts.clone(),
+            params,
+            parsed: parsed.clone(),
+        };
+        (result, self.text, parsed)
     }
 }
 
-fn start_diagnostic_worker(jobs: Receiver<DiagnosticJob>, results: Sender<DiagnosticResult>) {
+fn reparse_latest(
+    old_text: &str,
+    new_text: &str,
+    old_parse: ra_ap_syntax::Parse<SourceFile>,
+    edition: Edition,
+) -> ra_ap_syntax::Parse<SourceFile> {
+    let mut prefix = old_text
+        .bytes()
+        .zip(new_text.bytes())
+        .take_while(|(old, new)| old == new)
+        .count();
+    while !old_text.is_char_boundary(prefix) || !new_text.is_char_boundary(prefix) {
+        prefix -= 1;
+    }
+
+    let max_suffix = old_text.len().min(new_text.len()) - prefix;
+    let mut suffix = old_text
+        .bytes()
+        .rev()
+        .zip(new_text.bytes().rev())
+        .take(max_suffix)
+        .take_while(|(old, new)| old == new)
+        .count();
+    while !old_text.is_char_boundary(old_text.len() - suffix)
+        || !new_text.is_char_boundary(new_text.len() - suffix)
+    {
+        suffix -= 1;
+    }
+
+    let old_end = old_text.len() - suffix;
+    let new_end = new_text.len() - suffix;
+    old_parse.reparse(
+        TextRange::new(
+            TextSize::from(prefix as u32),
+            TextSize::from(old_end as u32),
+        ),
+        &new_text[prefix..new_end],
+        edition,
+    )
+}
+
+type PendingAnalysis = Arc<(Mutex<HashMap<String, Option<ParseJob>>>, Condvar)>;
+
+fn queue_parse_job(pending: &PendingAnalysis, job: ParseJob) {
+    let (jobs, wake) = &**pending;
+    if let Ok(mut jobs) = jobs.lock() {
+        jobs.insert(job.uri.clone(), Some(job));
+        wake.notify_one();
+    }
+}
+
+fn queue_close_job(pending: &PendingAnalysis, uri: &str) {
+    let (jobs, wake) = &**pending;
+    if let Ok(mut jobs) = jobs.lock() {
+        jobs.insert(uri.to_owned(), None);
+        wake.notify_one();
+    }
+}
+
+fn start_analysis_worker(pending: PendingAnalysis, results: Sender<AnalysisResult>) {
     thread::spawn(move || {
-        let mut pending = HashMap::<String, DiagnosticJob>::new();
-        while let Ok(first) = jobs.recv() {
-            pending.insert(first.uri.clone(), first);
-            while let Ok(job) = jobs.try_recv() {
-                pending.insert(job.uri.clone(), job);
+        let mut worker_documents =
+            HashMap::<String, (u64, String, ra_ap_syntax::Parse<SourceFile>)>::new();
+        loop {
+            let (jobs, wake) = &*pending;
+            let mut jobs = match jobs.lock() {
+                Ok(jobs) => jobs,
+                Err(_) => break,
+            };
+            while jobs.is_empty() {
+                jobs = match wake.wait(jobs) {
+                    Ok(jobs) => jobs,
+                    Err(_) => return,
+                };
             }
-            let Some(uri) = pending.keys().next().cloned() else {
+            let Some(uri) = jobs.keys().next().cloned() else {
                 continue;
             };
-            let Some(job) = pending.remove(&uri) else {
+            let Some(job) = jobs.remove(&uri) else {
                 continue;
             };
-            let version = job.version;
-            let params = job.run();
-            if results
-                .send(DiagnosticResult {
-                    uri,
-                    version,
-                    params,
-                })
-                .is_err()
-            {
+            drop(jobs);
+            let Some(job) = job else {
+                worker_documents.remove(&uri);
+                continue;
+            };
+            let previous = worker_documents
+                .get(&uri)
+                .map(|(generation, text, parsed)| (*generation, text.clone(), parsed.clone()));
+            let (result, text, parsed) = job.run(previous);
+            worker_documents.insert(uri.clone(), (result.generation, text, parsed));
+            if result.uri != uri || results.send(result).is_err() {
                 break;
             }
         }
     });
 }
 
-fn publish_ready_diagnostics(
+fn publish_ready_analysis(
     output: &mut impl Write,
-    documents: &HashMap<String, Document>,
-    results: &Receiver<DiagnosticResult>,
+    documents: &mut HashMap<String, Document>,
+    live_documents: &HashMap<String, LiveDocument>,
+    results: &Receiver<AnalysisResult>,
 ) -> io::Result<()> {
     while let Ok(result) = results.try_recv() {
-        let current = documents
-            .get(&result.uri)
-            .is_some_and(|document| document.version == result.version);
-        if current {
-            send_notification(output, "textDocument/publishDiagnostics", result.params)?;
-        }
+        publish_analysis_result(output, documents, live_documents, result)?;
     }
     Ok(())
 }
 
-fn document_symbols(document: &mut Document) -> Vec<Value> {
-    let symbols = document_symbols_index(document).to_vec();
-    symbols
-        .iter()
-        .map(|symbol| {
-            json!({
-                "name": symbol.name,
-                "kind": symbol.kind,
-                "range": text_range_to_lsp(&document.text, &document.line_starts, symbol.range),
-                "selectionRange": text_range_to_lsp(
-                    &document.text,
-                    &document.line_starts,
-                    symbol.selection,
-                ),
-            })
+fn publish_analysis_result(
+    output: &mut impl Write,
+    documents: &mut HashMap<String, Document>,
+    live_documents: &HashMap<String, LiveDocument>,
+    result: AnalysisResult,
+) -> io::Result<()> {
+    let current = live_documents.get(&result.uri).is_some_and(|document| {
+        document.version == result.version && document.generation == result.generation
+    });
+    if current {
+        let uri = result.uri.clone();
+        let params = result.params.clone();
+        let document = Document::from_result(result);
+        documents.insert(uri, document);
+        send_notification(output, "textDocument/publishDiagnostics", params)?;
+    }
+    Ok(())
+}
+
+fn analysis_is_current(
+    uri: &str,
+    documents: &HashMap<String, Document>,
+    live_documents: &HashMap<String, LiveDocument>,
+) -> bool {
+    documents
+        .get(uri)
+        .zip(live_documents.get(uri))
+        .is_some_and(|(analysis, live)| {
+            analysis.version == live.version && analysis.generation == live.generation
         })
-        .collect()
+}
+
+fn request_analysis_is_current(
+    params: &Value,
+    documents: &HashMap<String, Document>,
+    live_documents: &HashMap<String, LiveDocument>,
+) -> bool {
+    params
+        .pointer("/textDocument/uri")
+        .and_then(Value::as_str)
+        .is_some_and(|uri| analysis_is_current(uri, documents, live_documents))
+}
+
+fn respond_ready_requests(
+    output: &mut impl Write,
+    pending: &mut Vec<DeferredRequest>,
+    documents: &mut HashMap<String, Document>,
+    live_documents: &HashMap<String, LiveDocument>,
+) -> io::Result<()> {
+    let mut waiting = Vec::new();
+    for request in pending.drain(..) {
+        let uri = request
+            .params
+            .pointer("/textDocument/uri")
+            .and_then(Value::as_str);
+        let Some(uri) = uri else {
+            send_error(output, &request.id, -32602, "Missing text document URI")?;
+            continue;
+        };
+        if live_documents.contains_key(uri) && !analysis_is_current(uri, documents, live_documents)
+        {
+            waiting.push(request);
+            continue;
+        }
+        let result = match request.method.as_str() {
+            "textDocument/documentSymbol" => Value::Array(
+                documents
+                    .get_mut(uri)
+                    .map(document_symbols)
+                    .unwrap_or_default(),
+            ),
+            "textDocument/completion" => {
+                completions(&request.params, documents, live_documents.get(uri), false)
+            }
+            "textDocument/definition" => definition(&request.params, documents),
+            "textDocument/hover" => hover(&request.params, documents),
+            _ => Value::Null,
+        };
+        send_message(
+            output,
+            &json!({ "jsonrpc": "2.0", "id": request.id, "result": result }),
+        )?;
+    }
+    *pending = waiting;
+    Ok(())
+}
+
+fn document_symbols(document: &mut Document) -> Vec<Value> {
+    if document.symbol_response.is_none() {
+        let symbols = document_symbols_index(document).to_vec();
+        document.symbol_response = Some(
+            symbols
+                .iter()
+                .map(|symbol| {
+                    json!({
+                        "name": symbol.name,
+                        "kind": symbol.kind,
+                        "range": text_range_to_lsp(&document.text, &document.line_starts, symbol.range),
+                        "selectionRange": text_range_to_lsp(
+                            &document.text,
+                            &document.line_starts,
+                            symbol.selection,
+                        ),
+                    })
+                })
+                .collect(),
+        );
+    }
+    document.symbol_response.clone().unwrap_or_default()
 }
 
 fn document_symbols_index(document: &mut Document) -> &[Symbol] {
@@ -480,16 +791,24 @@ where
     });
 }
 
-fn completions(params: &Value, documents: &mut HashMap<String, Document>) -> Value {
+fn completions(
+    params: &Value,
+    documents: &mut HashMap<String, Document>,
+    live_document: Option<&LiveDocument>,
+    is_incomplete: bool,
+) -> Value {
     let Some(uri) = params.pointer("/textDocument/uri").and_then(Value::as_str) else {
         return json!({ "isIncomplete": true, "items": [] });
     };
     let Some(document) = documents.get(uri) else {
         return json!({ "isIncomplete": true, "items": [] });
     };
+    let (text, line_starts) = live_document
+        .map(|live| (live.text.as_str(), live.line_starts.as_slice()))
+        .unwrap_or((&document.text, &document.line_starts));
     let prefix = identifier_prefix(
-        &document.text,
-        &document.line_starts,
+        text,
+        line_starts,
         params.pointer("/position").unwrap_or(&Value::Null),
     );
     let mut candidates = HashMap::<String, (u32, String)>::new();
@@ -517,7 +836,7 @@ fn completions(params: &Value, documents: &mut HashMap<String, Document>) -> Val
             json!({ "label": name, "kind": kind, "detail": detail, "insertText": name })
         })
         .collect::<Vec<_>>();
-    json!({ "isIncomplete": false, "items": items })
+    json!({ "isIncomplete": is_incomplete, "items": items })
 }
 
 fn definition(params: &Value, documents: &mut HashMap<String, Document>) -> Value {
@@ -662,45 +981,99 @@ fn text_range_to_lsp(text: &str, line_starts: &[usize], range: TextRange) -> Val
     })
 }
 
-fn edition_for_uri(uri: &str) -> Edition {
+fn edition_for_uri(uri: &str) -> EditionResolution {
     let Ok(url) = url::Url::parse(uri) else {
-        return Edition::CURRENT;
+        return EditionResolution {
+            edition: Edition::CURRENT,
+            warning: None,
+        };
     };
     let Ok(mut path) = url.to_file_path() else {
-        return Edition::CURRENT;
+        return EditionResolution {
+            edition: Edition::CURRENT,
+            warning: None,
+        };
     };
     if path.is_file() {
         path.pop();
     }
+    let mut inherited_edition_missing = false;
     for directory in path.ancestors() {
         let manifest = directory.join("Cargo.toml");
         let Ok(contents) = std::fs::read_to_string(manifest) else {
             continue;
         };
-        let Ok(value) = contents.parse::<toml::Value>() else {
-            continue;
+        let value = match toml::from_str::<toml::Value>(&contents) {
+            Ok(value) => value,
+            Err(_) => continue,
         };
-        if let Some(edition) = value
-            .get("package")
-            .and_then(|p| p.get("edition"))
-            .and_then(toml::Value::as_str)
-        {
-            if let Ok(edition) = Edition::from_str(edition) {
-                return edition;
+        if let Some(package) = value.get("package") {
+            if let Some(edition) = package.get("edition") {
+                if edition.get("workspace").and_then(toml::Value::as_bool) == Some(true) {
+                    inherited_edition_missing = true;
+                    if let Some(workspace_edition) = value
+                        .get("workspace")
+                        .and_then(|workspace| workspace.get("package"))
+                        .and_then(|package| package.get("edition"))
+                    {
+                        return edition_resolution(workspace_edition);
+                    }
+                    continue;
+                }
+                return edition_resolution(edition);
             }
+            return EditionResolution {
+                edition: Edition::Edition2015,
+                warning: None,
+            };
         }
         if let Some(edition) = value
             .get("workspace")
             .and_then(|w| w.get("package"))
             .and_then(|p| p.get("edition"))
-            .and_then(toml::Value::as_str)
         {
-            if let Ok(edition) = Edition::from_str(edition) {
-                return edition;
-            }
+            return edition_resolution(edition);
         }
     }
-    Edition::CURRENT
+    if inherited_edition_missing {
+        return EditionResolution {
+            edition: Edition::CURRENT,
+            warning: Some(format!(
+                "The package inherits its Rust edition, but no workspace edition was found; using edition {}.",
+                Edition::CURRENT
+            )),
+        };
+    }
+    EditionResolution {
+        edition: Edition::CURRENT,
+        warning: None,
+    }
+}
+
+fn edition_resolution(value: &toml::Value) -> EditionResolution {
+    if let Some(name) = value.as_str() {
+        if let Ok(edition) = Edition::from_str(name) {
+            return EditionResolution {
+                edition,
+                warning: None,
+            };
+        }
+        return EditionResolution {
+            edition: Edition::CURRENT,
+            warning: Some(format!(
+                "Rust edition '{name}' is not supported by this parser; using edition {}. Supported editions: 2015, 2018, 2021, 2024.",
+                Edition::CURRENT
+            )),
+        };
+    }
+
+    EditionResolution {
+        edition: Edition::CURRENT,
+        warning: Some(format!(
+            "Rust edition value '{value}' is invalid; using edition {}. Supported editions: 2015, 2018, 2021, 2024.",
+            Edition::CURRENT
+        )),
+    }
 }
 
 fn line_starts(text: &str) -> Vec<usize> {
@@ -708,6 +1081,28 @@ fn line_starts(text: &str) -> Vec<usize> {
     starts.push(0);
     starts.extend(text.match_indices('\n').map(|(index, _)| index + 1));
     starts
+}
+
+fn update_line_starts(starts: &mut Vec<usize>, start: usize, end: usize, inserted: &str) {
+    let prefix_end = starts.partition_point(|line_start| *line_start <= start);
+    let suffix_start = starts.partition_point(|line_start| *line_start <= end);
+    let removed_len = end - start;
+    let delta = inserted.len() as isize - removed_len as isize;
+    let inserted_newlines = inserted.bytes().filter(|byte| *byte == b'\n').count();
+    let mut updated =
+        Vec::with_capacity(prefix_end + inserted_newlines + starts.len() - suffix_start);
+    updated.extend_from_slice(&starts[..prefix_end]);
+    updated.extend(
+        inserted
+            .match_indices('\n')
+            .map(|(index, _)| start + index + 1),
+    );
+    updated.extend(
+        starts[suffix_start..]
+            .iter()
+            .map(|old| (*old as isize + delta) as usize),
+    );
+    *starts = updated;
 }
 
 fn position_to_offset(text: &str, line_starts: &[usize], position: &Value) -> usize {
@@ -811,4 +1206,302 @@ fn send_message(output: &mut impl Write, message: &Value) -> io::Result<()> {
     write!(output, "Content-Length: {}\r\n\r\n", body.len())?;
     output.write_all(&body)?;
     output.flush()
+}
+
+#[cfg(test)]
+mod syntax_contract_tests {
+    use super::{ParseJob, reparse_latest};
+    use ra_ap_syntax::{AstNode, Edition, SourceFile};
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn tree_signature(parse: &ra_ap_syntax::Parse<SourceFile>) -> Vec<String> {
+        parse
+            .tree()
+            .syntax()
+            .descendants_with_tokens()
+            .map(|element| {
+                let text = element
+                    .as_node()
+                    .map(|node| node.text().to_string())
+                    .or_else(|| element.as_token().map(|token| token.text().to_owned()))
+                    .unwrap_or_default();
+                format!(
+                    "{:?}|{:?}|{}|{}",
+                    element.kind(),
+                    element.text_range(),
+                    element.as_node().is_some(),
+                    text,
+                )
+            })
+            .collect()
+    }
+
+    fn error_signature(parse: &ra_ap_syntax::Parse<SourceFile>) -> Vec<String> {
+        let mut errors = parse
+            .errors()
+            .into_iter()
+            .map(|error| format!("{:?}|{}", error.range(), error))
+            .collect::<Vec<_>>();
+        errors.sort();
+        errors
+    }
+
+    fn collect_source_files(directory: &Path, files: &mut Vec<PathBuf>) {
+        let entries = fs::read_dir(directory).expect("read parser fixture directory");
+        for entry in entries {
+            let path = entry.expect("read parser fixture entry").path();
+            if path.is_dir() {
+                collect_source_files(&path, files);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                files.push(path);
+            }
+        }
+    }
+
+    fn fixture_edition(source: &str) -> Edition {
+        let first_line = source.lines().next().unwrap_or_default();
+        let marker = first_line
+            .strip_prefix("//@ edition: ")
+            .or_else(|| first_line.strip_prefix("// "));
+        match marker.map(|marker| marker.get(..4).unwrap_or_default()) {
+            Some("2015") => Edition::Edition2015,
+            Some("2018") => Edition::Edition2018,
+            Some("2021") => Edition::Edition2021,
+            _ => Edition::Edition2024,
+        }
+    }
+
+    #[test]
+    fn source_file_tree_round_trips_source_exactly() {
+        let sources = [
+            "#![allow(dead_code)]\n/// docs\n#[cfg(any())]\nfn r#type<'a>(x: &'a str) {\n    macro_rules! nested { ($($t:tt)*) => { $($t)* } }\n    nested!({ let café = r##\"raw // text\"##; /* outer /* nested */ */ });\n}\n",
+            "fn main() { let x = \"unfinished;\n",
+            "macro_rules! m { ($x:expr) => { $x }\n",
+            "/* comment only */\n",
+            "fn main() { builtin # asm(\"\", clobber_abi(\"C\"), options(nostack)); }\n",
+        ];
+
+        for edition in [
+            Edition::Edition2015,
+            Edition::Edition2018,
+            Edition::Edition2021,
+            Edition::Edition2024,
+        ] {
+            for source in sources {
+                let parse = SourceFile::parse(source, edition);
+                assert_eq!(parse.tree().syntax().text().to_string(), source);
+            }
+        }
+    }
+
+    #[test]
+    fn macro_payloads_remain_opaque_token_trees() {
+        // Macro arguments have a macro-defined grammar. This payload is not a
+        // valid Rust expression, but it is valid Rust macro-call syntax and
+        // must not produce a parser diagnostic before expansion.
+        let source = concat!(
+            "macro_rules! accepts_tokens { ($($t:tt)*) => { $($t)* }; }\n",
+            "fn main() { accepts_tokens!({ let = \"macro DSL\"; ??? }); }\n",
+        );
+        let (result, _, parsed) = ParseJob {
+            uri: "file:///macro-payload.rs".to_owned(),
+            version: 1,
+            generation: 1,
+            text: source.to_owned(),
+            line_starts: super::line_starts(source),
+            edition: Edition::Edition2024,
+            edition_warning: None,
+        }
+        .run(None);
+
+        assert_eq!(parsed.tree().syntax().text().to_string(), source);
+        assert!(
+            result.params["diagnostics"].as_array().unwrap().is_empty(),
+            "opaque macro payload produced a Rust syntax diagnostic: {}",
+            result.params["diagnostics"],
+        );
+    }
+
+    #[test]
+    fn upstream_parser_fixtures_round_trip_and_incrementally_match() {
+        let Some(fixture_root) = std::env::var_os("QUILL_RUST_PARSER_FIXTURES") else {
+            eprintln!("skipping upstream fixture corpus: QUILL_RUST_PARSER_FIXTURES is unset");
+            return;
+        };
+        let fixture_root = PathBuf::from(fixture_root);
+        let mut files = Vec::new();
+        for category in ["ok", "err", "inline"] {
+            let directory = fixture_root.join(category);
+            if directory.is_dir() {
+                collect_source_files(&directory, &mut files);
+            }
+        }
+        files.sort();
+        assert!(
+            !files.is_empty(),
+            "no parser fixtures found under {fixture_root:?}"
+        );
+        let mut observed_kinds = BTreeSet::new();
+
+        for path in &files {
+            let source = fs::read_to_string(path).expect("read Rust parser fixture");
+            let edition = fixture_edition(&source);
+            let mut current_text = source.clone();
+            let mut current_parse = SourceFile::parse(&source, edition);
+            observed_kinds.extend(
+                current_parse
+                    .tree()
+                    .syntax()
+                    .descendants_with_tokens()
+                    .filter_map(|element| {
+                        element.as_node().map(|_| format!("{:?}", element.kind()))
+                    }),
+            );
+            assert_eq!(
+                current_parse.tree().syntax().text().to_string(),
+                source,
+                "source did not round-trip: {}",
+                path.display(),
+            );
+
+            let probe_prefix = format!("{source}\n// Quill incremental probe\n");
+            let valid_probe =
+                "fn __quill_incremental_probe() { let __quill_probe_value_7f3 = 1; }\n";
+            let malformed_probe =
+                "fn __quill_incremental_probe() { let __quill_probe_value_7f3 = (1; }\n";
+            let repaired_probe =
+                "fn __quill_incremental_probe() { let __quill_probe_value_7f3 = r##\"λ\"##; }\n";
+            let edits = [
+                probe_prefix.clone(),
+                format!("{probe_prefix}{valid_probe}"),
+                format!("{probe_prefix}{malformed_probe}"),
+                format!("{probe_prefix}{repaired_probe}"),
+                source.clone(),
+            ];
+
+            for (version, edited_text) in edits.into_iter().enumerate() {
+                let uri = path.to_string_lossy().into_owned();
+                let (incremental_result, _, incremental) = ParseJob {
+                    uri: uri.clone(),
+                    version: version as i64 + 1,
+                    generation: 1,
+                    text: edited_text.clone(),
+                    line_starts: super::line_starts(&edited_text),
+                    edition,
+                    edition_warning: None,
+                }
+                .run(Some((1, current_text.clone(), current_parse)));
+                let (fresh_result, _, reparsed) = ParseJob {
+                    uri,
+                    version: version as i64 + 1,
+                    generation: 1,
+                    text: edited_text.clone(),
+                    line_starts: super::line_starts(&edited_text),
+                    edition,
+                    edition_warning: None,
+                }
+                .run(None);
+                assert_eq!(
+                    incremental.tree().syntax().text().to_string(),
+                    edited_text,
+                    "incremental tree lost source text: {}",
+                    path.display(),
+                );
+                assert_eq!(
+                    tree_signature(&incremental),
+                    tree_signature(&reparsed),
+                    "incremental tree differs from full parse: {}",
+                    path.display(),
+                );
+                assert_eq!(
+                    error_signature(&incremental),
+                    error_signature(&reparsed),
+                    "incremental errors differ from full parse: {}",
+                    path.display(),
+                );
+                assert_eq!(
+                    incremental_result.params["diagnostics"],
+                    fresh_result.params["diagnostics"],
+                    "incremental diagnostics differ from full parse: {}",
+                    path.display(),
+                );
+                current_text = edited_text;
+                current_parse = incremental;
+            }
+        }
+        let grammar_witnesses =
+            ["fn main() { builtin # asm(\"\", clobber_abi(\"C\"), options(nostack)); }\n"];
+        for source in grammar_witnesses {
+            let parse = SourceFile::parse(source, Edition::Edition2024);
+            assert_eq!(
+                parse.tree().syntax().text().to_string(),
+                source,
+                "grammar witness source did not round-trip",
+            );
+            observed_kinds.extend(
+                parse
+                    .tree()
+                    .syntax()
+                    .descendants_with_tokens()
+                    .filter_map(|element| {
+                        element.as_node().map(|_| format!("{:?}", element.kind()))
+                    }),
+            );
+        }
+        eprintln!("verified upstream parser fixtures: {}", files.len());
+        eprintln!("verified varied incremental edits: {}", files.len() * 5);
+        eprintln!(
+            "observed syntax node kinds: {}",
+            observed_kinds.into_iter().collect::<Vec<_>>().join(",")
+        );
+    }
+
+    #[test]
+    fn incremental_reparse_matches_fresh_tree_and_errors() {
+        let edit_pairs = [
+            (
+                "fn main() { let value = 1; }\n",
+                "fn main() { let value = 10; }\n",
+            ),
+            (
+                "fn main() { let value = (1 + 2); }\n",
+                "fn main() { let value = (1 + 2; }\n",
+            ),
+            (
+                "fn main() { /* note */ value(); }\n",
+                "fn main() { /* note */ value :: call(); }\n",
+            ),
+            (
+                "fn main() { let café = r#type; }\n",
+                "fn main() { let café = r#type; let λ = 2; }\n",
+            ),
+            (
+                "macro_rules! m { ($($t:tt)*) => { $($t)* } }\n",
+                "macro_rules! m { ($($t:tt)*) => { ($($t)*) } }\n",
+            ),
+            (
+                "fn main() { let value = \"text\"; }\n",
+                "fn main() { let value = r##\"text\"##; }\n",
+            ),
+        ];
+
+        for edition in [
+            Edition::Edition2015,
+            Edition::Edition2018,
+            Edition::Edition2021,
+            Edition::Edition2024,
+        ] {
+            for (old_text, new_text) in edit_pairs {
+                let old_parse = SourceFile::parse(old_text, edition);
+                let incremental = reparse_latest(old_text, new_text, old_parse, edition);
+                let fresh = SourceFile::parse(new_text, edition);
+
+                assert_eq!(incremental.tree().syntax().text().to_string(), new_text);
+                assert_eq!(tree_signature(&incremental), tree_signature(&fresh));
+                assert_eq!(error_signature(&incremental), error_signature(&fresh));
+            }
+        }
+    }
 }

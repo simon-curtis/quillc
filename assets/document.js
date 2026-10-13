@@ -7,13 +7,80 @@ const source = new URL(location.href);
 source.hash = '';
 source.searchParams.set('raw', '1');
 document.querySelector('#raw-link').href = source.href;
+const isJson = location.pathname.toLowerCase().endsWith('.json');
+document.querySelector('#raw-link').firstChild.textContent = isJson ? 'View raw data ' : 'View raw Markdown ';
 
 try {
   const response = await fetch(source, { headers: { Accept: 'text/plain' } });
   if (!response.ok) throw new Error(`Document unavailable (${response.status})`);
-  const markdown = await response.text();
+  const content = await response.text();
   if (response.headers.get('content-type')?.includes('text/html')) throw new Error('This page needs the Quill Vite+ server: npm run dev');
-  article.innerHTML = DOMPurify.sanitize(marked.parse(markdown, { gfm: true }), { USE_PROFILES: { html: true } });
+  if (isJson) {
+    const value = JSON.parse(content);
+    const heading = document.createElement('h1');
+    heading.textContent = decodeURIComponent(location.pathname.split('/').pop());
+    article.classList.add('json-document');
+    const tree = document.createElement('ul');
+    tree.className = 'json-tree';
+
+    function appendValue(parent, key, item, root = false) {
+      const row = document.createElement('li');
+      const container = item !== null && typeof item === 'object';
+      if (container) {
+        const array = Array.isArray(item);
+        const entries = array ? item : Object.entries(item);
+        const details = document.createElement('details');
+        details.className = 'json-node';
+        details.open = root;
+        const summary = document.createElement('summary');
+        summary.className = 'json-summary';
+        if (!root) {
+          const property = document.createElement('span');
+          property.className = 'json-key';
+          property.textContent = key;
+          summary.append(property);
+        }
+        const type = document.createElement('span');
+        type.className = 'json-type';
+        const count = array ? item.length : entries.length;
+        type.textContent = `${array ? 'Array' : 'Object'} · ${count} ${array ? 'items' : 'keys'}`;
+        summary.append(type);
+        details.append(summary);
+        const children = document.createElement('ul');
+        children.className = 'json-children';
+        details.append(children);
+        const populate = () => {
+          if (details.dataset.populated) return;
+          details.dataset.populated = 'true';
+          if (array) item.forEach((child, index) => appendValue(children, `[${index}]`, child));
+          else for (const [name, child] of entries) appendValue(children, name, child);
+        };
+        details.addEventListener('toggle', () => {
+          if (details.open) populate();
+        });
+        if (root) populate();
+        row.append(details);
+      } else {
+        const line = document.createElement('div');
+        line.className = 'json-value-row';
+        const property = document.createElement('span');
+        property.className = 'json-key';
+        property.textContent = key;
+        const value = document.createElement('span');
+        value.className = `json-value json-${item === null ? 'null' : typeof item}`;
+        value.textContent = typeof item === 'string' ? JSON.stringify(item) : String(item);
+        if (!root) line.append(property);
+        line.append(value);
+        row.append(line);
+      }
+      parent.append(row);
+    }
+
+    appendValue(tree, '', value, true);
+    article.replaceChildren(heading, tree);
+  } else {
+    article.innerHTML = DOMPurify.sanitize(marked.parse(content, { gfm: true }), { USE_PROFILES: { html: true } });
+  }
   const ids = new Set();
   for (const heading of article.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
     const title = heading.textContent;

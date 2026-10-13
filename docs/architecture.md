@@ -55,9 +55,12 @@ not yet separate crates.
 
 ### Frontend and Cargo
 
-The driver uses Syn for compiler parsing and retains a custom lexer for `lex`
-and token spans. It discovers conventional and supported `#[path]` modules,
-applies supported target/feature `cfg`, and parses independent files in parallel.
+The driver parses compiler source with rust-analyzer's `ra_ap_syntax` AST and
+retains a custom lexer for `lex` and token spans. `quill-cfg` reads attributes
+from the same syntax tree. A test-only Syn oracle checks the existing Quill
+model during migration. The compiler discovers conventional and supported
+`#[path]` modules, applies supported target/feature `cfg`, and parses
+independent files in parallel.
 HIR records module/target ownership, imports, struct fields, impl ownership,
 and selected qualified calls. Complete Rust name resolution, visibility, type
 namespaces, and general macro expansion remain incomplete. Exact supported
@@ -116,7 +119,7 @@ cannot establish a general compiler speedup.
 
 ## Research references
 
-- [Syn file parser](https://docs.rs/syn/latest/syn/fn.parse_file.html)
+- [rust-analyzer syntax crate](https://docs.rs/ra_ap_syntax/latest/ra_ap_syntax/)
 - [Rust compiler query system](https://rustc-dev-guide.rust-lang.org/query.html)
 - [Rust parallel compiler](https://rustc-dev-guide.rust-lang.org/parallel-rustc.html)
 - [Rust incremental compilation](https://rustc-dev-guide.rust-lang.org/queries/incremental-compilation.html)
