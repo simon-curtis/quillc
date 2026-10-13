@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [slice short-circuit run](results/2026-10-13-slice-short-circuit-clean.json)
+passes 85/85 cases at clean revision `ee8d02d`. It verifies skipped indexed
+operands do not panic under `false &&` or `true ||`, reached operands do panic,
+and a `while` length guard avoids indexing past the slice. This curated pass
+rate is not an overall Rust compatibility percentage.
+
 The [mutable-slice indexing run](results/2026-10-13-mut-slice-index-clean.json)
 passes 82/82 cases at clean revision `fc69255`. It checks runtime indexing
 through `&mut [u64]` and an out-of-bounds access with matching rustc panic
