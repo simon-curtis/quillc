@@ -51,23 +51,24 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 28-case run passes 18 (64.3%) against clean Quill revision
-`8c79dda` and probes 28 of 29 tracked categories. The local workspace
-dependency and feature
-cfg cases match rustc. A narrow two-`u64` Rust ABI call also links from a
+The current 28-case run passes 21 (75.0%) against base Quill revision
+`612d6d6` and probes 28 of 29 tracked categories. The report's
+`quillc_source_dirty` flag is true: the tested binary includes in-flight codegen
+changes that were uncommitted when measured. The local workspace dependency,
+feature cfg, and narrow unsigned-integer Vec push/iteration cases match rustc.
+A narrow two-`u64` Rust ABI call also links from a
 Quill object into a rustc host and matches output. The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
-records the exact source revision, compiler-source cleanliness, binary hash, and
-build time. The website reports this result separately from the manually curated
+records the base source revision, dirty-source state, binary hash, and build
+time. The website reports this result separately from the manually curated
 10.3% documentation index. The full compatibility target remains stable Rust
 behavior, Rust diagnostics, Cargo workflows, and Linux and Windows targets as
 described in the project specification.
 
-Windows output is the only tracked category with no probe. Ten cases fail,
-covering multiple binary targets, build scripts, diagnostic parity for type
-mismatch and use-after-move, Option status checks, derive implementations,
-trait dispatch, Vec iteration, panic behavior, and rustc's
+Windows output is the only tracked category with no probe. Seven cases fail,
+covering multiple binary targets, build scripts, use-after-move diagnostics,
+derive implementations, trait dispatch, panic behavior, and rustc's
 inability to consume Quill's object as an `--extern` library. Macro syntax and
-one literal macro expansion now pass. The 64.3% figure applies only to these
+one literal macro expansion now pass. The 75.0% figure applies only to these
 28 curated cases; it is not a general Rust compatibility score and cannot be
 compared directly to the manual 10.3% index ratio.

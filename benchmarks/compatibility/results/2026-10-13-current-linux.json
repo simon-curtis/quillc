@@ -2,13 +2,13 @@
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
   "quillc": "/home/simon/git/quillc/target/release/quillc",
-  "quillc_source_revision": "8c79dda69dedb20bbcbbfddc50827743eda0c395",
-  "quillc_source_dirty": false,
-  "quillc_artifact_mtime": "2026-10-13T15:01:19.504067+00:00",
-  "quillc_sha256": "41ed8015acc28f1d5c13217bbc4189929dd1758b6686164ff3fef53c71d39184",
-  "passed": 18,
+  "quillc_source_revision": "612d6d64827db4213750879cd63ded4e4aba6f3e",
+  "quillc_source_dirty": true,
+  "quillc_artifact_mtime": "2026-10-13T15:08:59.089266+00:00",
+  "quillc_sha256": "42c062da53f5c578c1a468fd883bbb93b85e7eb1ad4fd561e27c3efda8485421",
+  "passed": 21,
   "total": 28,
-  "percent": 64.3,
+  "percent": 75.0,
   "results": [
     {
       "case": "hello-world",
@@ -195,20 +195,20 @@
     {
       "case": "diagnostic-type-mismatch",
       "kind": "diagnostic",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": false,
       "quill_accepted": false,
-      "reason": "diagnostic mismatch: quill_error_code_matches, quill_primary_message_matches, primary_span_matches",
+      "reason": "all diagnostic fields match",
       "rustc_status": 1,
       "quill_status": 1,
       "runtime_match": null,
       "diagnostic_checks": {
         "both_reject": true,
         "rustc_error_code_matches": true,
-        "quill_error_code_matches": false,
+        "quill_error_code_matches": true,
         "rustc_primary_message_matches": true,
-        "quill_primary_message_matches": false,
-        "primary_span_matches": false
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
       },
       "diagnostic_observed": {
         "rustc_code": "E0308",
@@ -217,12 +217,12 @@
           "line": 1,
           "column": 30
         },
-        "quill_code": null,
+        "quill_code": "E0308",
         "quill_primary_location": {
           "line": 1,
-          "column": 13
+          "column": 30
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-b0h90ydz/diagnostic-type-mismatch/main.rs:1:13: local binding has type `reference`, expected `u64` (Reference(StringSlice) vs Integer(\"u64\"))"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-np_b_tve/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -241,13 +241,13 @@
     {
       "case": "option-status-check",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: `.is_some()` currently requires a supported Option function call",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -339,7 +339,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-b0h90ydz/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-np_b_tve/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -349,13 +349,13 @@
     {
       "case": "vec-push-and-iteration",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: native Vec::push supports owned strings and named records with scalar, string, or collection fields",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -404,7 +404,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-b0h90ydz/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-b0h90ydz/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-b0h90ydz/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-b0h90ydz/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-np_b_tve/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-np_b_tve/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-np_b_tve/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-np_b_tve/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -446,10 +446,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 4,
-      "passed": 3,
-      "failed": [
-        "vec-push-and-iteration"
-      ]
+      "passed": 4,
+      "failed": []
     },
     {
       "id": "derive-implementations",
@@ -466,9 +464,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 2,
-      "passed": 0,
+      "passed": 1,
       "failed": [
-        "diagnostic-type-mismatch",
         "diagnostic-use-after-move"
       ]
     },
@@ -537,13 +534,11 @@
       "tracker_status": "available",
       "probed": true,
       "cases": 24,
-      "passed": 17,
+      "passed": 19,
       "failed": [
         "cargo-multiple-binary-targets",
-        "option-status-check",
         "derive-clone-debug-equality",
         "generic-trait-dispatch",
-        "vec-push-and-iteration",
         "panic-runtime",
         "cargo-build-script-cfg"
       ]
@@ -571,10 +566,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 1,
-      "passed": 0,
-      "failed": [
-        "option-status-check"
-      ]
+      "passed": 1,
+      "failed": []
     },
     {
       "id": "owned-strings",
@@ -589,10 +582,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 15,
-      "passed": 14,
-      "failed": [
-        "option-status-check"
-      ]
+      "passed": 15,
+      "failed": []
     },
     {
       "id": "rust-source-parsing",
@@ -653,10 +644,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 1,
-      "passed": 0,
-      "failed": [
-        "diagnostic-type-mismatch"
-      ]
+      "passed": 1,
+      "failed": []
     },
     {
       "id": "utf-8-string-literal-helper-calls",
@@ -671,10 +660,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 1,
-      "passed": 0,
-      "failed": [
-        "vec-push-and-iteration"
-      ]
+      "passed": 1,
+      "failed": []
     },
     {
       "id": "windows-output",
