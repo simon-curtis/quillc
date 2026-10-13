@@ -29,7 +29,7 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 ## Paired build measurements
 
 Five runs were collected on 2026-10-13 from a clean release build at revision
-`44120ba` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+`5ce2188` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
 logical CPUs. Both commands selected the same binary and eight-crate source
 dependency graph. The table reports medians. Cold runs cleared the Rust target
 and Quill parse/type-check/artifact caches, but retained the OS file cache.
@@ -44,19 +44,19 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.686 s | 5.699 s | 570.8 MiB |
-| `quillc cargo-build-subset` | Cold | 0.333 s | 1.809 s | 133.1 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.018969 s | 0.019616 s | 21.9 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001321 s | 0.001143 s | 21.9 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.287 s | 0.410 s | 227.7 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.084 s | 35.8 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.308 s | 0.431 s | 227.9 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.174 s | 52.1 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.814 s | 5.853 s | 568.5 MiB |
+| `quillc cargo-build-subset` | Cold | 0.344 s | 1.800 s | 132.5 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018889 s | 0.019331 s | 21.7 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001382 s | 0.001204 s | 21.7 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.295 s | 0.418 s | 230.6 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.082 s | 35.8 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.316 s | 0.448 s | 228.9 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.086 s | 0.177 s | 52.7 MiB |
 
-Quill's median wall-time ratios were 8.06× cold, 14.36× warm, 10.67× for the
-comment edit, and 3.70× for the semantic edit. Peak RSS was lower in the cold
+Quill's median wall-time ratios were 8.19× cold, 13.67× warm, 10.90× for the
+comment edit, and 3.68× for the semantic edit. Peak RSS was lower in the cold
 and both incremental states, and equal in the warm state. CPU-time ratios were
-3.15× cold, 17.16× warm, 4.88× for the comment edit, and 2.47× for the semantic edit. This run
+3.25× cold, 16.05× warm, 5.09× for the comment edit, and 2.53× for the semantic edit. This run
 clears the 3× wall-time gate in all four states on this fixture, but semantic
 CPU-time speedup remains below 3×. These results do not establish general Rust
 compiler performance.
@@ -85,16 +85,16 @@ and the earlier `3f16b03` run is retained in
 
 ## Generated binary runtime
 
-A separate 2026-10-13 run at compiler revision `44120ba` timed the resulting
+A separate 2026-10-13 run at compiler revision `5ce2188` timed the resulting
 executables: five warmups followed by 25 alternating launches per binary.
 Every invocation produced the same output. Wall time includes process startup.
 
 | Binary | Median wall time | Range | Median CPU time |
 |---|---:|---:|---:|
-| `rustc` | 1.016 ms | 0.827–1.147 ms | 0.843 ms |
-| Quill | 17.205 ms | 16.771–17.489 ms | 16.994 ms |
+| `rustc` | 0.954 ms | see raw samples | 0.796 ms |
+| Quill | 17.627 ms | see raw samples | 17.370 ms |
 
-For this workload, the Quill binary's median wall time was 16.9× the `rustc`
+For this workload, the Quill binary's median wall time was 18.5× the `rustc`
 binary's. These are debug-profile executables for one small synthetic fixture;
 the measurements include launch overhead and do not establish runtime
 performance for other programs. The raw per-launch samples are in
