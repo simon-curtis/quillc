@@ -29,7 +29,7 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 ## Paired build measurements
 
 Five runs were collected on 2026-10-13 from a clean release build at revision
-`13849a3` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+`3b7fe26` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
 logical CPUs. Both commands selected the same binary and eight-crate source
 dependency graph. The table reports medians. Cold runs cleared the Rust target
 and Quill parse/type-check/artifact caches, but retained the OS file cache.
@@ -44,22 +44,22 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.681 s | 5.648 s | 567.3 MiB |
-| `quillc cargo-build-subset` | Cold | 0.362 s | 1.956 s | 133.5 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.018759 s | 0.019225 s | 21.9 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001290 s | 0.001111 s | 21.9 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.285 s | 0.406 s | 227.4 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.025 s | 0.088 s | 35.7 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.305 s | 0.433 s | 233.5 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.178 s | 51.9 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.671 s | 5.639 s | 567.3 MiB |
+| `quillc cargo-build-subset` | Cold | 0.348 s | 1.782 s | 139.5 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018934 s | 0.019358 s | 21.8 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001361 s | 0.001155 s | 21.8 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.410 s | 230.0 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.082 s | 35.6 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.303 s | 0.430 s | 226.2 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.088 s | 0.180 s | 52.0 MiB |
 
-Quill's median wall-time ratios were 7.41× cold, 14.54× warm, 11.23× for the
-comment edit, and 3.62× for the semantic edit. Peak RSS was lower in three
-states and equal in the warm state. CPU-time ratios were 2.89× cold, 17.31×
-warm, 4.61× for the comment edit, and 2.43× for the semantic edit. This run
-clears the 3× wall-time gate in all four states on this fixture, but cold and
-semantic CPU-time ratios remain below 3×. These results do not establish
-general Rust compiler performance.
+Quill's median wall-time ratios were 7.67× cold, 13.91× warm, 10.83× for the
+comment edit, and 3.44× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. CPU-time ratios were 3.16× cold, 16.76×
+warm, 5.02× for the comment edit, and 2.39× for the semantic edit. This run
+clears the 3× wall-time gate in all four states on this fixture, but semantic
+CPU-time speedup remains below 3×. These results do not establish general Rust
+compiler performance.
 
 The warm cache-hit processes finish in about 1.35 ms for Quill. The former
 2 ms psutil polling loop perturbed those short runs; direct alternating samples
@@ -78,16 +78,16 @@ and the earlier `3f16b03` run is retained in
 
 ## Generated binary runtime
 
-A separate 2026-10-13 run at compiler revision `13849a3` timed the resulting
+A separate 2026-10-13 run at compiler revision `3b7fe26` timed the resulting
 executables: five warmups followed by 25 alternating launches per binary.
 Every invocation produced the same output. Wall time includes process startup.
 
 | Binary | Median wall time | Range | Median CPU time |
 |---|---:|---:|---:|
-| `rustc` | 1.018 ms | 0.831–1.271 ms | 0.844 ms |
-| Quill | 17.165 ms | 16.662–17.530 ms | 16.964 ms |
+| `rustc` | 1.016 ms | 0.822–1.174 ms | 0.822 ms |
+| Quill | 17.078 ms | 16.727–17.696 ms | 16.873 ms |
 
-For this workload, the Quill binary's median wall time was 16.9× the `rustc`
+For this workload, the Quill binary's median wall time was 16.8× the `rustc`
 binary's. These are debug-profile executables for one small synthetic fixture;
 the measurements include launch overhead and do not establish runtime
 performance for other programs. The raw per-launch samples are in
