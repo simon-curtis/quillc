@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [mutable-slice indexing run](results/2026-10-13-mut-slice-index-clean.json)
+passes 82/82 cases at clean revision `fc69255`. It checks runtime indexing
+through `&mut [u64]` and an out-of-bounds access with matching rustc panic
+output. Other mutable-slice operations remain incomplete. This curated pass
+rate is not an overall Rust compatibility percentage.
+
 The [indexed-slice if-condition run](results/2026-10-13-slice-if-index-clean.json)
 passes 80/80 cases at clean revision `8df05ff`. It checks both outcomes of an
 `if` whose condition indexes a borrowed slice, plus a matching runtime
