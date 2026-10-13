@@ -2564,15 +2564,40 @@ fn compile_parsed_sources(
             let source_fingerprints = target_source_fingerprints
                 .get(target)
                 .expect("every target has source fingerprints");
-            // The source fingerprints already cover every local declaration
-            // and body. Keep dependency interfaces here, but do not serialize
-            // a second copy of the target's derived function headers.
+            let function_headers = parse
+                .functions
+                .iter()
+                .map(|function| {
+                    (
+                        &function.name,
+                        &function.scope,
+                        &function.parameters,
+                        &function.return_type,
+                        &function.calls,
+                        &function.qualified_calls,
+                        (
+                            function.is_public,
+                            function.is_generic,
+                            &function.generic_parameters,
+                            &function.generic_copy_parameters,
+                            &function.generic_as_ref_str_parameters,
+                            &function.generic_add_parameters,
+                            function.generic_has_bounds,
+                            function.is_async,
+                            function.is_const,
+                            function.is_unsafe,
+                            function.has_abi,
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>();
             let mut object_hasher = blake3::Hasher::new();
             bincode::serialize_into(
                 HasherWriter(&mut object_hasher),
                 &(
                     &*target,
                     source_fingerprints,
+                    &function_headers,
                     &parse.structs,
                     &imports,
                     object_compiler_stamp.as_ref(),
