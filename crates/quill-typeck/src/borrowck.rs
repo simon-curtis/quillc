@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use super::{
-    SignatureIndex, StructSignature, Ty, infer_with_structs, matching_signatures,
+    BinaryOperator, SignatureIndex, StructSignature, Ty, infer_with_structs, is_copy_type, matching_signatures,
     method_signatures, type_from_syntax,
 };
 use quill_syntax::{
@@ -45,6 +45,7 @@ struct Loan {
     holder_projection: Vec<String>,
     parent: Option<String>,
     place: Place,
+    lifetimes: Vec<String>,
     mutable: bool,
     two_phase: bool,
     origin: Range<usize>,
@@ -88,7 +89,13 @@ impl State {
     fn replace_held_at(&mut self, root: &str, projection: &[String], loans: Vec<Loan>) {
         self.loans.retain(|loan| {
             loan.holder.as_deref() != Some(root)
-                || !loan.holder_projection.starts_with(projection)
+                || !loan
+                    .holder_projection
+                    .iter()
+                    .zip(projection)
+                    .all(|(held, assigned)| {
+                        held == assigned || held == "[*]" || assigned == "[*]"
+                    })
         });
         self.loans.extend(loans.into_iter().map(|mut loan| {
             loan.holder = Some(root.to_owned());
@@ -185,8 +192,7 @@ pub(super) fn check(
                 parameter.name.as_ref().map(|name| {
                     (
                         name.clone(),
-                        parameter.type_text.trim_start().starts_with("mut ")
-                            || parameter.type_text.trim_start().starts_with("&mut "),
+                        parameter.mutable,
                     )
                 })
             })
@@ -194,6 +200,7 @@ pub(super) fn check(
         signatures,
         struct_signatures,
         local_types: local_types.clone(),
+        expected_return_lifetimes: return_lifetime_contract(function),
     };
     let mut state = State::default();
     for parameter in &function.parameters {
@@ -220,12 +227,14 @@ pub(super) fn check(
                 root: format!("\0input:{name}"),
                 projection: Vec::new(),
             },
+            lifetimes: parameter_lifetimes(&parameter.type_text, name),
             mutable,
             two_phase: false,
             origin: parameter.span.clone(),
         });
     }
-    checker.expression(body, &mut state);
+    let returned_loans = checker.expression(body, &mut state);
+    checker.validate_return_lifetimes(&returned_loans);
     checker.diagnostics
 }
 
@@ -256,6 +265,7 @@ struct Checker<'a, 'b> {
     signatures: &'a SignatureIndex<'b>,
     struct_signatures: &'a [StructSignature],
     local_types: HashMap<String, Ty>,
+    expected_return_lifetimes: Option<Vec<String>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -276,6 +286,27 @@ impl Checker<'_, '_> {
         }
     }
 
+    fn validate_return_lifetimes(&mut self, loans: &[Loan]) {
+        for loan in loans {
+            if self.local_roots.contains(&loan.place.root) {
+                self.report(
+                    loan.origin.clone(),
+                    format!(
+                        "error[E0515]: cannot return reference to local variable `{}`",
+                        loan.place.root
+                    ),
+                );
+            } else if let Some(expected) = &self.expected_return_lifetimes
+                && !loan.lifetimes.iter().any(|lifetime| expected.contains(lifetime))
+            {
+                self.report(
+                    loan.origin.clone(),
+                    "error[E0621]: explicit lifetime required to return this reference",
+                );
+            }
+        }
+    }
+
     fn infer_local_type(&mut self, expression: &BodyExpr) -> Ty {
         let mut ignored = Vec::new();
         infer_with_structs(
@@ -286,6 +317,33 @@ impl Checker<'_, '_> {
             &Ty::Unknown,
             &mut ignored,
         )
+    }
+
+    fn check_move_access(&mut self, expression: &BodyExpr, state: &State) {
+        let ty = self.infer_local_type(expression);
+        if ty == Ty::Unknown
+            || matches!(ty, Ty::Reference(_, _))
+            || is_copy_type(&ty, self.struct_signatures)
+        {
+            return;
+        }
+        let Some((place, through)) = self.place(expression, state) else {
+            return;
+        };
+        if through.is_some() {
+            // The move checker diagnoses attempts to move a referent through
+            // a borrowed pointer; this check is for moving the owner itself.
+            return;
+        }
+        if state.loans.iter().any(|loan| loan.place.overlaps(&place)) {
+            self.report(
+                expression.span.clone(),
+                format!(
+                    "error[E0505]: cannot move out of `{}` because it is borrowed",
+                    place.root
+                ),
+            );
+        }
     }
 
     fn access(
@@ -404,11 +462,14 @@ impl Checker<'_, '_> {
         let mode = if matches!(
             method,
             "append"
+                | "as_mut_slice"
                 | "clear"
                 | "extend"
+                | "first_mut"
                 | "get_mut"
                 | "insert"
                 | "iter_mut"
+                | "last_mut"
                 | "pop"
                 | "push"
                 | "push_str"
@@ -426,6 +487,7 @@ impl Checker<'_, '_> {
             "as_str"
                 | "as_bytes"
                 | "as_ref"
+                | "as_slice"
                 | "iter"
                 | "keys"
                 | "values"
@@ -437,7 +499,24 @@ impl Checker<'_, '_> {
         } else {
             return None;
         };
-        let returns_receiver = matches!(method, "as_str" | "as_bytes" | "as_ref" | "get" | "first" | "last");
+        let returns_receiver = matches!(
+            method,
+            "as_str"
+                | "as_bytes"
+                | "as_ref"
+                | "as_slice"
+                | "get"
+                | "get_mut"
+                | "iter"
+                | "iter_mut"
+                | "keys"
+                | "values"
+                | "values_mut"
+                | "first"
+                | "first_mut"
+                | "last"
+                | "last_mut"
+        );
         Some((
             mode,
             if returns_receiver { vec![0] } else { Vec::new() },
@@ -485,6 +564,12 @@ impl Checker<'_, '_> {
             holder: None,
             holder_projection: Vec::new(),
             parent: through.map(str::to_owned),
+            lifetimes: through.map_or_else(Vec::new, |holder| {
+                state
+                    .for_holder(holder)
+                    .flat_map(|loan| loan.lifetimes.iter().cloned())
+                    .collect()
+            }),
             place,
             mutable,
             two_phase: false,
@@ -526,7 +611,7 @@ impl Checker<'_, '_> {
                 mutable,
                 expression: borrowed,
             } => {
-                let Some((place, through)) = self.place(borrowed, state) else {
+                let Some((place, through)) = self.place_for_borrow(borrowed, state) else {
                     return Vec::new();
                 };
                 if *mutable && !self.mutable_access_allowed(&place, through.as_deref(), state) {
@@ -550,6 +635,18 @@ impl Checker<'_, '_> {
             BodyExprKind::Parenthesized(inner) => self.expression(inner, state),
             BodyExprKind::Dereference(inner) => {
                 let aliases = self.expression_place_alias(inner, state);
+                if let Some(name) = simple_path(inner) {
+                    self.access(
+                        &Place {
+                            root: name,
+                            projection: Vec::new(),
+                        },
+                        false,
+                        None,
+                        state,
+                        expression.span.clone(),
+                    );
+                }
                 if aliases.is_empty() {
                     self.expression(inner, state);
                 }
@@ -589,19 +686,29 @@ impl Checker<'_, '_> {
                 returned_loans
             }
             BodyExprKind::Match { scrutinee, arms } => {
-                self.expression(scrutinee, state);
+                self.check_move_access(scrutinee, state);
+                let scrutinee_loans = self.expression(scrutinee, state);
                 let incoming = state.clone();
                 let mut joined = State::default();
                 let mut returned_loans = Vec::new();
                 for arm in arms {
                     let mut arm_state = incoming.clone();
-                    if let MatchPattern::Binding(name) = &arm.pattern {
-                        arm_state.replace_holder(name, Vec::new());
+                    let bindings = pattern_bindings(&arm.pattern);
+                    for name in &bindings {
+                        arm_state.replace_holder(name, scrutinee_loans.clone());
                     }
                     for loan in self.expression(&arm.body, &mut arm_state) {
                         if !returned_loans.contains(&loan) {
                             returned_loans.push(loan);
                         }
+                    }
+                    for name in bindings {
+                        arm_state
+                            .loans
+                            .retain(|loan| loan.holder.as_deref() != Some(&name));
+                        arm_state
+                            .loans
+                            .extend(incoming.all_for_holder(&name).cloned());
                     }
                     joined.merge(arm_state);
                 }
@@ -617,6 +724,12 @@ impl Checker<'_, '_> {
                     .find(|function| function.parameters.len() == arguments.len());
                 let mut argument_loans = Vec::with_capacity(arguments.len());
                 for (index, argument) in arguments.iter().enumerate() {
+                    if let Some(parameter) = signature
+                        .and_then(|function| function.parameters.get(index))
+                        && !parameter.type_text.trim_start().starts_with('&')
+                    {
+                        self.check_move_access(argument, state);
+                    }
                     let mut loans = self.expression(argument, state);
                     if let Some(parameter) = signature.and_then(|function| function.parameters.get(index))
                         && parameter.type_text.trim_start().starts_with('&')
@@ -658,6 +771,9 @@ impl Checker<'_, '_> {
             BodyExprKind::Tuple(arguments)
             | BodyExprKind::ArrayLiteral(arguments)
             | BodyExprKind::FixedArrayLiteral(arguments) => {
+                for argument in arguments {
+                    self.check_move_access(argument, state);
+                }
                 self.evaluate_projected(
                     arguments
                         .iter()
@@ -665,6 +781,10 @@ impl Checker<'_, '_> {
                         .map(|(index, expression)| (index.to_string(), expression)),
                     state,
                 )
+            }
+            BodyExprKind::ArrayRepeat { element, .. } => {
+                self.check_move_access(element, state);
+                self.expression(element, state)
             }
             BodyExprKind::MacroInvocation(macro_expression) => {
                 self.evaluate_many(macro_expression.arguments.iter(), state);
@@ -681,10 +801,12 @@ impl Checker<'_, '_> {
                 // A by-value receiver consumes its value; only reference
                 // receivers participate in alias checks.
                 if mode.0 == ReceiverMode::Value {
+                    self.check_move_access(receiver, state);
                     self.expression(receiver, state);
                     self.evaluate_many(arguments.iter(), state);
                     return Vec::new();
                 }
+                self.expression(receiver, state);
                 let Some((place, through)) = self.place(receiver, state) else {
                     self.expression(receiver, state);
                     self.evaluate_many(arguments.iter(), state);
@@ -710,6 +832,12 @@ impl Checker<'_, '_> {
                         holder: None,
                         holder_projection: Vec::new(),
                         parent: through.clone(),
+                        lifetimes: through.as_deref().map_or_else(Vec::new, |holder| {
+                            state
+                                .for_holder(holder)
+                                .flat_map(|loan| loan.lifetimes.iter().cloned())
+                                .collect()
+                        }),
                         place: place.clone(),
                         mutable: true,
                         two_phase: true,
@@ -733,6 +861,9 @@ impl Checker<'_, '_> {
                 for (index, argument) in arguments.iter().enumerate() {
                     let mut loans = self.expression(argument, state);
                     let parameter_type = mode.2.get(index);
+                    if parameter_type.is_some_and(|type_text| !type_text.trim_start().starts_with('&')) {
+                        self.check_move_access(argument, state);
+                    }
                     if let Some(parameter_type) = parameter_type
                         && parameter_type.trim_start().starts_with('&')
                     {
@@ -785,6 +916,9 @@ impl Checker<'_, '_> {
                 returned
             }
             BodyExprKind::StructLiteral { fields, .. } => {
+                for (_, value) in fields {
+                    self.check_move_access(value, state);
+                }
                 self.evaluate_projected(
                     fields.iter().map(|(field, value)| (field.clone(), value)),
                     state,
@@ -821,15 +955,35 @@ impl Checker<'_, '_> {
                 self.expression(index, state);
                 result
             }
-            BodyExprKind::Binary { left, right, .. } => {
+            BodyExprKind::Binary {
+                operator,
+                left,
+                right,
+            } => {
+                if matches!(
+                    operator,
+                    BinaryOperator::Add
+                        | BinaryOperator::Subtract
+                        | BinaryOperator::Multiply
+                        | BinaryOperator::Divide
+                        | BinaryOperator::Remainder
+                        | BinaryOperator::BitXor
+                ) {
+                    self.check_move_access(left, state);
+                    self.check_move_access(right, state);
+                }
                 self.expression(left, state);
                 self.expression(right, state);
                 Vec::new()
             }
             BodyExprKind::Cast { expression, .. }
             | BodyExprKind::Negate(expression)
-            | BodyExprKind::Not(expression)
-            | BodyExprKind::Try(expression) => {
+            | BodyExprKind::Not(expression) => {
+                self.expression(expression, state);
+                Vec::new()
+            }
+            BodyExprKind::Try(expression) => {
+                self.check_move_access(expression, state);
                 self.expression(expression, state);
                 Vec::new()
             }
@@ -884,6 +1038,7 @@ impl Checker<'_, '_> {
             }
             BodyExprKind::Return(value) => {
                 if let Some(value) = value {
+                    self.check_move_access(value, state);
                     for loan in self.expression(value, state) {
                         if self.local_roots.contains(&loan.place.root) {
                             self.report(
@@ -892,6 +1047,13 @@ impl Checker<'_, '_> {
                                     "error[E0515]: cannot return reference to local variable `{}`",
                                     loan.place.root
                                 ),
+                            );
+                        } else if let Some(expected) = &self.expected_return_lifetimes
+                            && !loan.lifetimes.iter().any(|lifetime| expected.contains(lifetime))
+                        {
+                            self.report(
+                                loan.origin.clone(),
+                                "error[E0621]: explicit lifetime required to return this reference",
                             );
                         }
                     }
@@ -916,18 +1078,21 @@ impl Checker<'_, '_> {
         let original_types = self.local_types.clone();
         let mut declarations = HashSet::new();
         for (index, statement) in statements.iter().enumerate() {
-            let current = statement_names(statement);
+            let current = statement_live_places(statement);
             let mut future = HashSet::new();
             for next in &statements[index + 1..] {
-                statement_names_into(next, &mut future);
+                collect_live_statement(next, &mut future);
             }
             if let Some(tail) = tail {
-                expression_names(tail, &mut future);
+                collect_live_expression(tail, &mut future);
             }
             state.loans.retain(|loan| {
-                loan.holder
-                    .as_ref()
-                    .is_none_or(|holder| current.contains(holder) || future.contains(holder))
+                loan.holder.as_ref().is_none_or(|holder| {
+                    current
+                        .iter()
+                        .chain(future.iter())
+                        .any(|place| holder_projection_live(holder, &loan.holder_projection, place))
+                })
             });
             self.statement(statement, state, &mut declarations);
         }
@@ -1063,10 +1228,26 @@ impl Checker<'_, '_> {
                     .map(|type_text| type_from_syntax(type_text, self.struct_signatures))
                     .or_else(|| initializer.as_ref().map(|initializer| self.infer_local_type(initializer)))
                     .unwrap_or(Ty::Unknown);
+                if let Some(name) = name
+                    && (declarations.contains(name) || self.mutable_locals.contains_key(name))
+                {
+                    let mut initializer_names = HashSet::new();
+                    if let Some(initializer) = initializer {
+                        expression_names(initializer, &mut initializer_names);
+                    }
+                    if !initializer_names.contains(name) {
+                        state
+                            .loans
+                            .retain(|loan| loan.holder.as_deref() != Some(name));
+                    }
+                }
                 let moved_reference = initializer
                     .as_ref()
                     .and_then(simple_path)
                     .filter(|source| state.for_holder(source).any(|loan| loan.mutable));
+                if let Some(initializer) = initializer {
+                    self.check_move_access(initializer, state);
+                }
                 let loans = initializer
                     .as_ref()
                     .map_or_else(Vec::new, |initializer| self.expression(initializer, state));
@@ -1088,6 +1269,7 @@ impl Checker<'_, '_> {
                 names, initializer, ..
             } => {
                 let initializer_type = self.infer_local_type(initializer);
+                self.check_move_access(initializer, state);
                 self.expression(initializer, state);
                 for (index, name) in names.iter().enumerate() {
                     declarations.insert(name.clone());
@@ -1120,9 +1302,22 @@ impl Checker<'_, '_> {
                             .retain(|loan| loan.holder.as_deref() != Some(name));
                     }
                 }
+                self.check_move_access(value, state);
                 let aliases = self.expression(value, state);
                 let assignment = self.assignment_place(name, state);
                 if let Some((place, through)) = assignment.as_ref() {
+                    if let Some(holder) = through {
+                        self.access(
+                            &Place {
+                                root: holder.clone(),
+                                projection: Vec::new(),
+                            },
+                            true,
+                            None,
+                            state,
+                            span.clone(),
+                        );
+                    }
                     self.access(place, true, through.as_deref(), state, span.clone());
                 }
                 if is_direct_binding(name) {
@@ -1134,7 +1329,7 @@ impl Checker<'_, '_> {
                                 .retain(|loan| loan.holder.as_deref() != Some(&source));
                         }
                     }
-                } else if let Some((place, None)) = assignment
+                } else if let Some((place, _)) = assignment
                     && !place.projection.is_empty()
                     && !matches!(self.local_types.get(&place.root), Some(Ty::Reference(_, _)))
                 {
@@ -1178,18 +1373,86 @@ impl Checker<'_, '_> {
                 names,
                 iterator,
                 body,
+                span,
                 ..
             } => {
-                self.expression(iterator, state);
+                let original = state.clone();
+                let original_mutability = self.mutable_locals.clone();
+                let original_types = self.local_types.clone();
+                let iterator_type = self.infer_local_type(iterator);
+                let (item_type, borrowed_item) = match &iterator_type {
+                    Ty::Reference(inner, _) => match inner.as_ref() {
+                        Ty::Slice(element) | Ty::Vector(element) => {
+                            (Some((**element).clone()), true)
+                        }
+                        _ => (None, false),
+                    },
+                    Ty::Slice(element) | Ty::Vector(element) => {
+                        (Some((**element).clone()), false)
+                    }
+                    Ty::Iterator(element) => (Some((**element).clone()), false),
+                    _ => (None, false),
+                };
+                self.check_move_access(iterator, state);
+                let mut iterator_loans = self.expression(iterator, state);
+                let iterator_holder = format!("\0iterator:{}", span.start);
+                for loan in &mut iterator_loans {
+                    loan.holder = Some(iterator_holder.clone());
+                    loan.holder_projection.clear();
+                    state.loans.push(loan.clone());
+                }
                 declarations.extend(names.iter().cloned());
-                self.mutable_locals
-                    .extend(names.iter().cloned().map(|name| (name, false)));
-                for name in names {
-                    self.local_types.insert(name.clone(), Ty::Unknown);
+                let binding_types = match &item_type {
+                    Some(Ty::Tuple(fields)) if fields.len() == names.len() => fields.clone(),
+                    Some(item) if names.len() == 1 => vec![item.clone()],
+                    _ => vec![Ty::Unknown; names.len()],
+                };
+                for (index, name) in names.iter().enumerate() {
+                    let mut binding_type = binding_types[index].clone();
+                    let has_reference_loan = borrowed_item
+                        || matches!(binding_type, Ty::Reference(_, _));
+                    if borrowed_item {
+                        binding_type = Ty::Reference(Box::new(binding_type), false);
+                    }
+                    self.mutable_locals.insert(name.clone(), false);
+                    self.local_types.insert(name.clone(), binding_type);
+                    let mut item_loans = Vec::new();
+                    if has_reference_loan {
+                        for iterator_loan in &iterator_loans {
+                            let mut item_loan = iterator_loan.clone();
+                            item_loan.holder = None;
+                            item_loan.holder_projection.clear();
+                            item_loan.parent = Some(iterator_holder.clone());
+                            item_loan.place.projection.push("[*]".to_owned());
+                            if names.len() > 1 {
+                                item_loan.place.projection.push(index.to_string());
+                            }
+                            item_loans.push(item_loan);
+                        }
+                    }
+                    state.replace_holder(name, item_loans);
                 }
                 *state = self.loop_fixed_point(state, |checker, loop_state| {
                     checker.expression(body, loop_state);
                 });
+                for name in names {
+                    for loan in state.loans.iter().filter(|loan| {
+                        loan.place.root == *name
+                            && loan.holder.as_deref().is_some_and(|holder| !names.contains(&holder.to_owned()))
+                    }) {
+                        self.report(
+                            loan.origin.clone(),
+                            format!("error[E0597]: `{name}` does not live long enough"),
+                        );
+                    }
+                    state
+                        .loans
+                        .retain(|loan| loan.holder.as_deref() != Some(name));
+                    state.loans.extend(original.all_for_holder(name).cloned());
+                }
+                state.loans.retain(|loan| loan.holder.as_deref() != Some(&iterator_holder));
+                self.mutable_locals = original_mutability;
+                self.local_types = original_types;
             }
             BodyStatement::MacroInvocation { arguments, .. } => {
                 for argument in arguments {
@@ -1205,7 +1468,9 @@ impl Checker<'_, '_> {
     fn place(&self, expression: &BodyExpr, state: &State) -> Option<(Place, Option<String>)> {
         match &expression.kind {
             BodyExprKind::Path(name) => {
-                if let Some(loan) = state.for_holder(name).next() {
+                if matches!(self.local_types.get(name), Some(Ty::Reference(_, _)))
+                    && let Some(loan) = state.for_holder(name).next()
+                {
                     Some((loan.place.clone(), Some(name.clone())))
                 } else {
                     Some((
@@ -1236,6 +1501,24 @@ impl Checker<'_, '_> {
                     .map(|loan| (loan.place, loan.holder))
             }
             _ => None,
+        }
+    }
+
+    fn place_for_borrow(
+        &self,
+        expression: &BodyExpr,
+        state: &State,
+    ) -> Option<(Place, Option<String>)> {
+        match &expression.kind {
+            BodyExprKind::Path(name) => Some((
+                Place {
+                    root: name.clone(),
+                    projection: Vec::new(),
+                },
+                None,
+            )),
+            BodyExprKind::Parenthesized(inner) => self.place_for_borrow(inner, state),
+            _ => self.place(expression, state),
         }
     }
 
@@ -1322,12 +1605,55 @@ fn named_lifetimes(text: &str) -> HashSet<String> {
             continue;
         }
         let lifetime = &rest[..length];
-        if lifetime != "static" && lifetime != "_" {
+        if lifetime != "_" {
             lifetimes.insert(lifetime.to_owned());
         }
         rest = &rest[length..];
     }
     lifetimes
+}
+
+fn parameter_lifetimes(type_text: &str, name: &str) -> Vec<String> {
+    let mut lifetimes = named_lifetimes(type_text).into_iter().collect::<Vec<_>>();
+    if lifetimes.is_empty() {
+        lifetimes.push(format!("\0input:{name}"));
+    }
+    lifetimes.sort();
+    lifetimes
+}
+
+fn return_lifetime_contract(function: &FunctionItem) -> Option<Vec<String>> {
+    let return_type = function.return_type.as_deref()?;
+    let mut lifetimes = named_lifetimes(return_type).into_iter().collect::<Vec<_>>();
+    if !lifetimes.is_empty() {
+        lifetimes.sort();
+        return Some(lifetimes);
+    }
+    if !return_type.contains('&') {
+        return None;
+    }
+    let reference_parameters = function
+        .parameters
+        .iter()
+        .filter(|parameter| parameter.type_text.trim_start().starts_with('&'))
+        .collect::<Vec<_>>();
+    if function.scope.iter().any(|scope| scope.starts_with("impl:"))
+        && reference_parameters
+            .first()
+            .is_some_and(|parameter| parameter.name.as_deref() == Some("self"))
+    {
+        return Some(parameter_lifetimes(
+            &reference_parameters[0].type_text,
+            "self",
+        ));
+    }
+    if reference_parameters.len() == 1 {
+        return Some(parameter_lifetimes(
+            &reference_parameters[0].type_text,
+            reference_parameters[0].name.as_deref().unwrap_or("_"),
+        ));
+    }
+    Some(Vec::new())
 }
 
 fn is_mutable_reference_type(type_text: &str) -> bool {
@@ -1453,6 +1779,7 @@ fn expression_names(expression: &BodyExpr, names: &mut HashSet<String>) {
                 expression_names(argument, names);
             }
         }
+        BodyExprKind::ArrayRepeat { element, .. } => expression_names(element, names),
         BodyExprKind::MethodCall {
             receiver,
             arguments,
@@ -1537,10 +1864,208 @@ fn expression_names(expression: &BodyExpr, names: &mut HashSet<String>) {
     }
 }
 
-fn statement_names(statement: &BodyStatement) -> HashSet<String> {
-    let mut names = HashSet::new();
-    statement_names_into(statement, &mut names);
-    names
+fn statement_live_places(statement: &BodyStatement) -> HashSet<Place> {
+    let mut places = HashSet::new();
+    collect_live_statement(statement, &mut places);
+    places
+}
+
+fn holder_projection_live(holder: &str, projection: &[String], live: &Place) -> bool {
+    holder == live.root
+        && projection
+            .iter()
+            .zip(&live.projection)
+            .all(|(held, used)| held == used || held == "[*]" || used == "[*]")
+}
+
+fn collect_live_statement(statement: &BodyStatement, places: &mut HashSet<Place>) {
+    match statement {
+        BodyStatement::Let { initializer, .. } => {
+            if let Some(initializer) = initializer {
+                collect_live_expression(initializer, places);
+            }
+        }
+        BodyStatement::LetTuple { initializer, .. } => {
+            collect_live_expression(initializer, places);
+        }
+        BodyStatement::Assign { name, value, .. } => {
+            if let Some((place, _)) = place_from_text(name) {
+                places.insert(place);
+            }
+            collect_live_expression(value, places);
+        }
+        BodyStatement::While { condition, body, .. } => {
+            collect_live_expression(condition, places);
+            collect_live_expression(body, places);
+        }
+        BodyStatement::Loop { body, .. } => collect_live_expression(body, places),
+        BodyStatement::ForRange {
+            start,
+            end,
+            body,
+            ..
+        } => {
+            collect_live_expression(start, places);
+            collect_live_expression(end, places);
+            collect_live_expression(body, places);
+        }
+        BodyStatement::ForEach { iterator, body, .. } => {
+            collect_live_expression(iterator, places);
+            collect_live_expression(body, places);
+        }
+        BodyStatement::MacroInvocation {
+            arguments,
+            format_string,
+            ..
+        } => {
+            for argument in arguments {
+                collect_live_expression(argument, places);
+            }
+            if let Some(format) = format_string {
+                let mut names = HashSet::new();
+                format_capture_names(format, &mut names);
+                places.extend(names.into_iter().map(|root| Place {
+                    root,
+                    projection: Vec::new(),
+                }));
+            }
+        }
+        BodyStatement::Expression { expression, .. } => {
+            collect_live_expression(expression, places);
+        }
+        BodyStatement::Break { .. }
+        | BodyStatement::Continue { .. }
+        | BodyStatement::Unsupported => {}
+    }
+}
+
+fn collect_live_expression(expression: &BodyExpr, places: &mut HashSet<Place>) {
+    match &expression.kind {
+        BodyExprKind::Path(name) => {
+            places.insert(Place {
+                root: name.clone(),
+                projection: Vec::new(),
+            });
+        }
+        BodyExprKind::FieldAccess { .. } | BodyExprKind::Index { .. }
+            if place_from_expression(expression).is_some() =>
+        {
+            let place = place_from_expression(expression).expect("checked place");
+            // A partial aggregate use keeps the aggregate temporary live as a
+            // whole under rustc's current MIR liveness rules. The projection
+            // is still retained for reads and move tracking.
+            places.insert(Place {
+                root: place.root.clone(),
+                projection: Vec::new(),
+            });
+            places.insert(place);
+            if let BodyExprKind::Index { index, .. } = &expression.kind {
+                collect_live_expression(index, places);
+            }
+        }
+        BodyExprKind::Reference { expression, .. }
+        | BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Dereference(expression)
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression) => {
+            collect_live_expression(expression, places);
+        }
+        BodyExprKind::Call {
+            callee, arguments, ..
+        } => {
+            if !callee.contains("::") {
+                places.insert(Place {
+                    root: callee.clone(),
+                    projection: Vec::new(),
+                });
+            }
+            for argument in arguments {
+                collect_live_expression(argument, places);
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            collect_live_expression(receiver, places);
+            for argument in arguments {
+                collect_live_expression(argument, places);
+            }
+        }
+        BodyExprKind::Closure { body, .. } => collect_live_expression(body, places),
+        BodyExprKind::Tuple(expressions)
+        | BodyExprKind::ArrayLiteral(expressions)
+        | BodyExprKind::FixedArrayLiteral(expressions) => {
+            for expression in expressions {
+                collect_live_expression(expression, places);
+            }
+        }
+        BodyExprKind::ArrayRepeat { element, .. } => collect_live_expression(element, places),
+        BodyExprKind::StructLiteral { fields, .. } => {
+            for (_, value) in fields {
+                collect_live_expression(value, places);
+            }
+        }
+        BodyExprKind::FieldAccess { base, .. } => collect_live_expression(base, places),
+        BodyExprKind::Index { base, index } => {
+            collect_live_expression(base, places);
+            collect_live_expression(index, places);
+        }
+        BodyExprKind::Binary { left, right, .. } => {
+            collect_live_expression(left, places);
+            collect_live_expression(right, places);
+        }
+        BodyExprKind::Block { statements, tail } => {
+            for statement in statements {
+                collect_live_statement(statement, places);
+            }
+            if let Some(tail) = tail {
+                collect_live_expression(tail, places);
+            }
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_live_expression(condition, places);
+            collect_live_expression(then_branch, places);
+            if let Some(otherwise) = else_branch {
+                collect_live_expression(otherwise, places);
+            }
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            collect_live_expression(scrutinee, places);
+            for arm in arms {
+                collect_live_expression(&arm.body, places);
+            }
+        }
+        BodyExprKind::Return(value) => {
+            if let Some(value) = value {
+                collect_live_expression(value, places);
+            }
+        }
+        BodyExprKind::MacroInvocation(macro_expression) => {
+            for argument in &macro_expression.arguments {
+                collect_live_expression(argument, places);
+            }
+            if let Some(format) = &macro_expression.format_string {
+                let mut names = HashSet::new();
+                format_capture_names(format, &mut names);
+                places.extend(names.into_iter().map(|root| Place {
+                    root,
+                    projection: Vec::new(),
+                }));
+            }
+        }
+        BodyExprKind::Unit
+        | BodyExprKind::Literal(_)
+        | BodyExprKind::EmptySliceReference
+        | BodyExprKind::Unsupported => {}
+    }
 }
 
 fn statement_names_into(statement: &BodyStatement, names: &mut HashSet<String>) {
@@ -1645,6 +2170,24 @@ fn format_capture_names(format: &str, names: &mut HashSet<String>) {
     }
 }
 
+fn pattern_bindings(pattern: &MatchPattern) -> Vec<String> {
+    match pattern {
+        MatchPattern::Binding(name) => vec![name.clone()],
+        MatchPattern::Or(patterns) => {
+            let mut bindings = Vec::new();
+            for pattern in patterns {
+                for name in pattern_bindings(pattern) {
+                    if !bindings.contains(&name) {
+                        bindings.push(name);
+                    }
+                }
+            }
+            bindings
+        }
+        _ => Vec::new(),
+    }
+}
+
 fn collect_bindings(expression: &BodyExpr, bindings: &mut HashSet<String>) {
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
@@ -1716,6 +2259,7 @@ fn collect_bindings(expression: &BodyExpr, bindings: &mut HashSet<String>) {
         | BodyExprKind::Not(expression)
         | BodyExprKind::Try(expression)
         | BodyExprKind::Parenthesized(expression) => collect_bindings(expression, bindings),
+        BodyExprKind::ArrayRepeat { element, .. } => collect_bindings(element, bindings),
         BodyExprKind::Call { arguments, .. }
         | BodyExprKind::Tuple(arguments)
         | BodyExprKind::ArrayLiteral(arguments)
@@ -1888,6 +2432,7 @@ fn collect_mutated_names(expression: &BodyExpr, mutated: &mut HashSet<String>) {
         | BodyExprKind::Not(expression)
         | BodyExprKind::Try(expression)
         | BodyExprKind::Parenthesized(expression) => collect_mutated_names(expression, mutated),
+        BodyExprKind::ArrayRepeat { element, .. } => collect_mutated_names(element, mutated),
         BodyExprKind::Call { arguments, .. }
         | BodyExprKind::Tuple(arguments)
         | BodyExprKind::ArrayLiteral(arguments)

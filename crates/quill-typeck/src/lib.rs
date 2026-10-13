@@ -73,6 +73,7 @@ enum Ty {
     Into(Box<Ty>),
     Tuple(Vec<Ty>),
     Reference(Box<Ty>, bool),
+    RawPointer(Box<Ty>, bool),
     Option(Box<Ty>),
     Result(Box<Ty>, Box<Ty>),
     Named(String),
@@ -125,6 +126,7 @@ impl Ty {
             Self::Into(_) => "Into",
             Self::Tuple(_) => "tuple",
             Self::Reference(_, _) => "reference",
+            Self::RawPointer(_, _) => "raw pointer",
             Self::Option(_) => "Option",
             Self::Result(_, _) => "Result",
             Self::Named(name) if name.starts_with("\0quill_generic:") => "generic parameter",
@@ -286,6 +288,18 @@ fn method_owner(function: &FunctionItem) -> Option<&str> {
                 scope
                     .strip_prefix("impl:")
                     .or_else(|| scope.strip_prefix("trait:"))
+            })
+    })
+}
+
+fn function_has_trait_owner(function: &FunctionItem, owner: &str) -> bool {
+    function.scope.iter().any(|scope| {
+        scope
+            .strip_prefix("trait:")
+            .or_else(|| scope.strip_prefix("traitimpl:"))
+            .is_some_and(|candidate| {
+                candidate == owner
+                    || candidate.rsplit("::").next() == Some(owner.rsplit("::").next().unwrap_or(owner))
             })
     })
 }
@@ -491,6 +505,15 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
         let referent = referent.strip_prefix("mut ").unwrap_or(referent);
         return Ty::Reference(Box::new(type_from_syntax(referent, structs)), mutable);
     }
+    if let Some(pointer) = text.strip_prefix('*') {
+        let pointer = pointer.trim_start();
+        let mutable = pointer.starts_with("mut ");
+        let referent = pointer
+            .strip_prefix("mut ")
+            .or_else(|| pointer.strip_prefix("const "))
+            .unwrap_or(pointer);
+        return Ty::RawPointer(Box::new(type_from_syntax(referent, structs)), mutable);
+    }
     if let Some((ok_type, err_type)) = generic_pair(text, "Result") {
         return Ty::Result(
             Box::new(type_from_syntax(ok_type, structs)),
@@ -686,6 +709,7 @@ fn is_cloneable(ty: &Ty, structs: &[StructSignature]) -> bool {
         | Ty::StringSlice
         | Ty::Unknown => true,
         Ty::Reference(_, mutable) => !*mutable,
+        Ty::RawPointer(_, _) => true,
         Ty::Vector(item) | Ty::Slice(item) | Ty::Array(item, _) => is_cloneable(item, structs),
         Ty::Map(key, value) => is_cloneable(key, structs) && is_cloneable(value, structs),
         Ty::Tuple(items) => items.iter().all(|item| is_cloneable(item, structs)),
@@ -889,6 +913,7 @@ fn check_selected_functions<'a>(
                 .map(|type_text| quill_syntax::ParameterItem {
                     name: None,
                     type_text: type_text.clone(),
+                    mutable: false,
                     span: 0..0,
                 })
                 .collect(),
@@ -1040,6 +1065,16 @@ fn check_one_function(
     };
     let function_structs = function_structs.as_ref();
     let mut locals = HashMap::new();
+    if let Some(trait_owner) = function.scope.iter().find_map(|scope| {
+        scope
+            .strip_prefix("trait:")
+            .or_else(|| scope.strip_prefix("traitimpl:"))
+    }) {
+        locals.insert(
+            "\0quill_trait_context".to_owned(),
+            Ty::Named(trait_owner.to_owned()),
+        );
+    }
     for parameter in &function.parameters {
         if let Some(name) = &parameter.name {
             locals.insert(
@@ -1055,8 +1090,7 @@ fn check_one_function(
             parameter.name.as_ref().map(|name| {
                 (
                     name.clone(),
-                    parameter.type_text.trim_start().starts_with("&mut ")
-                        || parameter.type_text.trim_start().starts_with("mut "),
+                    parameter.mutable,
                 )
             })
         })
@@ -1097,7 +1131,7 @@ fn check_one_function(
             }),
     );
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
-    check_loop_control(body, 0, &mut diagnostics);
+    check_loop_control(body, &mut Vec::new(), &mut diagnostics);
     if strict_calls {
         let mut names: HashSet<String> = function
             .parameters
@@ -1141,6 +1175,727 @@ fn check_move_uses(
     );
 }
 
+/// Propagate moves around a loop until the header state includes every move
+/// that can flow back from its body. Move state only grows over a finite set
+/// of places, so the union reaches a fixed point without an iteration limit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum MoveLoopExit {
+    BackEdge,
+    Break(Option<String>),
+    Continue(Option<String>),
+    Return,
+}
+
+fn move_loop_fixed_point(
+    incoming: &HashSet<String>,
+    mut transfer: impl FnMut(&mut HashSet<String>) -> MoveLoopExit,
+) -> (HashSet<String>, HashSet<String>) {
+    let mut header = incoming.clone();
+    let mut break_exits = HashSet::new();
+    loop {
+        let mut back_edge = header.clone();
+        match transfer(&mut back_edge) {
+            MoveLoopExit::Break(_) => {
+                break_exits.extend(back_edge.iter().cloned());
+                back_edge.clone_from(&header);
+            }
+            MoveLoopExit::Continue(_) => {}
+            MoveLoopExit::Return => back_edge.clone_from(&header),
+            MoveLoopExit::BackEdge => {}
+        }
+        let mut next = incoming.clone();
+        next.extend(back_edge);
+        if next == header {
+            return (header, break_exits);
+        }
+        header = next;
+    }
+}
+
+fn push_move_diagnostic(
+    diagnostics: &mut Vec<TypeDiagnostic>,
+    span: Range<usize>,
+    message: impl Into<String>,
+) {
+    let diagnostic = TypeDiagnostic {
+        span,
+        message: message.into(),
+    };
+    if !diagnostics.contains(&diagnostic) {
+        diagnostics.push(diagnostic);
+    }
+}
+
+fn move_match_bindings(pattern: &MatchPattern) -> Vec<String> {
+    match pattern {
+        MatchPattern::Binding(name) => vec![name.clone()],
+        MatchPattern::Or(patterns) => patterns
+            .iter()
+            .flat_map(move_match_bindings)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum LabeledLoopControl {
+    Break,
+    Continue,
+}
+
+fn contains_labeled_control(
+    expression: &BodyExpr,
+    label: &str,
+    control: LabeledLoopControl,
+) -> bool {
+    fn in_statement(
+        statement: &BodyStatement,
+        label: &str,
+        control: LabeledLoopControl,
+    ) -> bool {
+        match statement {
+            BodyStatement::Break {
+                label: Some(target), ..
+            } if matches!(control, LabeledLoopControl::Break) => target == label,
+            BodyStatement::Continue {
+                label: Some(target), ..
+            } if matches!(control, LabeledLoopControl::Continue) => target == label,
+            BodyStatement::While {
+                label: nested_label,
+                condition,
+                body,
+                ..
+            } => {
+                nested_label.as_deref() != Some(label)
+                    && (contains_labeled_control(condition, label, control)
+                        || contains_labeled_control(body, label, control))
+            }
+            BodyStatement::Loop {
+                label: nested_label,
+                body,
+                ..
+            } => {
+                nested_label.as_deref() != Some(label)
+                    && contains_labeled_control(body, label, control)
+            }
+            BodyStatement::ForRange {
+                label: nested_label,
+                start,
+                end,
+                body,
+                ..
+            } => {
+                nested_label.as_deref() != Some(label)
+                    && (contains_labeled_control(start, label, control)
+                        || contains_labeled_control(end, label, control)
+                        || contains_labeled_control(body, label, control))
+            }
+            BodyStatement::ForEach {
+                label: nested_label,
+                iterator,
+                body,
+                ..
+            } => {
+                nested_label.as_deref() != Some(label)
+                    && (contains_labeled_control(iterator, label, control)
+                        || contains_labeled_control(body, label, control))
+            }
+            BodyStatement::Let {
+                initializer: Some(value),
+                ..
+            }
+            | BodyStatement::LetTuple {
+                initializer: value,
+                ..
+            }
+            | BodyStatement::Assign { value, .. } => {
+                contains_labeled_control(value, label, control)
+            }
+            BodyStatement::Expression { expression, .. } => {
+                contains_labeled_control(expression, label, control)
+            }
+            BodyStatement::MacroInvocation { arguments, .. } => arguments
+                .iter()
+                .any(|argument| contains_labeled_control(argument, label, control)),
+            _ => false,
+        }
+    }
+    match &expression.kind {
+        BodyExprKind::Block { statements, tail } => {
+            statements
+                .iter()
+                .any(|statement| in_statement(statement, label, control))
+                || tail
+                    .as_deref()
+                    .is_some_and(|tail| contains_labeled_control(tail, label, control))
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            contains_labeled_control(condition, label, control)
+                || contains_labeled_control(then_branch, label, control)
+                || else_branch
+                    .as_deref()
+                    .is_some_and(|branch| contains_labeled_control(branch, label, control))
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            contains_labeled_control(scrutinee, label, control)
+                || arms
+                    .iter()
+                    .any(|arm| contains_labeled_control(&arm.body, label, control))
+        }
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => arguments
+            .iter()
+            .any(|argument| contains_labeled_control(argument, label, control)),
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            contains_labeled_control(receiver, label, control)
+                || arguments
+                    .iter()
+                    .any(|argument| contains_labeled_control(argument, label, control))
+        }
+        BodyExprKind::Return(Some(value))
+        | BodyExprKind::Try(value)
+        | BodyExprKind::Parenthesized(value)
+        | BodyExprKind::Reference {
+            expression: value, ..
+        }
+        | BodyExprKind::Dereference(value)
+        | BodyExprKind::Negate(value)
+        | BodyExprKind::Not(value)
+        | BodyExprKind::Cast {
+            expression: value, ..
+        } => contains_labeled_control(value, label, control),
+        BodyExprKind::Binary { left, right, .. } => {
+            contains_labeled_control(left, label, control)
+                || contains_labeled_control(right, label, control)
+        }
+        BodyExprKind::FieldAccess { base, .. } => {
+            contains_labeled_control(base, label, control)
+        }
+        BodyExprKind::Index { base, index } => {
+            contains_labeled_control(base, label, control)
+                || contains_labeled_control(index, label, control)
+        }
+        BodyExprKind::StructLiteral { fields, .. } => fields
+            .iter()
+            .any(|(_, value)| contains_labeled_control(value, label, control)),
+        BodyExprKind::Closure { .. } => false,
+        _ => false,
+    }
+}
+
+/// Analyze loop-body paths through direct exits and top-level `if`/`match`
+/// splits. Terminating branches contribute exit states; only continuing paths
+/// flow into the loop back edge.
+fn check_move_loop_transfer(
+    expression: &BodyExpr,
+    current_label: Option<&str>,
+    parent_label: Option<&str>,
+    signatures: &SignatureIndex<'_>,
+    struct_signatures: &[StructSignature],
+    locals: &mut HashMap<String, Ty>,
+    moved: &mut HashSet<String>,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+    branch_breaks: &mut Vec<HashSet<String>>,
+) -> MoveLoopExit {
+    let BodyExprKind::Block {
+        statements: block_statements,
+        tail,
+    } = &expression.kind
+    else {
+        check_move_expression(
+            expression,
+            false,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        );
+        return MoveLoopExit::BackEdge;
+    };
+    let expanded_statements;
+    let statements: &[BodyStatement] = if let Some(tail) = tail {
+        expanded_statements = {
+            let mut statements = block_statements.clone();
+            statements.push(BodyStatement::Expression {
+                expression: tail.as_ref().clone(),
+                has_semicolon: false,
+            });
+            statements
+        };
+        &expanded_statements
+    } else {
+        block_statements
+    };
+    if let Some(current_label) = current_label {
+        let nested_loop = statements.iter().enumerate().find_map(|(index, statement)| {
+            let BodyStatement::Loop {
+                label: nested_label,
+                body,
+                ..
+            } = statement
+            else {
+                return None;
+            };
+            let prefix_is_scope_safe = statements[..index].iter().all(|statement| {
+                !matches!(
+                    statement,
+                    BodyStatement::Let { .. }
+                        | BodyStatement::LetTuple { .. }
+                        | BodyStatement::ForRange { .. }
+                        | BodyStatement::ForEach { .. }
+                        | BodyStatement::Break { .. }
+                        | BodyStatement::Continue { .. }
+                )
+            });
+            (prefix_is_scope_safe
+                && (contains_labeled_control(
+                    body,
+                    current_label,
+                    LabeledLoopControl::Break,
+                ) || contains_labeled_control(
+                    body,
+                    current_label,
+                    LabeledLoopControl::Continue,
+                )))
+                .then_some((index, nested_label.as_deref(), body))
+        });
+        if let Some((nested_index, nested_label, nested_body)) = nested_loop {
+            if nested_index > 0 {
+                let prefix = BodyExpr {
+                    kind: BodyExprKind::Block {
+                        statements: statements[..nested_index].to_vec(),
+                        tail: None,
+                    },
+                    span: expression.span.clone(),
+                };
+                check_move_expression(
+                    &prefix,
+                    false,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+            let first_exit = branch_breaks.len();
+            let outcome = check_move_loop_transfer(
+                nested_body,
+                nested_label,
+                Some(current_label),
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+                branch_breaks,
+            );
+            if matches!(
+                &outcome,
+                MoveLoopExit::Break(Some(target)) | MoveLoopExit::Continue(Some(target))
+                    if target == current_label
+            ) {
+                for exit in &branch_breaks[first_exit..] {
+                    moved.extend(exit.iter().cloned());
+                }
+                return outcome;
+            }
+        }
+    }
+    let branch_if = statements.iter().enumerate().find_map(|(index, statement)| {
+        if statements[..index].iter().any(|prior| {
+            matches!(
+                prior,
+                BodyStatement::Expression { expression, .. }
+                    if matches!(&expression.kind, BodyExprKind::Match { .. })
+            )
+        }) {
+            return None;
+        }
+        let BodyStatement::Expression {
+            expression:
+                BodyExpr {
+                    kind:
+                        BodyExprKind::If {
+                            condition,
+                            then_branch,
+                            else_branch,
+                        },
+                    ..
+                },
+            ..
+        } = statement
+        else {
+            return None;
+        };
+        let prefix_is_scope_safe = statements[..index].iter().all(|statement| {
+            !matches!(
+                statement,
+                BodyStatement::Let { .. }
+                    | BodyStatement::LetTuple { .. }
+                    | BodyStatement::ForRange { .. }
+                    | BodyStatement::ForEach { .. }
+                    | BodyStatement::Break { .. }
+                    | BodyStatement::Continue { .. }
+            ) && !matches!(
+                statement,
+                BodyStatement::Expression {
+                    expression,
+                    ..
+                } if matches!(&expression.kind, BodyExprKind::Return(_))
+            )
+        });
+        prefix_is_scope_safe.then_some((index, condition, then_branch, else_branch))
+    });
+    if let Some((if_index, condition, then_branch, else_branch)) = branch_if {
+        if if_index > 0 {
+            let prefix = BodyExpr {
+                kind: BodyExprKind::Block {
+                    statements: statements[..if_index].to_vec(),
+                    tail: None,
+                },
+                span: expression.span.clone(),
+            };
+            check_move_expression(
+                &prefix,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+        }
+        check_move_expression(
+            condition,
+            false,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        );
+        let incoming = moved.clone();
+        let mut continuing = Vec::new();
+        let mut branch_exits = Vec::new();
+        let mut propagated_exits = Vec::new();
+        for branch in [Some(then_branch.as_ref()), else_branch.as_deref()]
+            .into_iter()
+            .flatten()
+        {
+            let mut branch_locals = locals.clone();
+            let mut branch_moved = incoming.clone();
+            match check_move_loop_transfer(
+                branch,
+                current_label,
+                parent_label,
+                signatures,
+                struct_signatures,
+                &mut branch_locals,
+                &mut branch_moved,
+                diagnostics,
+                branch_breaks,
+            ) {
+                MoveLoopExit::BackEdge => continuing.push(branch_moved),
+                MoveLoopExit::Break(target)
+                    if target.as_deref().is_none_or(|target| Some(target) == current_label) =>
+                {
+                    branch_breaks.push(branch_moved.clone());
+                    branch_exits.push(branch_moved);
+                }
+                MoveLoopExit::Continue(target)
+                    if target.as_deref().is_none_or(|target| Some(target) == current_label) =>
+                {
+                    continuing.push(branch_moved)
+                }
+                MoveLoopExit::Break(target) => {
+                    if parent_label.is_some() && target.as_deref() == parent_label {
+                        branch_breaks.push(branch_moved.clone());
+                    }
+                    propagated_exits.push((MoveLoopExit::Break(target), branch_moved));
+                }
+                MoveLoopExit::Continue(target) => {
+                    propagated_exits.push((MoveLoopExit::Continue(target), branch_moved));
+                }
+                MoveLoopExit::Return => {}
+            }
+        }
+        if else_branch.is_none() {
+            continuing.push(incoming);
+        }
+        if continuing.is_empty() {
+            if branch_exits.is_empty() {
+                if let Some((exit, _)) = propagated_exits.first().cloned()
+                    && propagated_exits
+                        .iter()
+                        .all(|(other_exit, _)| other_exit == &exit)
+                {
+                    moved.clear();
+                    for (_, state) in propagated_exits {
+                        moved.extend(state);
+                    }
+                    return exit;
+                }
+                return MoveLoopExit::Return;
+            }
+            moved.clear();
+            for exit in branch_exits {
+                moved.extend(exit);
+            }
+            return MoveLoopExit::Break(current_label.map(str::to_owned));
+        }
+        // The transfer model carries one continuing state. If an outer
+        // labeled exit shares this split with a path that stays in the current
+        // loop, conservatively join its moved places into that state so they
+        // reach the enclosing loop's next fixed-point iteration.
+        continuing.extend(propagated_exits.into_iter().map(|(_, state)| state));
+        moved.clear();
+        for state in continuing {
+            moved.extend(state);
+        }
+        if if_index + 1 == statements.len() {
+            return MoveLoopExit::BackEdge;
+        }
+        let suffix = BodyExpr {
+            kind: BodyExprKind::Block {
+                statements: statements[if_index + 1..].to_vec(),
+                tail: None,
+            },
+            span: expression.span.clone(),
+        };
+        return check_move_loop_transfer(
+            &suffix,
+            current_label,
+            parent_label,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+            branch_breaks,
+        );
+    }
+    let branch_match = statements.iter().enumerate().find_map(|(index, statement)| {
+        let BodyStatement::Expression {
+            expression:
+                BodyExpr {
+                    kind: BodyExprKind::Match { scrutinee, arms },
+                    ..
+                },
+            ..
+        } = statement
+        else {
+            return None;
+        };
+        let prefix_is_scope_safe = statements[..index].iter().all(|statement| {
+            !matches!(
+                statement,
+                BodyStatement::Let { .. }
+                    | BodyStatement::LetTuple { .. }
+                    | BodyStatement::ForRange { .. }
+                    | BodyStatement::ForEach { .. }
+                    | BodyStatement::Break { .. }
+                    | BodyStatement::Continue { .. }
+            ) && !matches!(
+                statement,
+                BodyStatement::Expression { expression, .. }
+                    if matches!(&expression.kind, BodyExprKind::Return(_))
+            )
+        });
+        prefix_is_scope_safe.then_some((index, scrutinee, arms))
+    });
+    if let Some((match_index, scrutinee, arms)) = branch_match {
+        if match_index > 0 {
+            let prefix = BodyExpr {
+                kind: BodyExprKind::Block {
+                    statements: statements[..match_index].to_vec(),
+                    tail: None,
+                },
+                span: expression.span.clone(),
+            };
+            check_move_expression(
+                &prefix,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+        }
+        let consumes_scrutinee = arms
+            .iter()
+            .any(|arm| !move_match_bindings(&arm.pattern).is_empty());
+        check_move_expression(
+            scrutinee,
+            consumes_scrutinee,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        );
+        let incoming = moved.clone();
+        let mut continuing = Vec::new();
+        let mut exits = Vec::new();
+        let mut propagated_exits = Vec::new();
+        for arm in arms {
+            let mut arm_locals = locals.clone();
+            let mut arm_moved = incoming.clone();
+            let bindings = move_match_bindings(&arm.pattern);
+            for name in &bindings {
+                arm_locals.insert(name.clone(), Ty::Unknown);
+                arm_moved.remove(name);
+            }
+            let outcome = check_move_loop_transfer(
+                &arm.body,
+                current_label,
+                parent_label,
+                signatures,
+                struct_signatures,
+                &mut arm_locals,
+                &mut arm_moved,
+                diagnostics,
+                branch_breaks,
+            );
+            for name in &bindings {
+                arm_moved.remove(name);
+                if incoming.contains(name) {
+                    arm_moved.insert(name.clone());
+                }
+            }
+            match outcome {
+                MoveLoopExit::BackEdge => continuing.push(arm_moved),
+                MoveLoopExit::Break(target)
+                    if target.as_deref().is_none_or(|target| Some(target) == current_label) =>
+                {
+                    branch_breaks.push(arm_moved.clone());
+                    exits.push(arm_moved);
+                }
+                MoveLoopExit::Continue(target)
+                    if target.as_deref().is_none_or(|target| Some(target) == current_label) =>
+                {
+                    continuing.push(arm_moved)
+                }
+                exit @ (MoveLoopExit::Break(_) | MoveLoopExit::Continue(_)) => {
+                    propagated_exits.push((exit, arm_moved));
+                }
+                MoveLoopExit::Return => {}
+            }
+        }
+        if continuing.is_empty() {
+            if exits.is_empty() {
+                if let Some((exit, _)) = propagated_exits.first().cloned()
+                    && propagated_exits
+                        .iter()
+                        .all(|(other_exit, _)| other_exit == &exit)
+                {
+                    moved.clear();
+                    for (_, state) in propagated_exits {
+                        moved.extend(state);
+                    }
+                    return exit;
+                }
+                return MoveLoopExit::Return;
+            }
+            moved.clear();
+            for exit in exits {
+                moved.extend(exit);
+            }
+            return MoveLoopExit::Break(current_label.map(str::to_owned));
+        }
+        continuing.extend(propagated_exits.into_iter().map(|(_, state)| state));
+        moved.clear();
+        for state in continuing {
+            moved.extend(state);
+        }
+        if match_index + 1 == statements.len() {
+            return MoveLoopExit::BackEdge;
+        }
+        let suffix = BodyExpr {
+            kind: BodyExprKind::Block {
+                statements: statements[match_index + 1..].to_vec(),
+                tail: None,
+            },
+            span: expression.span.clone(),
+        };
+        return check_move_loop_transfer(
+            &suffix,
+            current_label,
+            parent_label,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+            branch_breaks,
+        );
+    }
+    let terminal = statements.iter().position(|statement| match statement {
+        BodyStatement::Break { .. } | BodyStatement::Continue { .. } => true,
+        BodyStatement::Expression { expression, .. } => {
+            matches!(&expression.kind, BodyExprKind::Return(_))
+        }
+        _ => false,
+    });
+    let Some(terminal) = terminal else {
+        check_move_expression(
+            expression,
+            false,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        );
+        return MoveLoopExit::BackEdge;
+    };
+    let reachable_prefix = BodyExpr {
+        kind: BodyExprKind::Block {
+            statements: statements[..terminal].to_vec(),
+            tail: None,
+        },
+        span: expression.span.clone(),
+    };
+    check_move_expression(
+        &reachable_prefix,
+        false,
+        signatures,
+        struct_signatures,
+        locals,
+        moved,
+        diagnostics,
+    );
+    match &statements[terminal] {
+        BodyStatement::Break { label, .. } => MoveLoopExit::Break(label.clone()),
+        BodyStatement::Continue { label, .. } => MoveLoopExit::Continue(label.clone()),
+        BodyStatement::Expression { expression, .. } => {
+            check_move_expression(
+                expression,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            MoveLoopExit::Return
+        }
+        _ => MoveLoopExit::BackEdge,
+    }
+}
+
 fn check_move_expression(
     expression: &BodyExpr,
     consume: bool,
@@ -1156,13 +1911,14 @@ fn check_move_expression(
                 return;
             };
             if move_state_contains(name, moved) {
-                diagnostics.push(TypeDiagnostic {
-                    span: expression.span.clone(),
-                    message: format!(
+                push_move_diagnostic(
+                    diagnostics,
+                    expression.span.clone(),
+                    format!(
                         "error[E0382]: {} of moved value: `{name}`",
                         if consume { "use" } else { "borrow" }
                     ),
-                });
+                );
             } else if consume && !is_copy_type(ty, struct_signatures) {
                 moved.insert(name.clone());
             }
@@ -1304,53 +2060,97 @@ fn check_move_expression(
                         );
                     }
                     BodyStatement::While {
+                        label,
                         condition, body, ..
                     } => {
-                        check_move_expression(
-                            condition,
-                            false,
-                            signatures,
-                            struct_signatures,
-                            locals,
-                            moved,
-                            diagnostics,
-                        );
-                        let mut loop_locals = locals.clone();
-                        let mut loop_moved = moved.clone();
-                        check_move_expression(
-                            body,
-                            false,
-                            signatures,
-                            struct_signatures,
-                            &mut loop_locals,
-                            &mut loop_moved,
-                            diagnostics,
-                        );
-                        loop_moved.extend(moved.iter().cloned());
-                        *moved = loop_moved;
+                        let incoming = moved.clone();
+                        let mut branch_breaks = Vec::new();
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                            let mut loop_locals = locals.clone();
+                            check_move_expression(
+                                condition,
+                                false,
+                                signatures,
+                                struct_signatures,
+                                &mut loop_locals,
+                                loop_moved,
+                                diagnostics,
+                            );
+                            check_move_loop_transfer(
+                                body,
+                                label.as_deref(),
+                                None,
+                                signatures,
+                                struct_signatures,
+                                &mut loop_locals,
+                                loop_moved,
+                                diagnostics,
+                                &mut branch_breaks,
+                            )
+                        });
+                        *moved = header;
+                        moved.extend(break_exits);
+                        for exit in branch_breaks {
+                            moved.extend(exit);
+                        }
                     }
-                    BodyStatement::Loop { body, .. } => {
-                        let mut loop_locals = locals.clone();
-                        let mut loop_moved = moved.clone();
-                        check_move_expression(
-                            body,
-                            false,
-                            signatures,
-                            struct_signatures,
-                            &mut loop_locals,
-                            &mut loop_moved,
-                            diagnostics,
-                        );
-                        loop_moved.extend(moved.iter().cloned());
-                        *moved = loop_moved;
+                    BodyStatement::Loop { label, body, .. } => {
+                        let incoming = moved.clone();
+                        let mut branch_breaks = Vec::new();
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                            let mut loop_locals = locals.clone();
+                            check_move_loop_transfer(
+                                body,
+                                label.as_deref(),
+                                None,
+                                signatures,
+                                struct_signatures,
+                                &mut loop_locals,
+                                loop_moved,
+                                diagnostics,
+                                &mut branch_breaks,
+                            )
+                        });
+                        let mut all_breaks = break_exits;
+                        for exit in branch_breaks {
+                            all_breaks.extend(exit);
+                        }
+                        *moved = if all_breaks.is_empty() {
+                            header
+                        } else {
+                            all_breaks
+                        };
                     }
                     BodyStatement::ForRange {
+                        label,
                         name,
                         start,
                         end,
                         body,
                         ..
                     } => {
+                        let mut ignored = Vec::new();
+                        let start_type = infer_with_structs(
+                            start,
+                            locals,
+                            signatures,
+                            struct_signatures,
+                            &Ty::Unknown,
+                            &mut ignored,
+                        );
+                        let end_type = infer_with_structs(
+                            end,
+                            locals,
+                            signatures,
+                            struct_signatures,
+                            &Ty::Unknown,
+                            &mut ignored,
+                        );
+                        let iteration_type = if start_type == Ty::InferInteger {
+                            end_type
+                        } else {
+                            start_type
+                        };
                         check_move_expression(
                             start,
                             true,
@@ -1369,22 +2169,35 @@ fn check_move_expression(
                             moved,
                             diagnostics,
                         );
-                        let mut loop_locals = locals.clone();
-                        loop_locals.insert(name.clone(), Ty::Unknown);
-                        let mut loop_moved = moved.clone();
-                        check_move_expression(
-                            body,
-                            false,
-                            signatures,
-                            struct_signatures,
-                            &mut loop_locals,
-                            &mut loop_moved,
-                            diagnostics,
-                        );
-                        loop_moved.extend(moved.iter().cloned());
-                        *moved = loop_moved;
+                        let incoming = moved.clone();
+                        let mut branch_breaks = Vec::new();
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                            let mut loop_locals = locals.clone();
+                            loop_locals.insert(name.clone(), iteration_type.clone());
+                            check_move_loop_transfer(
+                                body,
+                                label.as_deref(),
+                                None,
+                                signatures,
+                                struct_signatures,
+                                &mut loop_locals,
+                                loop_moved,
+                                diagnostics,
+                                &mut branch_breaks,
+                            )
+                        });
+                        *moved = header;
+                        moved.extend(break_exits);
+                        for exit in branch_breaks {
+                            moved.extend(exit);
+                        }
                     }
-                    BodyStatement::ForEach { iterator, body, .. } => {
+                    BodyStatement::ForEach {
+                        label,
+                        iterator,
+                        body,
+                        ..
+                    } => {
                         check_move_expression(
                             iterator,
                             true,
@@ -1394,19 +2207,27 @@ fn check_move_expression(
                             moved,
                             diagnostics,
                         );
-                        let mut loop_locals = locals.clone();
-                        let mut loop_moved = moved.clone();
-                        check_move_expression(
-                            body,
-                            false,
-                            signatures,
-                            struct_signatures,
-                            &mut loop_locals,
-                            &mut loop_moved,
-                            diagnostics,
-                        );
-                        loop_moved.extend(moved.iter().cloned());
-                        *moved = loop_moved;
+                        let incoming = moved.clone();
+                        let mut branch_breaks = Vec::new();
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                            let mut loop_locals = locals.clone();
+                            check_move_loop_transfer(
+                                body,
+                                label.as_deref(),
+                                None,
+                                signatures,
+                                struct_signatures,
+                                &mut loop_locals,
+                                loop_moved,
+                                diagnostics,
+                                &mut branch_breaks,
+                            )
+                        });
+                        *moved = header;
+                        moved.extend(break_exits);
+                        for exit in branch_breaks {
+                            moved.extend(exit);
+                        }
                     }
                     _ => {}
                 }
@@ -1425,13 +2246,15 @@ fn check_move_expression(
             // Bindings introduced in this block cease to exist at its closing
             // brace. A moved inner binding must not poison an outer binding
             // with the same spelling after the block.
-            moved.retain(|name| original_names.contains(name));
+            moved.retain(|place| original_names.contains(move_place_root(place)));
             for name in shadowed_names.intersection(&original_names) {
-                if original_moved.contains(name) {
-                    moved.insert(name.clone());
-                } else {
-                    moved.remove(name);
-                }
+                moved.retain(|place| move_place_root(place) != name);
+                moved.extend(
+                    original_moved
+                        .iter()
+                        .filter(|place| move_place_root(place) == name)
+                        .cloned(),
+                );
             }
             *locals = original_locals;
         }
@@ -1838,6 +2661,10 @@ fn move_state_contains(place: &str, moved: &HashSet<String>) -> bool {
     })
 }
 
+fn move_place_root(place: &str) -> &str {
+    place.split(['.', '[']).next().unwrap_or(place)
+}
+
 fn clear_move_state(place: &str, moved: &mut HashSet<String>) {
     moved.retain(|moved_place| {
         moved_place != place
@@ -1988,6 +2815,9 @@ fn check_call_targets(
                 check_call_targets(element, locals, signatures, diagnostics);
             }
         }
+        BodyExprKind::ArrayRepeat { element, .. } => {
+            check_call_targets(element, locals, signatures, diagnostics);
+        }
         BodyExprKind::Index { base, index } => {
             check_call_targets(base, locals, signatures, diagnostics);
             check_call_targets(index, locals, signatures, diagnostics);
@@ -2114,54 +2944,84 @@ fn check_call_targets(
     }
 }
 
-fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec<TypeDiagnostic>) {
+fn check_loop_control(
+    expression: &BodyExpr,
+    loop_labels: &mut Vec<Option<String>>,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
             for statement in statements {
                 match statement {
-                    BodyStatement::Break { span } | BodyStatement::Continue { span }
-                        if depth == 0 =>
-                    {
-                        diagnostics.push(TypeDiagnostic {
-                            span: span.clone(),
-                            message: "loop control outside of a loop".to_owned(),
-                        })
+                    BodyStatement::Break { label, span }
+                    | BodyStatement::Continue { label, span } => {
+                        let target_exists = label.as_ref().map_or_else(
+                            || !loop_labels.is_empty(),
+                            |label| loop_labels.iter().rev().any(|active| active.as_ref() == Some(label)),
+                        );
+                        if !target_exists {
+                            diagnostics.push(TypeDiagnostic {
+                                span: span.clone(),
+                                message: if let Some(label) = label {
+                                    format!("error[E0426]: use of undeclared label `{label}`")
+                                } else {
+                                    "loop control outside of a loop".to_owned()
+                                },
+                            });
+                        }
                     }
                     BodyStatement::While {
-                        condition, body, ..
+                        label,
+                        condition,
+                        body,
+                        ..
                     } => {
-                        check_loop_control(condition, depth, diagnostics);
-                        check_loop_control(body, depth + 1, diagnostics);
+                        check_loop_control(condition, loop_labels, diagnostics);
+                        loop_labels.push(label.clone());
+                        check_loop_control(body, loop_labels, diagnostics);
+                        loop_labels.pop();
                     }
-                    BodyStatement::Loop { body, .. } => {
-                        check_loop_control(body, depth + 1, diagnostics)
+                    BodyStatement::Loop { label, body, .. } => {
+                        loop_labels.push(label.clone());
+                        check_loop_control(body, loop_labels, diagnostics);
+                        loop_labels.pop();
                     }
                     BodyStatement::ForRange {
+                        label,
                         start, end, body, ..
                     } => {
-                        check_loop_control(start, depth, diagnostics);
-                        check_loop_control(end, depth, diagnostics);
-                        check_loop_control(body, depth + 1, diagnostics);
+                        check_loop_control(start, loop_labels, diagnostics);
+                        check_loop_control(end, loop_labels, diagnostics);
+                        loop_labels.push(label.clone());
+                        check_loop_control(body, loop_labels, diagnostics);
+                        loop_labels.pop();
                     }
-                    BodyStatement::ForEach { iterator, body, .. } => {
-                        check_loop_control(iterator, depth, diagnostics);
-                        check_loop_control(body, depth + 1, diagnostics);
+                    BodyStatement::ForEach {
+                        label,
+                        iterator,
+                        body,
+                        ..
+                    } => {
+                        check_loop_control(iterator, loop_labels, diagnostics);
+                        loop_labels.push(label.clone());
+                        check_loop_control(body, loop_labels, diagnostics);
+                        loop_labels.pop();
                     }
                     BodyStatement::Let {
                         initializer: Some(value),
                         ..
                     }
                     | BodyStatement::Assign { value, .. } => {
-                        check_loop_control(value, depth, diagnostics)
+                        check_loop_control(value, loop_labels, diagnostics)
                     }
                     BodyStatement::Expression { expression, .. } => {
-                        check_loop_control(expression, depth, diagnostics)
+                        check_loop_control(expression, loop_labels, diagnostics)
                     }
                     _ => {}
                 }
             }
             if let Some(tail) = tail {
-                check_loop_control(tail, depth, diagnostics);
+                check_loop_control(tail, loop_labels, diagnostics);
             }
         }
         BodyExprKind::If {
@@ -2169,21 +3029,21 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
             then_branch,
             else_branch,
         } => {
-            check_loop_control(condition, depth, diagnostics);
-            check_loop_control(then_branch, depth, diagnostics);
+            check_loop_control(condition, loop_labels, diagnostics);
+            check_loop_control(then_branch, loop_labels, diagnostics);
             if let Some(branch) = else_branch {
-                check_loop_control(branch, depth, diagnostics);
+                check_loop_control(branch, loop_labels, diagnostics);
             }
         }
         BodyExprKind::Match { scrutinee, arms } => {
-            check_loop_control(scrutinee, depth, diagnostics);
+            check_loop_control(scrutinee, loop_labels, diagnostics);
             for arm in arms {
-                check_loop_control(&arm.body, depth, diagnostics);
+                check_loop_control(&arm.body, loop_labels, diagnostics);
             }
         }
         BodyExprKind::Call { arguments, .. } => {
             for argument in arguments {
-                check_loop_control(argument, depth, diagnostics);
+                check_loop_control(argument, loop_labels, diagnostics);
             }
         }
         BodyExprKind::MethodCall {
@@ -2191,26 +3051,28 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
             arguments,
             ..
         } => {
-            check_loop_control(receiver, depth, diagnostics);
+            check_loop_control(receiver, loop_labels, diagnostics);
             for argument in arguments {
-                check_loop_control(argument, depth, diagnostics);
+                check_loop_control(argument, loop_labels, diagnostics);
             }
         }
-        BodyExprKind::Closure { body, .. } => check_loop_control(body, depth, diagnostics),
+        BodyExprKind::Closure { body, .. } => {
+            check_loop_control(body, &mut Vec::new(), diagnostics)
+        }
         BodyExprKind::Tuple(elements)
         | BodyExprKind::ArrayLiteral(elements)
         | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
-                check_loop_control(element, depth, diagnostics);
+                check_loop_control(element, loop_labels, diagnostics);
             }
         }
         BodyExprKind::Index { base, index } => {
-            check_loop_control(base, depth, diagnostics);
-            check_loop_control(index, depth, diagnostics);
+            check_loop_control(base, loop_labels, diagnostics);
+            check_loop_control(index, loop_labels, diagnostics);
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
-                check_loop_control(value, depth, diagnostics);
+                check_loop_control(value, loop_labels, diagnostics);
             }
         }
         BodyExprKind::FieldAccess { base, .. }
@@ -2220,16 +3082,18 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
         | BodyExprKind::Dereference(base)
         | BodyExprKind::Cast {
             expression: base, ..
-        } => check_loop_control(base, depth, diagnostics),
+        } => check_loop_control(base, loop_labels, diagnostics),
         BodyExprKind::Binary { left, right, .. } => {
-            check_loop_control(left, depth, diagnostics);
-            check_loop_control(right, depth, diagnostics);
+            check_loop_control(left, loop_labels, diagnostics);
+            check_loop_control(right, loop_labels, diagnostics);
         }
         BodyExprKind::Negate(value)
         | BodyExprKind::Not(value)
         | BodyExprKind::Try(value)
-        | BodyExprKind::Parenthesized(value) => check_loop_control(value, depth, diagnostics),
-        BodyExprKind::Return(Some(value)) => check_loop_control(value, depth, diagnostics),
+        | BodyExprKind::Parenthesized(value) => {
+            check_loop_control(value, loop_labels, diagnostics)
+        }
+        BodyExprKind::Return(Some(value)) => check_loop_control(value, loop_labels, diagnostics),
         _ => {}
     }
 }
@@ -2275,6 +3139,9 @@ fn check_mutability(
             for element in elements {
                 check_mutability(element, locals, diagnostics);
             }
+        }
+        BodyExprKind::ArrayRepeat { element, .. } => {
+            check_mutability(element, locals, diagnostics);
         }
         BodyExprKind::Index { base, index } => {
             check_mutability(base, locals, diagnostics);
@@ -2494,7 +3361,11 @@ fn infer_with_structs(
                 diagnostics,
             );
             let target = type_from_syntax(type_name, struct_signatures);
-            if source.is_numeric() && target.is_numeric() {
+            if (source.is_numeric() && target.is_numeric())
+                || matches!((&source, &target), (Ty::RawPointer(_, _), Ty::RawPointer(_, _)))
+                || matches!((&source, &target), (Ty::RawPointer(_, _), Ty::Integer(_)))
+                || matches!((&source, &target), (Ty::Integer(_), Ty::RawPointer(_, _)))
+            {
                 target
             } else {
                 diagnostics.push(TypeDiagnostic {
@@ -2641,6 +3512,17 @@ fn infer_with_structs(
                 expected_return,
                 diagnostics,
             );
+            if matches!(index.kind, BodyExprKind::Unsupported) {
+                let element = match without_references(&base_type) {
+                    Ty::Array(element, _) | Ty::Slice(element) | Ty::Vector(element) => {
+                        Some(element.as_ref().clone())
+                    }
+                    _ => None,
+                };
+                if let Some(element) = element {
+                    return Ty::Slice(Box::new(element));
+                }
+            }
             let index_type = infer_with_structs(
                 index,
                 locals,
@@ -2679,6 +3561,79 @@ fn infer_with_structs(
             generic_arguments,
             arguments,
         } => {
+            if let Some((integer_name, method)) = callee.rsplit_once("::")
+                && matches!(method, "from_le" | "from_be" | "from_ne")
+            {
+                let integer = type_from_syntax(integer_name, struct_signatures);
+                if integer.is_integer() {
+                    if arguments.len() != 1 {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!(
+                                "integer constructor `{callee}` expects 1 argument but received {}",
+                                arguments.len()
+                            ),
+                        });
+                        return Ty::Unknown;
+                    }
+                    let actual = infer_with_structs(
+                        &arguments[0], locals, signatures, struct_signatures, &integer,
+                        diagnostics,
+                    );
+                    require_type(
+                        diagnostics,
+                        arguments[0].span.clone(),
+                        &integer,
+                        &actual,
+                        "integer byte-order conversion",
+                    );
+                    return integer;
+                }
+            }
+            if let Some((integer_name, method)) = callee.rsplit_once("::")
+                && matches!(method, "from_le_bytes" | "from_be_bytes" | "from_ne_bytes")
+            {
+                let integer = type_from_syntax(integer_name, struct_signatures);
+                let width = match &integer {
+                    Ty::Integer(name) => match name.as_str() {
+                        "i8" | "u8" => Some(1),
+                        "i16" | "u16" => Some(2),
+                        "i32" | "u32" => Some(4),
+                        "i64" | "u64" | "isize" | "usize" => Some(8),
+                        "i128" | "u128" => Some(16),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(width) = width {
+                    if arguments.len() != 1 {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!(
+                                "integer constructor `{callee}` expects 1 argument but received {}",
+                                arguments.len()
+                            ),
+                        });
+                        return Ty::Unknown;
+                    }
+                    let expected = Ty::Array(
+                        Box::new(Ty::Integer("u8".to_owned())),
+                        width,
+                    );
+                    let actual = infer_with_structs(
+                        &arguments[0], locals, signatures, struct_signatures, &expected,
+                        diagnostics,
+                    );
+                    require_type(
+                        diagnostics,
+                        arguments[0].span.clone(),
+                        &expected,
+                        &actual,
+                        "integer byte array",
+                    );
+                    return integer;
+                }
+            }
             if callee == "std::process::exit" {
                 if arguments.len() != 1 {
                     diagnostics.push(TypeDiagnostic {
@@ -2914,7 +3869,50 @@ fn infer_with_structs(
             if locals.contains_key(callee) {
                 return Ty::Unknown;
             }
-            let candidates = matching_signatures(signatures, callee);
+            if let Some(structure) = find_struct_signature(struct_signatures, callee)
+                .filter(|structure| {
+                    !structure.fields.is_empty()
+                        && structure
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .all(|(index, field)| field.name == index.to_string())
+                })
+            {
+                if arguments.len() != structure.fields.len() {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "tuple struct `{callee}` expects {} fields but received {}",
+                            structure.fields.len(),
+                            arguments.len()
+                        ),
+                    });
+                }
+                for (field, (argument, actual)) in
+                    structure.fields.iter().zip(arguments.iter().zip(argument_types.iter()))
+                {
+                    let expected = type_from_syntax(&field.type_text, struct_signatures);
+                    require_type(
+                        diagnostics,
+                        argument.span.clone(),
+                        &expected,
+                        actual,
+                        "tuple struct field initializer",
+                    );
+                }
+                return Ty::Named(structure.path.clone());
+            }
+            let mut candidates = callee
+                .strip_prefix("Self::")
+                .map_or_else(|| matching_signatures(signatures, callee), |method| {
+                    matching_signatures(signatures, method)
+                });
+            if let Some(Ty::Named(trait_owner)) = locals.get("\0quill_trait_context")
+                && callee.starts_with("Self::")
+            {
+                candidates.retain(|candidate| function_has_trait_owner(candidate, trait_owner));
+            }
             if candidates.is_empty() {
                 return Ty::Unknown;
             }
@@ -3166,6 +4164,69 @@ fn infer_with_structs(
                 diagnostics,
             );
             let receiver_base = without_references(&receiver_type);
+            if let Ty::Slice(element) | Ty::Array(element, _) | Ty::Vector(element) = receiver_base
+                && matches!(method.as_str(), "as_ptr" | "as_mut_ptr")
+                && arguments.is_empty()
+            {
+                let mutable = method == "as_mut_ptr"
+                    && matches!(receiver_type, Ty::Reference(_, true));
+                return Ty::RawPointer(element.clone(), mutable);
+            }
+            if matches!(receiver_base, Ty::String | Ty::StringSlice)
+                && method == "as_bytes"
+                && arguments.is_empty()
+            {
+                return Ty::Reference(
+                    Box::new(Ty::Slice(Box::new(Ty::Integer("u8".to_owned())))),
+                    false,
+                );
+            }
+            if matches!(receiver_base, Ty::String | Ty::StringSlice)
+                && matches!(method.as_str(), "as_ptr" | "as_mut_ptr")
+                && arguments.is_empty()
+            {
+                return Ty::RawPointer(
+                    Box::new(Ty::Integer("u8".to_owned())),
+                    method == "as_mut_ptr" && matches!(receiver_type, Ty::Reference(_, true)),
+                );
+            }
+            if let Ty::RawPointer(element, mutable) = receiver_base {
+                match method.as_str() {
+                    "cast" if arguments.is_empty() => {
+                        if matches!(expected_return, Ty::RawPointer(_, _)) {
+                            return expected_return.clone();
+                        }
+                        return Ty::RawPointer(Box::new(Ty::Unknown), *mutable);
+                    }
+                    "add" | "sub" | "offset" if arguments.len() == 1 => {
+                        let expected = if method == "offset" {
+                            Ty::Integer("isize".to_owned())
+                        } else {
+                            Ty::Integer("usize".to_owned())
+                        };
+                        let actual = infer_with_structs(
+                            &arguments[0], locals, signatures, struct_signatures, &expected,
+                            diagnostics,
+                        );
+                        require_type(diagnostics, arguments[0].span.clone(), &expected, &actual,
+                            "pointer offset");
+                        return receiver_base.clone();
+                    }
+                    "read" | "read_unaligned" | "read_volatile" if arguments.is_empty() => {
+                        return element.as_ref().clone();
+                    }
+                    "write" | "write_unaligned" | "write_volatile" if arguments.len() == 1 => {
+                        let actual = infer_with_structs(
+                            &arguments[0], locals, signatures, struct_signatures, element,
+                            diagnostics,
+                        );
+                        require_type(diagnostics, arguments[0].span.clone(), element, &actual,
+                            "pointer write value");
+                        return Ty::Unit;
+                    }
+                    _ => {}
+                }
+            }
             if matches!(method.as_str(), "read_exact" | "write_all")
                 && generic_receiver_has_trait(
                     &receiver_type,
@@ -3238,6 +4299,16 @@ fn infer_with_structs(
                 && let Ty::Into(target) = receiver_base
             {
                 return *target.clone();
+            }
+            if method == "try_into" && arguments.is_empty() {
+                let target = match expected_return {
+                    Ty::Result(ok, _) => ok.as_ref().clone(),
+                    other => other.clone(),
+                };
+                return Ty::Result(
+                    Box::new(target),
+                    Box::new(Ty::Named("core::array::TryFromSliceError".to_owned())),
+                );
             }
             if method == "as_ref"
                 && arguments.is_empty()
@@ -3842,15 +4913,66 @@ fn infer_with_structs(
                 }
                 return Ty::Bool;
             }
-            let expected_u64 = Ty::Integer("u64".to_owned());
             let receiver_type = infer_with_structs(
                 receiver,
                 locals,
                 signatures,
                 struct_signatures,
-                &expected_u64,
+                expected_return,
                 diagnostics,
             );
+            let receiver_base = without_references(&receiver_type);
+            let is_integer_receiver = matches!(receiver_base, Ty::Integer(_) | Ty::InferInteger);
+            let integer_methods = [
+                "wrapping_add", "wrapping_sub", "wrapping_mul", "wrapping_div",
+                "wrapping_rem", "to_le", "to_be", "to_ne", "swap_bytes",
+                "reverse_bits", "leading_zeros", "trailing_zeros", "count_ones",
+                "count_zeros", "rotate_left", "rotate_right",
+            ];
+            if is_integer_receiver && integer_methods.contains(&method.as_str()) {
+                let unary = matches!(
+                    method.as_str(),
+                    "to_le" | "to_be" | "to_ne" | "swap_bytes" | "reverse_bits"
+                        | "leading_zeros" | "trailing_zeros" | "count_ones" | "count_zeros"
+                );
+                let expected_arguments = usize::from(!unary);
+                if arguments.len() != expected_arguments {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "integer method `{method}` expects {expected_arguments} arguments but received {}",
+                            arguments.len()
+                        ),
+                    });
+                    return Ty::Unknown;
+                }
+                if !unary {
+                    let actual = infer_with_structs(
+                        &arguments[0],
+                        locals,
+                        signatures,
+                        struct_signatures,
+                        receiver_base,
+                        diagnostics,
+                    );
+                    require_type(
+                        diagnostics,
+                        arguments[0].span.clone(),
+                        receiver_base,
+                        &actual,
+                        "integer method argument",
+                    );
+                }
+                return if matches!(
+                    method.as_str(),
+                    "leading_zeros" | "trailing_zeros" | "count_ones" | "count_zeros"
+                ) {
+                    Ty::Integer("u32".to_owned())
+                } else {
+                    receiver_base.clone()
+                };
+            }
+            let expected_u64 = Ty::Integer("u64".to_owned());
             let argument_types: Vec<_> = arguments
                 .iter()
                 .map(|argument| {
@@ -4013,6 +5135,41 @@ fn infer_with_structs(
                         }
                     } else {
                         Ty::Unknown
+                    }
+                }
+                BinaryOperator::ShiftLeft | BinaryOperator::ShiftRight => {
+                    let left_value_ty = without_references(&left_ty);
+                    let right_value_ty = without_references(&right_ty);
+                    if !left_value_ty.is_integer() || !right_value_ty.is_integer() {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: "shift operands must be integers".to_owned(),
+                        });
+                        Ty::Unknown
+                    } else {
+                        left_value_ty.clone()
+                    }
+                }
+                BinaryOperator::BitAnd | BinaryOperator::BitOr => {
+                    let left_value_ty = without_references(&left_ty);
+                    let right_value_ty = without_references(&right_ty);
+                    if !left_value_ty.is_integer() || !right_value_ty.is_integer() {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: "bitwise operands must be integers".to_owned(),
+                        });
+                        Ty::Unknown
+                    } else if !types_compatible(left_value_ty, right_value_ty) {
+                        mismatch(
+                            diagnostics,
+                            expression.span.clone(),
+                            left_value_ty,
+                            right_value_ty,
+                            "bitwise operation",
+                        );
+                        Ty::Unknown
+                    } else {
+                        join_numeric_types(left_value_ty.clone(), right_value_ty.clone())
                     }
                 }
                 BinaryOperator::Unsupported => Ty::Unknown,
@@ -4406,6 +5563,7 @@ fn infer_with_structs(
                         iterator,
                         body,
                         span,
+                        ..
                     } => {
                         let iterator_type = infer_with_structs(
                             iterator,
@@ -4914,6 +6072,36 @@ fn infer_with_structs(
             }
             Ty::Array(Box::new(element_type), elements.len())
         }
+        BodyExprKind::ArrayRepeat { element, length } => {
+            let (expected_element, expected_length) = match expected_return {
+                Ty::Array(expected, expected_length) => {
+                    (Some(expected.as_ref()), Some(*expected_length))
+                }
+                _ => (None, None),
+            };
+            if let (Some(actual_length), Some(expected_length)) = (length, expected_length)
+                && actual_length != &expected_length
+            {
+                diagnostics.push(TypeDiagnostic {
+                    span: expression.span.clone(),
+                    message: format!(
+                        "array repeat length is {actual_length}, expected {expected_length}"
+                    ),
+                });
+            }
+            let element_type = infer_with_structs(
+                element,
+                locals,
+                signatures,
+                struct_signatures,
+                expected_element.unwrap_or(expected_return),
+                diagnostics,
+            );
+            Ty::Array(
+                Box::new(element_type),
+                length.or(expected_length).unwrap_or(0),
+            )
+        }
         BodyExprKind::EmptySliceReference | BodyExprKind::Unsupported => Ty::Unknown,
     }
 }
@@ -4987,13 +6175,16 @@ fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
         || matches!((expected, actual), (Ty::Vector(expected), Ty::Vector(actual))
             if types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Array(expected, expected_len), Ty::Array(actual, actual_len))
-            if expected_len == actual_len && types_compatible(expected, actual))
+            if (expected_len == actual_len || *expected_len == 0 || *actual_len == 0)
+                && types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Slice(expected), Ty::Vector(actual)) if types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Reference(expected, expected_mut), Ty::Reference(actual, actual_mut))
             if (!*expected_mut || *actual_mut)
                 && matches!((&**expected, &**actual), (Ty::Slice(expected), Ty::Array(actual, _) | Ty::Vector(actual))
                     if types_compatible(expected, actual)))
         || matches!((expected, actual), (Ty::Reference(expected, expected_mut), Ty::Reference(actual, actual_mut))
+            if (!*expected_mut || *actual_mut) && types_compatible(expected, actual))
+        || matches!((expected, actual), (Ty::RawPointer(expected, expected_mut), Ty::RawPointer(actual, actual_mut))
             if (!*expected_mut || *actual_mut) && types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Slice(expected), Ty::Slice(actual)) if types_compatible(expected, actual))
         || *expected == Ty::Unknown
@@ -5013,6 +6204,7 @@ fn is_copy_type(ty: &Ty, structs: &[StructSignature]) -> bool {
         | Ty::Float(_)
         | Ty::InferFloat
         | Ty::Never => true,
+        Ty::RawPointer(_, _) => true,
         Ty::Reference(_, mutable) => !*mutable,
         Ty::Tuple(fields) => fields.iter().all(|field| is_copy_type(field, structs)),
         Ty::Array(element, _) => is_copy_type(element, structs),
@@ -5556,7 +6748,7 @@ mod tests {
     }
 
     #[test]
-    fn checks_u64_wrapping_methods_and_rejects_wrong_receivers() {
+    fn checks_integer_wrapping_methods_and_rejects_non_integer_receivers() {
         let valid = SourceFile::from_text(
             "wrapping.rs",
             "fn mix(state: u64, byte: u64) -> u64 { state.wrapping_mul(33).wrapping_add(byte) }",
@@ -5567,9 +6759,19 @@ mod tests {
             "valid wrapping arithmetic should type-check"
         );
 
+        let valid_u32 = SourceFile::from_text(
+            "wrapping.rs",
+            "fn mix(state: u32) -> u32 { state.wrapping_add(1) }",
+        );
+        let parsed = parse(&valid_u32);
+        assert!(
+            check_functions_with_structs(&parsed.functions, &[]).is_empty(),
+            "u32 wrapping arithmetic should type-check"
+        );
+
         let invalid = SourceFile::from_text(
             "wrapping.rs",
-            "fn mix(state: u32) -> u64 { state.wrapping_add(1) }",
+            "fn mix(state: bool) -> bool { state.wrapping_add(true) }",
         );
         let parsed = parse(&invalid);
         let diagnostics = check_functions_with_structs(&parsed.functions, &[]);
@@ -5680,6 +6882,129 @@ mod tests {
         );
         let capture = source.text().find("{value}").unwrap() + 1;
         assert_eq!(diagnostics[0].span, capture..capture + "value".len());
+    }
+
+    #[test]
+    fn checks_move_state_on_later_loop_iterations() {
+        let valid = SourceFile::from_text(
+            "move-loop-reinitialize.rs",
+            "fn consume(value: String) {} fn valid(mut again: bool) { let mut value = String::from(\"owned\"); while again { consume(value); value = String::from(\"again\"); again = false; } }",
+        );
+        let parsed = parse(&valid);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+        let source = SourceFile::from_text(
+            "move-loop.rs",
+            "fn consume(value: String) {} fn invalid(mut again: bool) { let value = String::from(\"owned\"); while again { println!(\"{value}\"); consume(value); again = false; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                && diagnostic.message.contains("moved value: `value`")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn integer_range_bindings_are_copy_during_move_analysis() {
+        let source = SourceFile::from_text(
+            "copy-range-binding.rs",
+            "fn sum(start: i32, end: i32) -> i32 { let mut total = 0; for value in start..end { total = total + value; } total } fn literal_range() -> i32 { let mut total = 0; for value in 0..8 { total = total + value; } total }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn resolves_labeled_loop_control_and_rejects_unknown_labels() {
+        let source = SourceFile::from_text(
+            "loop-labels.rs",
+            "fn valid(condition: bool) { 'outer: while condition { loop { break 'outer; } } } fn invalid() { loop { break 'missing; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0]
+            .message
+            .contains("error[E0426]: use of undeclared label `'missing`"));
+    }
+
+    #[test]
+    fn does_not_flow_moves_past_a_nested_labeled_break() {
+        let source = SourceFile::from_text(
+            "nested-labeled-break.rs",
+            "fn valid(condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { if condition { drop(value); break 'outer; } println!(\"{value}\"); break 'outer; } println!(\"{value}\"); } } fn invalid(condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { if condition { drop(value); break 'outer; } println!(\"{value}\"); break 'outer; } println!(\"{value}\"); } println!(\"{value}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0382]")
+            && diagnostics[0].message.contains("moved value: `value`"));
+        let invalid_read = source.text().rfind("{value}").unwrap() + 1;
+        assert_eq!(diagnostics[0].span, invalid_read..invalid_read + "value".len());
+    }
+
+    #[test]
+    fn excludes_unreachable_moves_after_direct_loop_breaks() {
+        let source = SourceFile::from_text(
+            "move-loop-break.rs",
+            "fn consume(value: String) {} fn valid() { let value = String::from(\"owned\"); loop { break; consume(value); } println!(\"{value}\"); } fn invalid() { let value = String::from(\"owned\"); loop { consume(value); break; } println!(\"{value}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0382]")
+            && diagnostics[0].message.contains("moved value: `value`"));
+        let invalid_read = source.text().rfind("{value}").unwrap() + 1;
+        assert_eq!(diagnostics[0].span, invalid_read..invalid_read + "value".len());
+    }
+
+    #[test]
+    fn excludes_unreachable_moves_after_direct_loop_returns() {
+        let source = SourceFile::from_text(
+            "move-loop-return.rs",
+            "fn consume(value: String) {} fn valid() { let value = String::from(\"owned\"); loop { return; consume(value); } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn separates_conditional_break_paths_from_loop_back_edges() {
+        let source = SourceFile::from_text(
+            "move-branch-break.rs",
+            "fn valid(condition: bool) { let value = String::from(\"owned\"); loop { if condition { drop(value); break; } println!(\"{value}\"); break; } } fn valid_after_prefix(mut condition: bool) { let value = String::from(\"owned\"); loop { condition = !condition; if condition { drop(value); break; } println!(\"{value}\"); break; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn separates_match_arm_break_paths_from_loop_back_edges() {
+        let source = SourceFile::from_text(
+            "move-match-break.rs",
+            "fn valid(condition: bool) { let value = String::from(\"owned\"); loop { match condition { true => { drop(value); break; }, false => { println!(\"{value}\"); break; } } } } fn invalid(condition: bool) { let value = String::from(\"owned\"); loop { match condition { true => { drop(value); break; }, false => { println!(\"{value}\"); break; } } } println!(\"{value}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0382]")
+            && diagnostics[0].message.contains("moved value: `value`"));
+        let invalid_read = source.text().rfind("{value}").unwrap() + 1;
+        assert_eq!(diagnostics[0].span, invalid_read..invalid_read + "value".len());
     }
 
     #[test]
@@ -6319,5 +7644,208 @@ mod tests {
                 .message
                 .contains("error[E0506]: cannot assign to `first` because it is borrowed")
         }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn tracks_references_stored_in_and_read_from_aggregate_fields() {
+        let source = SourceFile::from_text(
+            "aggregate-field-loans.rs",
+            "fn invalid() { let mut value: i32 = 0; let holder = (&value, 7); let borrowed = holder.0; value = 1; println!(\"{borrowed}\"); } fn valid_disjoint_field() { let mut value: i32 = 0; let holder = (&value, 7); let scalar = holder.1; value = 1; println!(\"{scalar}\"); } fn invalid_live_aggregate_field() { let mut value: i32 = 0; let holder = (&value, 7); value = 1; println!(\"{}\", holder.1); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `value` because it is borrowed")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("cannot assign to `value` because it is borrowed")
+                && diagnostic.span.start > source.text().find("fn valid_disjoint_field").unwrap()
+                && diagnostic.span.start < source.text().find("fn invalid_live_aggregate_field").unwrap()
+        }), "{diagnostics:?}");
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("cannot assign to `value` because it is borrowed")
+                && diagnostic.span.start > source.text().find("fn invalid_live_aggregate_field").unwrap()
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn expires_a_shadowed_mutable_reference_before_its_replacement_borrow() {
+        let source = SourceFile::from_text(
+            "shadowed-reference.rs",
+            "fn valid() { let mut value: i32 = 0; let reference = &mut value; let reference = &mut value; *reference += 1; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn rejects_moving_a_non_copy_value_while_a_borrow_is_live() {
+        let source = SourceFile::from_text(
+            "move-while-borrowed.rs",
+            "struct Item { value: i32 } fn consume(item: Item) {} fn invalid() { let item = Item { value: 0 }; let borrowed = &item; consume(item); println!(\"{borrowed:?}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[StructSignature {
+                path: "Item".to_owned(),
+                fields: vec![StructFieldSignature {
+                    name: "value".to_owned(),
+                    type_text: "i32".to_owned(),
+                }],
+                ..StructSignature::default()
+            }],
+        );
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0505]: cannot move out of `item` because it is borrowed")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn distinguishes_borrowing_a_reference_binding_from_its_referent() {
+        let source = SourceFile::from_text(
+            "reference-binding-loan.rs",
+            "fn invalid() { let mut value: i32 = 0; let mut reference = &mut value; let slot = &mut reference; *reference = 1; **slot = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0506]")
+                || diagnostic.message.contains("error[E0503]")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn keeps_iterator_borrows_active_through_the_loop_body() {
+        let source = SourceFile::from_text(
+            "iterator-borrow.rs",
+            "fn valid() { let values: Vec<i32> = Vec::new(); let mut total: i32 = 0; for item in values.iter() { total += *item; } } fn invalid() { let mut values: Vec<i32> = Vec::new(); for item in values.iter() { values.push(*item); } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0502]")
+                || diagnostic.message.contains("error[E0499]")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn invalid").unwrap()
+                && diagnostic.message.contains("error[E050")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn carries_scrutinee_loans_into_match_bindings() {
+        let source = SourceFile::from_text(
+            "match-binding-loan.rs",
+            "fn invalid() { let mut value: i32 = 0; let reference = &value; match reference { captured => { value = 1; println!(\"{captured}\"); } } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0506]: cannot assign to `value` because it is borrowed")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn tracks_mutability_of_parameter_bindings_separately_from_referents() {
+        let source = SourceFile::from_text(
+            "parameter-mutability.rs",
+            "fn mutable_value(mut value: i32) { value = 1; } fn mutate_referent(value: &mut i32) { *value = 1; } fn cannot_rebind_reference(value: &mut i32, other: &mut i32) { value = other; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("cannot assign twice to immutable variable `value`")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn cannot_rebind_reference").unwrap()
+                && diagnostic.message.contains("cannot assign twice")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn validates_explicit_function_return_lifetimes() {
+        let source = SourceFile::from_text(
+            "return-lifetime-mismatch.rs",
+            "fn invalid<'a, 'b>(first: &'a i32, second: &'b i32) -> &'b i32 { first } fn valid<'a>(value: &'a i32) -> &'a i32 { value }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("error[E0621]: explicit lifetime required to return this reference")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start > source.text().find("fn valid").unwrap()
+                && diagnostic.message.contains("explicit lifetime required")
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn checks_tuple_struct_construction_fields_and_integer_methods() {
+        let source = SourceFile::from_text(
+            "tuple-struct-integer-method.rs",
+            "struct Pair(u32, u8); fn value() -> u32 { let pair = Pair(7, 1); pair.0.to_le() } fn from_bytes(bytes: [u8; 4]) -> u32 { u32::from_be_bytes(bytes) }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[StructSignature {
+                path: "Pair".to_owned(),
+                fields: vec![
+                    StructFieldSignature {
+                        name: "0".to_owned(),
+                        type_text: "u32".to_owned(),
+                    },
+                    StructFieldSignature {
+                        name: "1".to_owned(),
+                        type_text: "u8".to_owned(),
+                    },
+                ],
+                ..StructSignature::default()
+            }],
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn checks_raw_pointer_types_and_slice_pointer_methods() {
+        let source = SourceFile::from_text(
+            "raw-pointer-methods.rs",
+            "fn raw(bytes: &mut [u8]) -> *mut u8 { bytes.as_mut_ptr() } fn read(pointer: *const u32) -> u32 { pointer.read_unaligned() }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn checks_array_repeats_range_slices_and_try_into() {
+        let source = SourceFile::from_text(
+            "array-repeat-range-try-into.rs",
+            "fn repeated() -> u8 { let bytes = [0; 4]; bytes[0] } fn read(bytes: &[u8]) -> u16 { u16::from_be_bytes(bytes[..2].try_into().unwrap()) }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 }
