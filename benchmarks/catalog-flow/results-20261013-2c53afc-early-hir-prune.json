@@ -1,0 +1,924 @@
+{
+  "toolchain": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+  "logical_cpu_count": 12,
+  "quill_profile": "release",
+  "quillc_source_revision": "2c53afcb16ec3faa24a3d342c6fc9566a2157f22",
+  "quillc_source_dirty": false,
+  "quillc_source_dirty_paths": [],
+  "quillc_sha256": "201506ad155a62c0b1f713bb2df7bedd8f942a583664fba4d46ae1e5c307e331",
+  "rust_lines": 30992,
+  "runtime_output": "catalog-flow records=128 digest=0000a53352b1a3d7",
+  "semantic_edit_runtime_output": "catalog-flow records=127 digest=000002dca8b2f100",
+  "memory_metric": "peak process-tree RSS sampled every 2 ms for cold/incremental builds; warm cache hits use wait4 process RSS because they launch no compiler child",
+  "results": [
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.690601,
+      "user_seconds": 5.24187,
+      "system_seconds": 0.446659,
+      "cpu_seconds": 5.688529,
+      "peak_process_tree_rss_mib": 571.2,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.018868,
+      "user_seconds": 0.01273,
+      "system_seconds": 0.006374,
+      "cpu_seconds": 0.019104,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.32509,
+      "user_seconds": 1.632615,
+      "system_seconds": 0.205453,
+      "cpu_seconds": 1.838068,
+      "peak_process_tree_rss_mib": 134.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.001313,
+      "user_seconds": 0.001136,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.001136,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.293669,
+      "user_seconds": 0.282221,
+      "system_seconds": 0.137816,
+      "cpu_seconds": 0.420037,
+      "peak_process_tree_rss_mib": 230.4,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.013773,
+      "user_seconds": 0.022754,
+      "system_seconds": 0.008742,
+      "cpu_seconds": 0.031496,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.305442,
+      "user_seconds": 0.300779,
+      "system_seconds": 0.128917,
+      "cpu_seconds": 0.429696,
+      "peak_process_tree_rss_mib": 230.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.081714,
+      "user_seconds": 0.096331,
+      "system_seconds": 0.034158,
+      "cpu_seconds": 0.130489,
+      "peak_process_tree_rss_mib": 44.1,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.685847,
+      "user_seconds": 5.193705,
+      "system_seconds": 0.418426,
+      "cpu_seconds": 5.612131,
+      "peak_process_tree_rss_mib": 561.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019176,
+      "user_seconds": 0.013399,
+      "system_seconds": 0.006706,
+      "cpu_seconds": 0.020105,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.326331,
+      "user_seconds": 1.618162,
+      "system_seconds": 0.208018,
+      "cpu_seconds": 1.82618,
+      "peak_process_tree_rss_mib": 127.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.001641,
+      "user_seconds": 0.000665,
+      "system_seconds": 0.000655,
+      "cpu_seconds": 0.00132,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.296536,
+      "user_seconds": 0.288732,
+      "system_seconds": 0.128319,
+      "cpu_seconds": 0.417051,
+      "peak_process_tree_rss_mib": 232.6,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.013152,
+      "user_seconds": 0.012648,
+      "system_seconds": 0.016094,
+      "cpu_seconds": 0.028742,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.308878,
+      "user_seconds": 0.311906,
+      "system_seconds": 0.127845,
+      "cpu_seconds": 0.439751,
+      "peak_process_tree_rss_mib": 229.2,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 2
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.102452,
+      "user_seconds": 0.115967,
+      "system_seconds": 0.036292,
+      "cpu_seconds": 0.152259,
+      "peak_process_tree_rss_mib": 45.2,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.729944,
+      "user_seconds": 5.29569,
+      "system_seconds": 0.407796,
+      "cpu_seconds": 5.703486,
+      "peak_process_tree_rss_mib": 562.4,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.018883,
+      "user_seconds": 0.012182,
+      "system_seconds": 0.007303,
+      "cpu_seconds": 0.019485,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.324198,
+      "user_seconds": 1.642032,
+      "system_seconds": 0.196954,
+      "cpu_seconds": 1.838986,
+      "peak_process_tree_rss_mib": 137.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.00128,
+      "user_seconds": 0.0,
+      "system_seconds": 0.001105,
+      "cpu_seconds": 0.001105,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.290143,
+      "user_seconds": 0.272135,
+      "system_seconds": 0.136534,
+      "cpu_seconds": 0.408669,
+      "peak_process_tree_rss_mib": 232.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.013011,
+      "user_seconds": 0.014474,
+      "system_seconds": 0.015688,
+      "cpu_seconds": 0.030162,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.300161,
+      "user_seconds": 0.303141,
+      "system_seconds": 0.127911,
+      "cpu_seconds": 0.431052,
+      "peak_process_tree_rss_mib": 227.1,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.083734,
+      "user_seconds": 0.106872,
+      "system_seconds": 0.028099,
+      "cpu_seconds": 0.134971,
+      "peak_process_tree_rss_mib": 44.8,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.682147,
+      "user_seconds": 5.156697,
+      "system_seconds": 0.424878,
+      "cpu_seconds": 5.581575,
+      "peak_process_tree_rss_mib": 565.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.018713,
+      "user_seconds": 0.008408,
+      "system_seconds": 0.010495,
+      "cpu_seconds": 0.018903,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.321395,
+      "user_seconds": 1.602797,
+      "system_seconds": 0.200623,
+      "cpu_seconds": 1.80342,
+      "peak_process_tree_rss_mib": 130.8,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.001357,
+      "user_seconds": 0.0,
+      "system_seconds": 0.001169,
+      "cpu_seconds": 0.001169,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.279072,
+      "user_seconds": 0.266451,
+      "system_seconds": 0.133451,
+      "cpu_seconds": 0.399902,
+      "peak_process_tree_rss_mib": 227.6,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.011902,
+      "user_seconds": 0.021766,
+      "system_seconds": 0.006552,
+      "cpu_seconds": 0.028318,
+      "peak_process_tree_rss_mib": 21.9,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.300343,
+      "user_seconds": 0.30331,
+      "system_seconds": 0.122708,
+      "cpu_seconds": 0.426018,
+      "peak_process_tree_rss_mib": 236.8,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 4
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.083742,
+      "user_seconds": 0.102175,
+      "system_seconds": 0.032341,
+      "cpu_seconds": 0.134516,
+      "peak_process_tree_rss_mib": 45.1,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_cold",
+      "wall_seconds": 2.741845,
+      "user_seconds": 5.325246,
+      "system_seconds": 0.431123,
+      "cpu_seconds": 5.756369,
+      "peak_process_tree_rss_mib": 570.0,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_warm",
+      "wall_seconds": 0.019537,
+      "user_seconds": 0.013213,
+      "system_seconds": 0.007122,
+      "cpu_seconds": 0.020335,
+      "peak_process_tree_rss_mib": 22.0,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_cold",
+      "wall_seconds": 0.346126,
+      "user_seconds": 1.665303,
+      "system_seconds": 0.216016,
+      "cpu_seconds": 1.881319,
+      "peak_process_tree_rss_mib": 135.3,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_warm",
+      "wall_seconds": 0.001421,
+      "user_seconds": 0.001241,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.001241,
+      "peak_process_tree_rss_mib": 22.0,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_incremental",
+      "wall_seconds": 0.360011,
+      "user_seconds": 0.354962,
+      "system_seconds": 0.155879,
+      "cpu_seconds": 0.510841,
+      "peak_process_tree_rss_mib": 232.7,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_incremental",
+      "wall_seconds": 0.014585,
+      "user_seconds": 0.01687,
+      "system_seconds": 0.014636,
+      "cpu_seconds": 0.031506,
+      "peak_process_tree_rss_mib": 22.0,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_semantic_incremental",
+      "wall_seconds": 0.352512,
+      "user_seconds": 0.329098,
+      "system_seconds": 0.166752,
+      "cpu_seconds": 0.49585,
+      "peak_process_tree_rss_mib": 227.9,
+      "command": "cargo +nightly-2026-08-23 build --quiet --package catalog-flow --manifest-path /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml --target-dir /tmp/catalog-flow-rustc-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_semantic_incremental",
+      "wall_seconds": 0.103656,
+      "user_seconds": 0.125582,
+      "system_seconds": 0.037017,
+      "cpu_seconds": 0.162599,
+      "peak_process_tree_rss_mib": 47.0,
+      "command": "/tmp/quillc-exp-callcache/target/release/quillc cargo-build-subset /tmp/quillc-exp-callcache/benchmarks/catalog-flow/Cargo.toml -o /tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.001071081991540268,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008809999999996876,
+      "cpu_seconds": 0.0008809999999996876,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 1
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.016769876005128026,
+      "user_seconds": 0.005838000000004229,
+      "system_seconds": 0.010698999999999792,
+      "cpu_seconds": 0.01653700000000402,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 1
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017035091994330287,
+      "user_seconds": 0.007889999999996178,
+      "system_seconds": 0.008882999999999974,
+      "cpu_seconds": 0.016772999999996152,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 2
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010967169946525246,
+      "user_seconds": 0.0009060000000005175,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0009060000000005175,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 2
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0008946440066210926,
+      "user_seconds": 0.0007610000000042305,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0007610000000042305,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 3
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017091325018554926,
+      "user_seconds": 0.003971999999997422,
+      "system_seconds": 0.012829000000000867,
+      "cpu_seconds": 0.01680099999999829,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 3
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.016979448002530262,
+      "user_seconds": 0.005895000000002426,
+      "system_seconds": 0.010821999999999221,
+      "cpu_seconds": 0.016717000000001647,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 4
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010459859913680702,
+      "user_seconds": 0.0,
+      "system_seconds": 0.000860000000000305,
+      "cpu_seconds": 0.000860000000000305,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 4
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009095919958781451,
+      "user_seconds": 0.0007659999999987122,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0007659999999987122,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 5
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.016903683979762718,
+      "user_seconds": 0.009819000000000244,
+      "system_seconds": 0.006865999999999595,
+      "cpu_seconds": 0.01668499999999984,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 5
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.018123345013009384,
+      "user_seconds": 0.003940000000000055,
+      "system_seconds": 0.01376400000000011,
+      "cpu_seconds": 0.017704000000000164,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 6
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0011125730234198272,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0009250000000005087,
+      "cpu_seconds": 0.0009250000000005087,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 6
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.001003407989628613,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008439999999998449,
+      "cpu_seconds": 0.0008439999999998449,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 7
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017413204011972994,
+      "user_seconds": 0.010080999999999563,
+      "system_seconds": 0.007064999999999877,
+      "cpu_seconds": 0.01714599999999944,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 7
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.01725355998496525,
+      "user_seconds": 0.004990999999996859,
+      "system_seconds": 0.011968999999999674,
+      "cpu_seconds": 0.016959999999996533,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 8
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0011236709833610803,
+      "user_seconds": 0.0009300000000038722,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0009300000000038722,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 8
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009798409882932901,
+      "user_seconds": 0.0008229999999969095,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0008229999999969095,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 9
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017560002976097167,
+      "user_seconds": 0.0040639999999996235,
+      "system_seconds": 0.013256000000000157,
+      "cpu_seconds": 0.01731999999999978,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 9
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017790520010748878,
+      "user_seconds": 0.008223999999998455,
+      "system_seconds": 0.009268000000000498,
+      "cpu_seconds": 0.017491999999998953,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 10
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0011270959803368896,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0009399999999999409,
+      "cpu_seconds": 0.0009399999999999409,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 10
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010090779978781939,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008919999999994488,
+      "cpu_seconds": 0.0008919999999994488,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 11
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.01815228202030994,
+      "user_seconds": 0.006287000000000376,
+      "system_seconds": 0.011527000000000065,
+      "cpu_seconds": 0.01781400000000044,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 11
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017517383996164426,
+      "user_seconds": 0.009145000000003733,
+      "system_seconds": 0.008116000000000234,
+      "cpu_seconds": 0.017261000000003968,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 12
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.001071722013875842,
+      "user_seconds": 0.0009039999999984616,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0009039999999984616,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 12
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009436440013814718,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008210000000001827,
+      "cpu_seconds": 0.0008210000000001827,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 13
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.01762096502352506,
+      "user_seconds": 0.00577899999999687,
+      "system_seconds": 0.011582999999999899,
+      "cpu_seconds": 0.01736199999999677,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 13
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017567455011885613,
+      "user_seconds": 0.006080000000004304,
+      "system_seconds": 0.011204000000000214,
+      "cpu_seconds": 0.017284000000004518,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 14
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0011569200141821057,
+      "user_seconds": 0.0009949999999960824,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0009949999999960824,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 14
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0008602440066169947,
+      "user_seconds": 0.0007459999999994693,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0007459999999994693,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 15
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017311410018010065,
+      "user_seconds": 0.007582000000006417,
+      "system_seconds": 0.009483999999999604,
+      "cpu_seconds": 0.01706600000000602,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 15
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017406603001290932,
+      "user_seconds": 0.005031999999999925,
+      "system_seconds": 0.01206700000000005,
+      "cpu_seconds": 0.017098999999999975,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 16
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010701540159061551,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008780000000001564,
+      "cpu_seconds": 0.0008780000000001564,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 16
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0008854710031300783,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0007729999999996906,
+      "cpu_seconds": 0.0007729999999996906,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 17
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017333079013042152,
+      "user_seconds": 0.0070399999999963825,
+      "system_seconds": 0.01004700000000014,
+      "cpu_seconds": 0.01708699999999652,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 17
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.0174373580084648,
+      "user_seconds": 0.004032000000002256,
+      "system_seconds": 0.013116000000000128,
+      "cpu_seconds": 0.017148000000002384,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 18
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010848200181499124,
+      "user_seconds": 0.0008979999999993993,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0008979999999993993,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 18
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009293110051658005,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0007849999999995916,
+      "cpu_seconds": 0.0007849999999995916,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 19
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017544611997436732,
+      "user_seconds": 0.007117000000000928,
+      "system_seconds": 0.010158000000000555,
+      "cpu_seconds": 0.017275000000001484,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 19
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017462860996602103,
+      "user_seconds": 0.006062999999997487,
+      "system_seconds": 0.011112999999999928,
+      "cpu_seconds": 0.017175999999997416,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 20
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010981590021401644,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008780000000001564,
+      "cpu_seconds": 0.0008780000000001564,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 20
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009266279812436551,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0007749999999999702,
+      "cpu_seconds": 0.0007749999999999702,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 21
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.01755120899179019,
+      "user_seconds": 0.00812100000000271,
+      "system_seconds": 0.009149999999999991,
+      "cpu_seconds": 0.0172710000000027,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 21
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.01735990701126866,
+      "user_seconds": 0.006028999999998064,
+      "system_seconds": 0.011054999999999815,
+      "cpu_seconds": 0.01708399999999788,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 22
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0010818159789778292,
+      "user_seconds": 0.0008830000000017435,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0008830000000017435,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 22
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.000905662978766486,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0007590000000003982,
+      "cpu_seconds": 0.0007590000000003982,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 23
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017531557008624077,
+      "user_seconds": 0.006099999999996442,
+      "system_seconds": 0.011173999999999573,
+      "cpu_seconds": 0.017273999999996015,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 23
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017514649021904916,
+      "user_seconds": 0.009098000000001605,
+      "system_seconds": 0.008135000000000225,
+      "cpu_seconds": 0.01723300000000183,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 24
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.001182537991553545,
+      "user_seconds": 0.0009840000000025384,
+      "system_seconds": 0.0,
+      "cpu_seconds": 0.0009840000000025384,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 24
+    },
+    {
+      "label": "rustc_binary_runtime",
+      "wall_seconds": 0.0009708050056360662,
+      "user_seconds": 0.0,
+      "system_seconds": 0.0008049999999997226,
+      "cpu_seconds": 0.0008049999999997226,
+      "command": "/tmp/catalog-flow-rustc-measure/debug/catalog-flow",
+      "run": 25
+    },
+    {
+      "label": "quill_binary_runtime",
+      "wall_seconds": 0.017611562012461945,
+      "user_seconds": 0.005782999999993876,
+      "system_seconds": 0.011523999999999646,
+      "cpu_seconds": 0.017306999999993522,
+      "command": "/tmp/catalog-flow-quill-measure",
+      "run": 25
+    }
+  ],
+  "medians": {
+    "rustc_cold": {
+      "wall_seconds": 2.690601,
+      "cpu_seconds": 5.688529,
+      "peak_process_tree_rss_mib": 565.9
+    },
+    "quill_cold": {
+      "wall_seconds": 0.32509,
+      "cpu_seconds": 1.838068,
+      "peak_process_tree_rss_mib": 134.9
+    },
+    "rustc_warm": {
+      "wall_seconds": 0.018883,
+      "cpu_seconds": 0.019485,
+      "peak_process_tree_rss_mib": 21.9
+    },
+    "quill_warm": {
+      "wall_seconds": 0.001357,
+      "cpu_seconds": 0.001169,
+      "peak_process_tree_rss_mib": 21.9
+    },
+    "rustc_incremental": {
+      "wall_seconds": 0.293669,
+      "cpu_seconds": 0.417051,
+      "peak_process_tree_rss_mib": 232.6
+    },
+    "quill_incremental": {
+      "wall_seconds": 0.013152,
+      "cpu_seconds": 0.030162,
+      "peak_process_tree_rss_mib": 21.9
+    },
+    "rustc_semantic_incremental": {
+      "wall_seconds": 0.305442,
+      "cpu_seconds": 0.431052,
+      "peak_process_tree_rss_mib": 229.2
+    },
+    "quill_semantic_incremental": {
+      "wall_seconds": 0.083742,
+      "cpu_seconds": 0.134971,
+      "peak_process_tree_rss_mib": 45.1
+    }
+  },
+  "runtime_medians": {
+    "rustc_binary_runtime": {
+      "wall_seconds": 0.001046,
+      "cpu_seconds": 0.000878
+    },
+    "quill_binary_runtime": {
+      "wall_seconds": 0.017463,
+      "cpu_seconds": 0.017176
+    }
+  },
+  "runtime_measurement": {
+    "warmups_per_binary": 5,
+    "samples_per_binary": 25,
+    "method": "separate process wall and child CPU time; includes process startup",
+    "output_checked_each_run": true
+  }
+}

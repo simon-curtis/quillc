@@ -114,6 +114,16 @@ ms CPU, close to the prior 13.8 ms / 30.1 ms. Program output still matched.
 The clean paired samples are in
 [`results-20261013-9edab5c-owned-emission.json`](results-20261013-9edab5c-owned-emission.json).
 
+I also tried using the existing direct-call graph to filter unreachable
+functions before HIR construction. This preserved all generic definitions
+after a corpus check caught shifted generic-instance indices, but the 31k
+five-round comparison did not show a gain. Semantic incremental medians were
+83.7 ms / 135 ms CPU, versus 80.1 ms / 131 ms CPU before the change; comment
+incremental was effectively unchanged. The sample ranges overlap, while
+sampled cold and semantic RSS were higher. The candidate was reverted at
+`b397f87`. Raw samples:
+[`results-20261013-2c53afc-early-hir-prune.json`](results-20261013-2c53afc-early-hir-prune.json).
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
