@@ -150,7 +150,8 @@
 @media(min-width:901px) and (max-width:1100px){.hero{grid-template-columns:minmax(0,1fr) 285px;gap:40px}.hero .quickstart{padding-left:24px}}
 @media(max-width:900px){.hero{grid-template-columns:1fr;gap:36px;padding-block:28px 42px}.hero-copy{order:0}.hero .quickstart{border-left:0;border-top:1px solid var(--line);padding:28px 0 0}.hero .quickstart-copy p{max-width:none}.hero .quickstart-commands{margin-top:20px}.hero .quickstart pre{font-size:13px}}
 
-.compatibility-asterisk{display:inline-block;color:var(--rust);font-size:1.15em;font-weight:650;line-height:1;vertical-align:super;margin-left:2px;pointer-events:auto}
+.compatibility-reference{white-space:nowrap}
+.compatibility-asterisk{color:var(--rust);font-size:1em;font-weight:650;vertical-align:baseline;margin-left:1px;pointer-events:auto}
 .compatibility-asterisk:hover{color:var(--ink)}
 .project-overview{padding-block:32px 38px;border-bottom:1px solid var(--line)}
 .project-overview>h2{font-size:24px;letter-spacing:-.04em;margin-bottom:28px}
