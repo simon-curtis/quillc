@@ -24,6 +24,25 @@ documents, including newly added files. Relative Markdown links and images keep
 their original base. Dot-directories, build output, and files resolving outside
 the repository are excluded from publication.
 
+## Color themes
+
+Use the header control to cycle **System → Dark → Light**. System is the default;
+an explicit choice is stored as `quill-theme` in local storage and shared across
+tabs. When storage is unavailable, the control still works for the current page.
+
+The small inline initializer in each HTML template applies the preference before
+styles paint. [`assets/theme.js`](../../assets/theme.js) manages the control,
+system changes, and browser theme color. Palette tokens live in
+[`assets/site.css`](../../assets/site.css); component styles should use those
+tokens. Halftone canvases repaint on `quill:themechange`, including when reduced
+motion is enabled. New page templates need both the initializer and theme script.
+
+For a theme change, inspect text, controls, code/JSON, feature statuses, and
+halftone art in both palettes. Check that the saved preference survives navigation
+and that narrow headers still fit. Desktop and 390px browser inspection covered
+the homepage, compatibility page, and Markdown reader during implementation;
+physical iPhone behavior has not been verified.
+
 ## Statistics and publication
 
 Edit or regenerate source reports; page figures are generated automatically.
@@ -42,9 +61,19 @@ records the selected reports, documentation index, and current revision.
 - Selection prefers recorded run/artifact timestamps, then filename date,
   filesystem modification time, and filename. Record timestamps in new report
   formats for unambiguous ordering across machines.
-- Feature availability is still curated in `compatibility.html`; the homepage
-  counts those entries automatically. Passing a probe never changes a feature's
-  status automatically.
+- Stage coverage uses the curated entries in `compatibility.html`. Checking
+  includes the Checking category; generating uses the explicit feature IDs in
+  `siteData`. Each percentage counts areas with partial or full support at equal
+  weight. The expandable lists expose the denominator and remaining gaps.
+  Compiler parsing coverage remains unmeasured; the LSP syntax report cannot
+  establish it. Passing a probe never promotes a feature automatically.
+- Real-crate tables on the homepage and compatibility page read
+  `benchmarks/crates/results.json`. They show pinned versions, source size,
+  parsing, subset checking, rustc checking, and compiler provenance. The current
+  report has no native-build measurements, so that column says “Not measured”.
+  Single observations are not paired performance results. Missing reports show
+  an unavailable state. Extend the renderer with explicit evidence when the
+  report gains new stages; never infer a native build from parsing or checking.
 
 Malformed reports surface an error. Missing LSP or compiler reports display an
 unavailable state instead of retaining copied numbers. Reloading displays new

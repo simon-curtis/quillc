@@ -13,7 +13,10 @@ Quill's own composition. Warm paper, charcoal type, restrained rust-red artwork,
 and local Geist fonts form the palette. Exact values belong in
 [`assets/site.css`](../../assets/site.css); halftone rendering belongs in
 [`assets/print-fields.js`](../../assets/print-fields.js). Geist Mono supports
-code and small labels.
+code and small labels. Dark mode uses charcoal paper, warm light text, and brighter
+rust-red ink. Both themes use the same layout and artwork; palette tokens control
+code surfaces, status colors, and halftone ink. The header theme control supports
+system preference and explicit light/dark choices.
 
 ## Composition
 
