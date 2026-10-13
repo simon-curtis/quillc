@@ -1331,4 +1331,26 @@
     "edition": "2024",
     "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    {\n        consume(value);\n    }\n}"
   }
+,
+  {
+    "id": "diagnostic-mut-borrow-in-nested-block-while-outer-borrow-live",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    {\n        let second = &mut value;\n        println!(\"{second}\");\n    }\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-borrow-in-nested-block-after-outer-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    println!(\"{first}\");\n    {\n        let second = &mut value;\n        println!(\"{second}\");\n    }\n}"
+  }
 ]

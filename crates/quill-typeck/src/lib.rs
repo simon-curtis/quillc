@@ -1119,6 +1119,8 @@ fn check_local_borrow_conflicts(
     check_local_borrow_conflicts_in_expression(
         body,
         &local_types,
+        &[],
+        &HashSet::new(),
         signatures,
         struct_signatures,
         diagnostics,
@@ -1128,15 +1130,23 @@ fn check_local_borrow_conflicts(
 fn check_local_borrow_conflicts_in_expression(
     expression: &BodyExpr,
     local_types: &HashMap<String, Ty>,
+    active_borrows: &[(String, String, bool, Option<String>)],
+    outer_live_out: &HashSet<String>,
     signatures: &SignatureIndex<'_>,
     struct_signatures: &[StructSignature],
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
-            let mut borrows = Vec::<(String, String, bool, Option<String>)>::new();
+            let mut borrows = active_borrows.to_vec();
             let mut local_types = local_types.clone();
             for (index, statement) in statements.iter().enumerate() {
+                let live_out = live_borrowers_after(
+                    &borrows,
+                    &statements[index + 1..],
+                    tail.as_deref(),
+                    outer_live_out,
+                );
                 let method_expressions: Vec<&BodyExpr> = match statement {
                     BodyStatement::Let {
                         initializer: Some(expression),
@@ -1167,6 +1177,7 @@ fn check_local_borrow_conflicts_in_expression(
                         &borrows,
                         &statements[index + 1..],
                         tail.as_deref(),
+                        outer_live_out,
                         diagnostics,
                     );
                 }
@@ -1183,6 +1194,7 @@ fn check_local_borrow_conflicts_in_expression(
                             &borrows,
                             &statements[index + 1..],
                             tail.as_deref(),
+                            outer_live_out,
                             diagnostics,
                         );
                     }
@@ -1201,6 +1213,7 @@ fn check_local_borrow_conflicts_in_expression(
                         &borrows,
                         &statements[index + 1..],
                         tail.as_deref(),
+                        outer_live_out,
                         diagnostics,
                     ),
                     BodyStatement::While { condition, .. } => {
@@ -1212,6 +1225,7 @@ fn check_local_borrow_conflicts_in_expression(
                             &borrows,
                             &statements[index + 1..],
                             tail.as_deref(),
+                            outer_live_out,
                             diagnostics,
                         );
                     }
@@ -1226,6 +1240,7 @@ fn check_local_borrow_conflicts_in_expression(
                                     &borrows,
                                     &statements[index + 1..],
                                     tail.as_deref(),
+                                    outer_live_out,
                                 )
                             {
                                 diagnostics.push(TypeDiagnostic {
@@ -1260,6 +1275,7 @@ fn check_local_borrow_conflicts_in_expression(
                                     &borrows,
                                     &statements[index + 1..],
                                     tail.as_deref(),
+                                    outer_live_out,
                                 )
                             {
                                 continue;
@@ -1316,6 +1332,7 @@ fn check_local_borrow_conflicts_in_expression(
                                 &borrows,
                                 &statements[index + 1..],
                                 tail.as_deref(),
+                                outer_live_out,
                             )
                         {
                             let message = match (*previous_is_mutable, is_mutable) {
@@ -1347,6 +1364,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_statement(
                     statement,
                     &local_types,
+                    &borrows,
+                    &live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1382,6 +1401,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     tail,
                     &local_types,
+                    &borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1397,6 +1418,8 @@ fn check_local_borrow_conflicts_in_expression(
         | BodyExprKind::Dereference(expression) => check_local_borrow_conflicts_in_expression(
             expression,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1409,6 +1432,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     argument,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1423,6 +1448,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 receiver,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1431,6 +1458,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     argument,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1440,6 +1469,8 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Closure { body, .. } => check_local_borrow_conflicts_in_expression(
             body,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1449,6 +1480,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     value,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1458,6 +1491,8 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::FieldAccess { base, .. } => check_local_borrow_conflicts_in_expression(
             base,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1466,6 +1501,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 base,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1473,6 +1510,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 index,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1482,6 +1521,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 left,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1489,6 +1530,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 right,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1502,6 +1545,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 condition,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1509,6 +1554,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 then_branch,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1517,6 +1564,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     else_branch,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1527,6 +1576,8 @@ fn check_local_borrow_conflicts_in_expression(
             check_local_borrow_conflicts_in_expression(
                 scrutinee,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1535,6 +1586,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     &arm.body,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1546,6 +1599,8 @@ fn check_local_borrow_conflicts_in_expression(
                 check_local_borrow_conflicts_in_expression(
                     argument,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1555,6 +1610,8 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Return(Some(value)) => check_local_borrow_conflicts_in_expression(
             value,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1571,6 +1628,8 @@ fn check_local_borrow_conflicts_in_expression(
 fn check_local_borrow_conflicts_in_statement(
     statement: &BodyStatement,
     local_types: &HashMap<String, Ty>,
+    active_borrows: &[(String, String, bool, Option<String>)],
+    outer_live_out: &HashSet<String>,
     signatures: &SignatureIndex<'_>,
     struct_signatures: &[StructSignature],
     diagnostics: &mut Vec<TypeDiagnostic>,
@@ -1581,6 +1640,8 @@ fn check_local_borrow_conflicts_in_statement(
                 check_local_borrow_conflicts_in_expression(
                     initializer,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1597,6 +1658,8 @@ fn check_local_borrow_conflicts_in_statement(
         } => check_local_borrow_conflicts_in_expression(
             initializer,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1607,6 +1670,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 condition,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1614,6 +1679,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 body,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1622,6 +1689,8 @@ fn check_local_borrow_conflicts_in_statement(
         BodyStatement::Loop { body, .. } => check_local_borrow_conflicts_in_expression(
             body,
             local_types,
+            active_borrows,
+            outer_live_out,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1632,6 +1701,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 start,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1639,6 +1710,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 end,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1646,6 +1719,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 body,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1655,6 +1730,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 iterator,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1662,6 +1739,8 @@ fn check_local_borrow_conflicts_in_statement(
             check_local_borrow_conflicts_in_expression(
                 body,
                 local_types,
+                active_borrows,
+                outer_live_out,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1672,6 +1751,8 @@ fn check_local_borrow_conflicts_in_statement(
                 check_local_borrow_conflicts_in_expression(
                     argument,
                     local_types,
+                    active_borrows,
+                    outer_live_out,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1710,6 +1791,7 @@ fn check_consumed_local_against_borrows(
     borrows: &[(String, String, bool, Option<String>)],
     statements_after: &[BodyStatement],
     tail: Option<&BodyExpr>,
+    outer_live_out: &HashSet<String>,
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
     match &expression.kind {
@@ -1721,7 +1803,13 @@ fn check_consumed_local_against_borrows(
         {
             for (borrow_index, (_, place, _, _)) in borrows.iter().enumerate() {
                 if place == name
-                    && local_borrow_is_live_after(borrow_index, borrows, statements_after, tail)
+                    && local_borrow_is_live_after(
+                        borrow_index,
+                        borrows,
+                        statements_after,
+                        tail,
+                        outer_live_out,
+                    )
                 {
                     diagnostics.push(TypeDiagnostic {
                         span: expression.span.clone(),
@@ -1741,6 +1829,7 @@ fn check_consumed_local_against_borrows(
             borrows,
             statements_after,
             tail,
+            outer_live_out,
             diagnostics,
         ),
         BodyExprKind::Parenthesized(inner) => check_consumed_local_against_borrows(
@@ -1751,6 +1840,7 @@ fn check_consumed_local_against_borrows(
             borrows,
             statements_after,
             tail,
+            outer_live_out,
             diagnostics,
         ),
         BodyExprKind::Call { arguments, .. }
@@ -1766,6 +1856,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1786,6 +1877,7 @@ fn check_consumed_local_against_borrows(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             for argument in arguments {
@@ -1797,6 +1889,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1811,6 +1904,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1828,6 +1922,7 @@ fn check_consumed_local_against_borrows(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             check_consumed_local_against_borrows(
@@ -1838,6 +1933,7 @@ fn check_consumed_local_against_borrows(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             if let Some(else_branch) = else_branch {
@@ -1849,6 +1945,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1866,6 +1963,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1878,6 +1976,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1892,11 +1991,12 @@ fn check_consumed_local_against_borrows(
                         initializer: Some(value),
                         ..
                     }
-                    | BodyStatement::LetTuple { initializer: value, .. }
+                    | BodyStatement::LetTuple {
+                        initializer: value, ..
+                    }
                     | BodyStatement::Assign { value, .. }
                     | BodyStatement::Expression {
-                        expression: value,
-                        ..
+                        expression: value, ..
                     } => Some((value, true)),
                     BodyStatement::While { condition, .. } => Some((condition, false)),
                     BodyStatement::ForRange { start, .. } => Some((start, false)),
@@ -1912,6 +2012,7 @@ fn check_consumed_local_against_borrows(
                         borrows,
                         statements_after,
                         tail,
+                        outer_live_out,
                         diagnostics,
                     );
                 }
@@ -1925,6 +2026,7 @@ fn check_consumed_local_against_borrows(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -1937,12 +2039,12 @@ fn check_consumed_local_against_borrows(
             borrows,
             statements_after,
             tail,
+            outer_live_out,
             diagnostics,
         ),
         _ => {}
     }
 }
-
 fn method_receiver_is_mutable(receiver_type: &Ty, method: &str) -> Option<bool> {
     match receiver_type {
         Ty::Reference(inner) => method_receiver_is_mutable(inner, method),
@@ -1979,6 +2081,7 @@ fn check_method_receiver_conflicts(
     borrows: &[(String, String, bool, Option<String>)],
     statements_after: &[BodyStatement],
     tail: Option<&BodyExpr>,
+    outer_live_out: &HashSet<String>,
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
     match &expression.kind {
@@ -2000,6 +2103,7 @@ fn check_method_receiver_conflicts(
                             borrows,
                             statements_after,
                             tail,
+                            outer_live_out,
                         );
                     if conflicts {
                         let message = match (*previous_is_mutable, mutable) {
@@ -2028,6 +2132,7 @@ fn check_method_receiver_conflicts(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             for argument in arguments {
@@ -2037,6 +2142,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2054,6 +2160,7 @@ fn check_method_receiver_conflicts(
             borrows,
             statements_after,
             tail,
+            outer_live_out,
             diagnostics,
         ),
         BodyExprKind::Call { arguments, .. }
@@ -2067,6 +2174,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2079,6 +2187,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2102,6 +2211,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2113,6 +2223,7 @@ fn check_method_receiver_conflicts(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             for arm in arms {
@@ -2122,6 +2233,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2134,6 +2246,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2144,6 +2257,7 @@ fn check_method_receiver_conflicts(
             borrows,
             statements_after,
             tail,
+            outer_live_out,
             diagnostics,
         ),
         BodyExprKind::Index { base, index, .. } => {
@@ -2153,6 +2267,7 @@ fn check_method_receiver_conflicts(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
             check_method_receiver_conflicts(
@@ -2161,6 +2276,7 @@ fn check_method_receiver_conflicts(
                 borrows,
                 statements_after,
                 tail,
+                outer_live_out,
                 diagnostics,
             );
         }
@@ -2191,6 +2307,7 @@ fn check_method_receiver_conflicts(
                         borrows,
                         statements_after,
                         tail,
+                        outer_live_out,
                         diagnostics,
                     );
                 }
@@ -2202,6 +2319,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2214,6 +2332,7 @@ fn check_method_receiver_conflicts(
                     borrows,
                     statements_after,
                     tail,
+                    outer_live_out,
                     diagnostics,
                 );
             }
@@ -2221,19 +2340,42 @@ fn check_method_receiver_conflicts(
         _ => {}
     }
 }
-
 fn local_borrow_is_live_after(
     borrow_index: usize,
     borrows: &[(String, String, bool, Option<String>)],
     statements: &[BodyStatement],
     tail: Option<&BodyExpr>,
+    outer_live_out: &HashSet<String>,
 ) -> bool {
     let (borrower, _, _, _) = &borrows[borrow_index];
     local_used_after(borrower, statements, tail)
+        || outer_live_out.contains(borrower)
         || borrows.iter().enumerate().any(|(child_index, child)| {
             child.3.as_deref() == Some(borrower)
-                && local_borrow_is_live_after(child_index, borrows, statements, tail)
+                && local_borrow_is_live_after(
+                    child_index,
+                    borrows,
+                    statements,
+                    tail,
+                    outer_live_out,
+                )
         })
+}
+
+fn live_borrowers_after(
+    borrows: &[(String, String, bool, Option<String>)],
+    statements: &[BodyStatement],
+    tail: Option<&BodyExpr>,
+    outer_live_out: &HashSet<String>,
+) -> HashSet<String> {
+    borrows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (borrower, _, _, _))| {
+            local_borrow_is_live_after(index, borrows, statements, tail, outer_live_out)
+                .then(|| borrower.clone())
+        })
+        .collect()
 }
 
 fn local_borrow_is_ancestor(
