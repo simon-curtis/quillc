@@ -252,7 +252,7 @@ impl ParseCache {
     /// Parse a file using a compact cache entry that omits non-generic
     /// function bodies. Generic bodies remain available for monomorphization.
     /// Returns whether the result is compact. A cache miss performs a full
-    /// parse and returns it once, while also populating both cache entries.
+    /// parse and returns it once, while populating the compact cache entry.
     pub fn parse_file_summary_with_cfg_and_edition(
         &self,
         source: &SourceFile,
@@ -278,12 +278,6 @@ impl ParseCache {
             } else {
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 let parsed = quill_syntax::parse_ast_with_cfg_and_edition(source, cfg, edition);
-                if self
-                    .write_cache(&full_path, source_digest, cfg_digest, &parsed)
-                    .is_err()
-                {
-                    self.write_failures.fetch_add(1, Ordering::Relaxed);
-                }
                 (parsed, false)
             };
         let summary = CachedParse::from_parse_summary(&parsed).into_parse();
@@ -1046,6 +1040,17 @@ mod tests {
             function.name == "identity" && function.body.is_some() && function.body_span.is_some()
         }));
         assert_eq!(cache.stats().hits, 1);
+
+        // Cargo's summary mode does not persist a duplicate full AST. A later
+        // target cache miss can request and cache the full parse on demand.
+        let full =
+            cache.parse_file_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2024");
+        assert!(
+            full.functions
+                .iter()
+                .all(|function| function.body.is_some())
+        );
+        assert_eq!(cache.stats().misses, 2);
         let _ = fs::remove_dir_all(root);
     }
 
