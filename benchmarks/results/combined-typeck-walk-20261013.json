@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "combine mutability and loop-control body walks",
+  "hypothesis": "Checking mutability and invalid break/continue placement in one traversal should reduce front-end CPU and possibly wall time without changing diagnostics.",
+  "measurement": "Quill check-subset front-end only; not a Cargo build or Rust compile-time result.",
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "rust_source_files": 50,
+    "rust_roots": 9,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "measurement_method": "Five fresh processes; Linux wait4 rusage for process CPU and peak RSS; perf_counter wall time.",
+  "before": {
+    "source": "shared-pool-20261013.json after median",
+    "median": {"wall_seconds": 0.726, "cpu_seconds": 7.623, "peak_rss_kib": 49208}
+  },
+  "after": {
+    "runs": [
+      {"wall_seconds": 0.737579, "cpu_seconds": 7.640542, "peak_rss_kib": 49276, "exit_code": 0},
+      {"wall_seconds": 0.735184, "cpu_seconds": 7.707344, "peak_rss_kib": 49248, "exit_code": 0},
+      {"wall_seconds": 0.811904, "cpu_seconds": 7.598401, "peak_rss_kib": 48800, "exit_code": 0},
+      {"wall_seconds": 0.730856, "cpu_seconds": 7.662222, "peak_rss_kib": 49384, "exit_code": 0},
+      {"wall_seconds": 0.727079, "cpu_seconds": 7.715496, "peak_rss_kib": 49248, "exit_code": 0}
+    ],
+    "median": {"wall_seconds": 0.735184, "cpu_seconds": 7.662222, "peak_rss_kib": 49248}
+  },
+  "median_change_percent": {"wall_time": 1.27, "cpu_time": 0.51, "peak_rss": 0.08},
+  "decision": "Reject the change: it did not demonstrate a speed or memory improvement; the medians slightly regressed and run ranges overlap. Restore the separate passes.",
+  "correctness_gate": "The combined version passed typeck and workspace tests; restored version retains the same tested separate-pass implementation."
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "reuse one bounded work-stealing pool for module parsing and type checking",
+  "hypothesis": "Avoiding a second Rayon pool and worker startup should reduce check-subset wall time and peak memory without changing results.",
+  "measurement": "Quill front-end check-subset profile; not comparable to cargo build or a Rust compile-time result",
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "rust_source_files": 50,
+    "rust_roots": 9,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "measurement_method": "Linux wait4 rusage for one quillc process; perf_counter wall time; ru_maxrss in KiB.",
+  "before": {
+    "pool_lifecycle": "module parsing pool dropped, then a separate type-check pool created",
+    "runs": [
+      {"wall_seconds": 0.733, "cpu_seconds": 7.578, "peak_rss_kib": 49132},
+      {"wall_seconds": 0.724, "cpu_seconds": 7.562, "peak_rss_kib": 49116},
+      {"wall_seconds": 0.720, "cpu_seconds": 7.543, "peak_rss_kib": 49112},
+      {"wall_seconds": 0.801, "cpu_seconds": 7.508, "peak_rss_kib": 48972},
+      {"wall_seconds": 0.722, "cpu_seconds": 7.562, "peak_rss_kib": 49136}
+    ],
+    "median": {"wall_seconds": 0.724, "cpu_seconds": 7.562, "peak_rss_kib": 49116}
+  },
+  "after": {
+    "pool_lifecycle": "the caller retains the parse pool and passes it into type checking",
+    "runs": [
+      {"wall_seconds": 0.736, "cpu_seconds": 7.651, "peak_rss_kib": 49056},
+      {"wall_seconds": 0.726, "cpu_seconds": 7.609, "peak_rss_kib": 49220},
+      {"wall_seconds": 0.724, "cpu_seconds": 7.623, "peak_rss_kib": 49292},
+      {"wall_seconds": 0.725, "cpu_seconds": 7.582, "peak_rss_kib": 49188},
+      {"wall_seconds": 0.731, "cpu_seconds": 7.640, "peak_rss_kib": 49208}
+    ],
+    "median": {"wall_seconds": 0.726, "cpu_seconds": 7.623, "peak_rss_kib": 49208}
+  },
+  "median_change_percent": {
+    "wall_time": 0.28,
+    "cpu_time": 0.81,
+    "peak_rss": 0.19
+  },
+  "interpretation": "No measurable speed or memory improvement; differences are within run noise. Retained to enforce a single pool lifecycle across phases, not as a claimed optimization.",
+  "correctness_gate": "workspace tests, Clippy with warnings denied, formatting, and 3454-body corpus check passed"
+}

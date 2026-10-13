@@ -1,0 +1,6 @@
+**/target/
+/benchmarks/results/*.txt
+/benchmarks/results/*.csv
+
+__pycache__/
+*.py[cod]

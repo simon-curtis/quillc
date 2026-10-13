@@ -1,0 +1,7 @@
+[package]
+name = "catalog-ingest"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+catalog_parse = { package = "catalog-parse", path = "../catalog-parse" }

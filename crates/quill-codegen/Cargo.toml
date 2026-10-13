@@ -1,0 +1,17 @@
+[package]
+name = "quill-codegen"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+quill-hir = { path = "../quill-hir" }
+quill-parallel = { path = "../quill-parallel" }
+quill-syntax = { path = "../quill-syntax" }
+object = { version = "=0.40.0", default-features = false, features = ["write_std", "elf"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+quill-source = { path = "../quill-source" }
+quill-link = { path = "../quill-link" }
+object = { version = "=0.40.0", default-features = false, features = ["read", "elf"] }

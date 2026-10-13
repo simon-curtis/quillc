@@ -1,0 +1,88 @@
+{
+  "experiment": "closed executable public dead-code pruning",
+  "rounds": 3,
+  "helpers": 3400,
+  "source_lines": 30602,
+  "source_sha256": "63399315cd718c25d0722aca44b14ee031a31c8fdae65951d28ee586a82d259d",
+  "measurement": "wait4 wall, CPU, and peak RSS for quillc plus waited linker child; generated program must exit 42",
+  "binaries": {
+    "before": {
+      "path": "/tmp/quill-public-prune-before/target/release/quillc",
+      "sha256": "28285c5a47da38caf936d37e15da1474463468edf7e5bbbe46081e1080a03651"
+    },
+    "after": {
+      "path": "/home/simon/git/quillc/target/release/quillc",
+      "sha256": "5e94ffb55b15c0479ea195c8ef45426bee98bc0400e264eb53bdb78bba6661f1"
+    }
+  },
+  "rows": [
+    {
+      "round": 1,
+      "variant": "before",
+      "wall_seconds": 1.7504230439953972,
+      "cpu_seconds": 1.746019,
+      "peak_rss_kib": 65292,
+      "output_bytes": 884256,
+      "program_exit_code": 42
+    },
+    {
+      "round": 1,
+      "variant": "after",
+      "wall_seconds": 1.3899135050014593,
+      "cpu_seconds": 1.387752,
+      "peak_rss_kib": 29908,
+      "output_bytes": 4760,
+      "program_exit_code": 42
+    },
+    {
+      "round": 2,
+      "variant": "after",
+      "wall_seconds": 1.4132111229992006,
+      "cpu_seconds": 1.4106869999999998,
+      "peak_rss_kib": 29816,
+      "output_bytes": 4760,
+      "program_exit_code": 42
+    },
+    {
+      "round": 2,
+      "variant": "before",
+      "wall_seconds": 1.4208558929967694,
+      "cpu_seconds": 1.4176950000000001,
+      "peak_rss_kib": 34920,
+      "output_bytes": 884256,
+      "program_exit_code": 42
+    },
+    {
+      "round": 3,
+      "variant": "before",
+      "wall_seconds": 1.399679797992576,
+      "cpu_seconds": 1.3973289999999998,
+      "peak_rss_kib": 34900,
+      "output_bytes": 884256,
+      "program_exit_code": 42
+    },
+    {
+      "round": 3,
+      "variant": "after",
+      "wall_seconds": 1.3955517470021732,
+      "cpu_seconds": 1.393224,
+      "peak_rss_kib": 29772,
+      "output_bytes": 4760,
+      "program_exit_code": 42
+    }
+  ],
+  "medians": {
+    "before": {
+      "wall_seconds": 1.4208558929967694,
+      "cpu_seconds": 1.4176950000000001,
+      "peak_rss_kib": 34920.0,
+      "output_bytes": 884256.0
+    },
+    "after": {
+      "wall_seconds": 1.3955517470021732,
+      "cpu_seconds": 1.393224,
+      "peak_rss_kib": 29816.0,
+      "output_bytes": 4760.0
+    }
+  }
+}

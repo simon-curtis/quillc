@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-12T22:45:43+01:00",
+  "git_revision": "uncommitted",
+  "host": {
+    "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "cpu_governor": "powersave",
+    "logical_cpus": 12
+  },
+  "rustc_version": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "cargo_version": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "source_lines": 30977,
+  "program_output": "catalog-flow records=128 digest=0000a53352b1a3d7",
+  "metrics_note": "systemd scope cgroup v2 cpu.stat and memory.peak deltas; memory includes the lightweight Python measurement wrapper.",
+  "runs": [
+    {
+      "round": 1,
+      "mode": "cold",
+      "wall_seconds": 2.6335815790080233,
+      "cpu_user_seconds": 5.002612,
+      "cpu_system_seconds": 0.487276,
+      "cpu_total_seconds": 5.489888,
+      "peak_memory_bytes": 345792512,
+      "exit_code": 0
+    },
+    {
+      "round": 1,
+      "mode": "warm",
+      "wall_seconds": 0.035755781005718745,
+      "cpu_user_seconds": 0.023201,
+      "cpu_system_seconds": 0.01364,
+      "cpu_total_seconds": 0.036841,
+      "peak_memory_bytes": 34136064,
+      "exit_code": 0
+    },
+    {
+      "round": 1,
+      "mode": "incremental",
+      "wall_seconds": 0.09854132500186097,
+      "cpu_user_seconds": 0.066678,
+      "cpu_system_seconds": 0.041621,
+      "cpu_total_seconds": 0.108299,
+      "peak_memory_bytes": 113799168,
+      "exit_code": 0
+    },
+    {
+      "round": 2,
+      "mode": "cold",
+      "wall_seconds": 2.6347824789991137,
+      "cpu_user_seconds": 5.062191,
+      "cpu_system_seconds": 0.421242,
+      "cpu_total_seconds": 5.483433,
+      "peak_memory_bytes": 348110848,
+      "exit_code": 0
+    },
+    {
+      "round": 2,
+      "mode": "warm",
+      "wall_seconds": 0.03619543100649025,
+      "cpu_user_seconds": 0.027421,
+      "cpu_system_seconds": 0.010025,
+      "cpu_total_seconds": 0.037445,
+      "peak_memory_bytes": 33918976,
+      "exit_code": 0
+    },
+    {
+      "round": 2,
+      "mode": "incremental",
+      "wall_seconds": 0.09622389099968132,
+      "cpu_user_seconds": 0.070333,
+      "cpu_system_seconds": 0.035924,
+      "cpu_total_seconds": 0.106258,
+      "peak_memory_bytes": 111480832,
+      "exit_code": 0
+    },
+    {
+      "round": 3,
+      "mode": "cold",
+      "wall_seconds": 2.6540723859943682,
+      "cpu_user_seconds": 5.124291,
+      "cpu_system_seconds": 0.433011,
+      "cpu_total_seconds": 5.557301,
+      "peak_memory_bytes": 343937024,
+      "exit_code": 0
+    },
+    {
+      "round": 3,
+      "mode": "warm",
+      "wall_seconds": 0.036545399998431094,
+      "cpu_user_seconds": 0.023873,
+      "cpu_system_seconds": 0.013879,
+      "cpu_total_seconds": 0.037751,
+      "peak_memory_bytes": 34463744,
+      "exit_code": 0
+    },
+    {
+      "round": 3,
+      "mode": "incremental",
+      "wall_seconds": 0.09771226200973615,
+      "cpu_user_seconds": 0.074066,
+      "cpu_system_seconds": 0.034495,
+      "cpu_total_seconds": 0.10856,
+      "peak_memory_bytes": 124596224,
+      "exit_code": 0
+    },
+    {
+      "round": 4,
+      "mode": "cold",
+      "wall_seconds": 2.6279650849901373,
+      "cpu_user_seconds": 5.036636,
+      "cpu_system_seconds": 0.455231,
+      "cpu_total_seconds": 5.491867,
+      "peak_memory_bytes": 341422080,
+      "exit_code": 0
+    },
+    {
+      "round": 4,
+      "mode": "warm",
+      "wall_seconds": 0.03542386200570036,
+      "cpu_user_seconds": 0.02634,
+      "cpu_system_seconds": 0.0102,
+      "cpu_total_seconds": 0.036541,
+      "peak_memory_bytes": 34193408,
+      "exit_code": 0
+    },
+    {
+      "round": 4,
+      "mode": "incremental",
+      "wall_seconds": 0.09756254400417674,
+      "cpu_user_seconds": 0.079894,
+      "cpu_system_seconds": 0.02818,
+      "cpu_total_seconds": 0.108075,
+      "peak_memory_bytes": 120504320,
+      "exit_code": 0
+    },
+    {
+      "round": 5,
+      "mode": "cold",
+      "wall_seconds": 2.626077228997019,
+      "cpu_user_seconds": 5.103833,
+      "cpu_system_seconds": 0.414209,
+      "cpu_total_seconds": 5.518043,
+      "peak_memory_bytes": 339079168,
+      "exit_code": 0
+    },
+    {
+      "round": 5,
+      "mode": "warm",
+      "wall_seconds": 0.03607689600903541,
+      "cpu_user_seconds": 0.027042,
+      "cpu_system_seconds": 0.0102,
+      "cpu_total_seconds": 0.037242,
+      "peak_memory_bytes": 34308096,
+      "exit_code": 0
+    },
+    {
+      "round": 5,
+      "mode": "incremental",
+      "wall_seconds": 0.09860913999727927,
+      "cpu_user_seconds": 0.073565,
+      "cpu_system_seconds": 0.034301,
+      "cpu_total_seconds": 0.107867,
+      "peak_memory_bytes": 116355072,
+      "exit_code": 0
+    }
+  ]
+}

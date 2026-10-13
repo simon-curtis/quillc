@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13T02:47:49+01:00",
+  "toolchain": {
+    "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+    "cargo": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+    "toolchain_file": "[toolchain]\nchannel = \"nightly-2026-08-23\"\nprofile = \"minimal\"\ncomponents = [\"rustfmt\", \"clippy\"]"
+  },
+  "host": {
+    "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12
+  },
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "source_files": 50,
+    "crate_roots": 9,
+    "command": "cargo-check-subset",
+    "function_bodies_checked": 3454
+  },
+  "measurement_note": "Quill cargo-check-subset query-cache profile, not a Cargo build or rustc comparison. Process metrics use Linux wait4 rusage.",
+  "runs": [
+    {
+      "round": 1,
+      "mode": "cold",
+      "wall_seconds": 0.4806843380065402,
+      "cpu_seconds": 3.4313079999999996,
+      "peak_rss_kib": 78292,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 0,
+          "misses": 50,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 0,
+          "misses": 3454,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 1,
+      "mode": "warm",
+      "wall_seconds": 0.191682338991086,
+      "cpu_seconds": 0.43541599999999997,
+      "peak_rss_kib": 47784,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 50,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3454,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 1,
+      "mode": "incremental",
+      "wall_seconds": 0.22288211500563193,
+      "cpu_seconds": 0.46909,
+      "peak_rss_kib": 50088,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 49,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3453,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "mode": "cold",
+      "wall_seconds": 0.4830109239992453,
+      "cpu_seconds": 3.399781,
+      "peak_rss_kib": 78972,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 0,
+          "misses": 50,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 0,
+          "misses": 3454,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "mode": "warm",
+      "wall_seconds": 0.1884972379921237,
+      "cpu_seconds": 0.433164,
+      "peak_rss_kib": 47780,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 50,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3454,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "mode": "incremental",
+      "wall_seconds": 0.2225148959987564,
+      "cpu_seconds": 0.48323199999999994,
+      "peak_rss_kib": 50020,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 49,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3453,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "mode": "cold",
+      "wall_seconds": 0.4803501519927522,
+      "cpu_seconds": 3.416756,
+      "peak_rss_kib": 78976,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 0,
+          "misses": 50,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 0,
+          "misses": 3454,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "mode": "warm",
+      "wall_seconds": 0.1871830210002372,
+      "cpu_seconds": 0.4306,
+      "peak_rss_kib": 48512,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 50,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3454,
+          "misses": 0,
+          "invalid_entries": 0,
+          "write_failures": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "mode": "incremental",
+      "wall_seconds": 0.22294220399635378,
+      "cpu_seconds": 0.473999,
+      "peak_rss_kib": 49812,
+      "exit_code": 0,
+      "cache": {
+        "parse": {
+          "hits": 49,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        },
+        "type_check": {
+          "hits": 3453,
+          "misses": 1,
+          "invalid_entries": 1,
+          "write_failures": 0
+        }
+      }
+    }
+  ],
+  "medians": {
+    "cold": {
+      "wall_seconds": 0.4806843380065402,
+      "cpu_seconds": 3.416756,
+      "peak_rss_kib": 78972.0
+    },
+    "warm": {
+      "wall_seconds": 0.1884972379921237,
+      "cpu_seconds": 0.433164,
+      "peak_rss_kib": 47784.0
+    },
+    "incremental": {
+      "wall_seconds": 0.22288211500563193,
+      "cpu_seconds": 0.473999,
+      "peak_rss_kib": 50020.0
+    }
+  }
+}

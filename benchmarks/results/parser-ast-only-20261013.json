@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "skip custom lexing and token-tree construction in compiler AST batch path",
+  "hypothesis": "The compiler driver does not consume Parse.items, so using Syn directly should reduce CPU and peak memory without changing extracted semantic items or diagnostics.",
+  "measurement": "quillc check-subset front-end profile; not comparable to cargo build or evidence of compiler speedup",
+  "workload": {
+    "name": "catalog-flow",
+    "rust_source_files": 50,
+    "rust_source_lines": 30977,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "host": {
+    "platform": "Linux x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12,
+    "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)"
+  },
+  "command": "target/debug/quillc check-subset <all 50 Rust files in benchmarks/catalog-flow>",
+  "measurement_method": "Linux wait4 rusage for one quillc process; wall time from perf_counter around wait4; ru_maxrss is KiB.",
+  "before": {
+    "path": "parse_files mapped to full lex + token-tree + Syn parse",
+    "runs": [
+      {"wall_seconds": 1.709, "cpu_seconds": 16.726, "peak_rss_kib": 93772},
+      {"wall_seconds": 1.576, "cpu_seconds": 16.547, "peak_rss_kib": 93476},
+      {"wall_seconds": 1.583, "cpu_seconds": 16.629, "peak_rss_kib": 93620},
+      {"wall_seconds": 1.577, "cpu_seconds": 16.673, "peak_rss_kib": 93540},
+      {"wall_seconds": 1.578, "cpu_seconds": 16.611, "peak_rss_kib": 93592}
+    ],
+    "median": {"wall_seconds": 1.578, "cpu_seconds": 16.629, "peak_rss_kib": 93592}
+  },
+  "after": {
+    "path": "parse_files mapped to Syn AST parsing; standalone parse and lex APIs unchanged",
+    "runs": [
+      {"wall_seconds": 1.478, "cpu_seconds": 15.674, "peak_rss_kib": 59792},
+      {"wall_seconds": 1.475, "cpu_seconds": 15.580, "peak_rss_kib": 59716},
+      {"wall_seconds": 1.482, "cpu_seconds": 15.649, "peak_rss_kib": 60600},
+      {"wall_seconds": 1.494, "cpu_seconds": 15.711, "peak_rss_kib": 60040},
+      {"wall_seconds": 1.579, "cpu_seconds": 15.596, "peak_rss_kib": 59972}
+    ],
+    "median": {"wall_seconds": 1.482, "cpu_seconds": 15.649, "peak_rss_kib": 59972}
+  },
+  "median_change_percent": {
+    "wall_time": -6.08,
+    "cpu_time": -5.89,
+    "peak_rss": -35.92
+  },
+  "official_module_root_mode_comparison": {
+    "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+    "rust_roots": 9,
+    "source_files_discovered": 50,
+    "before_runs_from_quill_check_subset_20261012": [
+      {"wall_seconds": 0.785, "cpu_seconds": 8.216, "peak_rss_kib": 64004},
+      {"wall_seconds": 0.817, "cpu_seconds": 8.434, "peak_rss_kib": 64372},
+      {"wall_seconds": 0.788, "cpu_seconds": 8.249, "peak_rss_kib": 64220},
+      {"wall_seconds": 0.778, "cpu_seconds": 8.190, "peak_rss_kib": 63844},
+      {"wall_seconds": 0.788, "cpu_seconds": 8.289, "peak_rss_kib": 64116}
+    ],
+    "after_runs": [
+      {"wall_seconds": 0.734, "cpu_seconds": 7.705, "peak_rss_kib": 47352},
+      {"wall_seconds": 0.733, "cpu_seconds": 7.688, "peak_rss_kib": 47532},
+      {"wall_seconds": 0.739, "cpu_seconds": 7.695, "peak_rss_kib": 47684},
+      {"wall_seconds": 0.734, "cpu_seconds": 7.753, "peak_rss_kib": 47400},
+      {"wall_seconds": 0.738, "cpu_seconds": 7.806, "peak_rss_kib": 47384}
+    ],
+    "before_median": {"wall_seconds": 0.788, "cpu_seconds": 8.249, "peak_rss_kib": 64116},
+    "after_median": {"wall_seconds": 0.734, "cpu_seconds": 7.705, "peak_rss_kib": 47400},
+    "median_change_percent": {"wall_time": -6.85, "cpu_time": -6.60, "peak_rss": -26.07}
+  },
+  "correctness_gate": "workspace tests, Clippy with warnings denied, and 3454-body corpus check passed after change"
+}

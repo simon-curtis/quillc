@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "collect direct calls during body lowering instead of a second Syn visitor pass",
+  "hypothesis": "Fusing call-edge collection into the existing expression lowering walk should reduce front-end work while preserving the HIR call graph, including calls nested inside unsupported syntax.",
+  "measurement": "Quill check-subset front-end only; not a Cargo build or rustc comparison.",
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "rust_source_files": 50,
+    "rust_roots": 9,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "measurement_method": "Seven fresh processes before and after; Linux wait4 rusage for CPU and peak RSS; perf_counter wall time.",
+  "before": {
+    "source": "indexed-span-lookup-20261013.json after median",
+    "median": {"wall_seconds": 0.262386, "cpu_seconds": 2.594550, "peak_rss_kib": 49184}
+  },
+  "experimental_after": {
+    "runs": [
+      {"wall_seconds": 0.274724, "cpu_seconds": 2.593697, "peak_rss_kib": 49272, "exit_code": 0},
+      {"wall_seconds": 0.262384, "cpu_seconds": 2.586554, "peak_rss_kib": 49284, "exit_code": 0},
+      {"wall_seconds": 0.265296, "cpu_seconds": 2.573061, "peak_rss_kib": 49288, "exit_code": 0},
+      {"wall_seconds": 0.263547, "cpu_seconds": 2.613755, "peak_rss_kib": 49276, "exit_code": 0},
+      {"wall_seconds": 0.265150, "cpu_seconds": 2.593603, "peak_rss_kib": 49164, "exit_code": 0},
+      {"wall_seconds": 0.259544, "cpu_seconds": 2.565791, "peak_rss_kib": 49468, "exit_code": 0},
+      {"wall_seconds": 0.260734, "cpu_seconds": 2.565183, "peak_rss_kib": 49476, "exit_code": 0}
+    ],
+    "median": {"wall_seconds": 0.263547, "cpu_seconds": 2.586554, "peak_rss_kib": 49284}
+  },
+  "median_change_percent": {"wall_time": 0.44, "cpu_time": -0.31, "peak_rss": 0.20},
+  "correctness_gate": "The experimental version passed workspace tests, a focused unsupported/nested-call syntax test, and a byte-for-byte comparison of complete HIR/reachability output for the benchmark corpus.",
+  "decision": "Reject and restore the original call collection pass. CPU changed by only -0.31%, wall time regressed by 0.44%, and RSS rose 0.20%; these differences are within run noise. Keep the independently measured source line-start index optimization."
+}

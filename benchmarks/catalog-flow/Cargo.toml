@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = [
+    "catalog-model",
+    "catalog-parse",
+    "catalog-ingest",
+    "catalog-validate",
+    "catalog-index",
+    "catalog-report",
+    "catalog-audit",
+    "catalog-flow",
+]
+default-members = [
+    "catalog-model",
+    "catalog-parse",
+    "catalog-ingest",
+    "catalog-validate",
+    "catalog-index",
+    "catalog-report",
+    "catalog-audit",
+    "catalog-flow",
+]

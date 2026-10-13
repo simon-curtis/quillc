@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-12",
+  "measurement": "quillc check-subset front-end profile",
+  "comparable_to_cargo_build_baseline": false,
+  "reason_not_comparable": "Quill checks its primitive subset and does not compile or link the corpus; the rustc baseline measures cargo build.",
+  "toolchain": "nightly-2026-08-23",
+  "host": {
+    "platform": "Linux x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12
+  },
+  "workload": {
+    "name": "catalog-flow",
+    "rust_source_files": 50,
+    "rust_source_lines": 30977,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "memory_method": "Python resource.getrusage(RUSAGE_CHILDREN).ru_maxrss for the single quillc child process; Linux reports KiB.",
+  "runs": [
+    {"wall_seconds": 0.785, "cpu_seconds": 8.216, "peak_rss_kib": 64004},
+    {"wall_seconds": 0.817, "cpu_seconds": 8.434, "peak_rss_kib": 64372},
+    {"wall_seconds": 0.788, "cpu_seconds": 8.249, "peak_rss_kib": 64220},
+    {"wall_seconds": 0.778, "cpu_seconds": 8.190, "peak_rss_kib": 63844},
+    {"wall_seconds": 0.788, "cpu_seconds": 8.289, "peak_rss_kib": 64116}
+  ],
+  "median": {
+    "wall_seconds": 0.788,
+    "cpu_seconds": 8.249,
+    "peak_rss_kib": 64116,
+    "cpu_seconds_per_wall_second": 10.47
+  }
+}

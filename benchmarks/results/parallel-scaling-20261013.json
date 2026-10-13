@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "check-subset work-stealing concurrency sweep",
+  "hypothesis": "The corpus frontend may reach best throughput below the host's full logical CPU count; configurable worker caps reveal the CPU/RSS tradeoff.",
+  "measurement": "Quill frontend profile only; not a Cargo build or equivalent Rust compilation benchmark",
+  "host": {
+    "platform": "Linux x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12
+  },
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "rust_source_files": 50,
+    "rust_roots": 9,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "method": "Five fresh processes per setting; Linux wait4 rusage for process CPU and peak RSS; perf_counter wall time. QUILL_JOBS caps workers, all means unset and uses all available CPUs.",
+  "settings": [
+    {
+      "jobs": "all",
+      "runs": [
+        {"exit": 0, "wall_seconds": 0.812, "cpu_seconds": 7.600, "peak_rss_kib": 48956},
+        {"exit": 0, "wall_seconds": 0.752, "cpu_seconds": 7.827, "peak_rss_kib": 49260},
+        {"exit": 0, "wall_seconds": 0.725, "cpu_seconds": 7.650, "peak_rss_kib": 49164},
+        {"exit": 0, "wall_seconds": 0.828, "cpu_seconds": 7.592, "peak_rss_kib": 49092},
+        {"exit": 0, "wall_seconds": 0.722, "cpu_seconds": 7.623, "peak_rss_kib": 49192}
+      ],
+      "median": {"wall_seconds": 0.752, "cpu_seconds": 7.623, "peak_rss_kib": 49164}
+    },
+    {
+      "jobs": 1,
+      "runs": [
+        {"exit": 0, "wall_seconds": 4.175, "cpu_seconds": 4.166, "peak_rss_kib": 22560},
+        {"exit": 0, "wall_seconds": 4.190, "cpu_seconds": 4.181, "peak_rss_kib": 22476},
+        {"exit": 0, "wall_seconds": 4.215, "cpu_seconds": 4.206, "peak_rss_kib": 22596},
+        {"exit": 0, "wall_seconds": 4.197, "cpu_seconds": 4.189, "peak_rss_kib": 22660},
+        {"exit": 0, "wall_seconds": 4.236, "cpu_seconds": 4.226, "peak_rss_kib": 22624}
+      ],
+      "median": {"wall_seconds": 4.197, "cpu_seconds": 4.189, "peak_rss_kib": 22596}
+    },
+    {
+      "jobs": 2,
+      "runs": [
+        {"exit": 0, "wall_seconds": 2.270, "cpu_seconds": 4.399, "peak_rss_kib": 24656},
+        {"exit": 0, "wall_seconds": 2.224, "cpu_seconds": 4.296, "peak_rss_kib": 24728},
+        {"exit": 0, "wall_seconds": 2.222, "cpu_seconds": 4.288, "peak_rss_kib": 24820},
+        {"exit": 0, "wall_seconds": 2.217, "cpu_seconds": 4.289, "peak_rss_kib": 24792},
+        {"exit": 0, "wall_seconds": 2.219, "cpu_seconds": 4.301, "peak_rss_kib": 24756}
+      ],
+      "median": {"wall_seconds": 2.222, "cpu_seconds": 4.296, "peak_rss_kib": 24756}
+    },
+    {
+      "jobs": 4,
+      "runs": [
+        {"exit": 0, "wall_seconds": 1.173, "cpu_seconds": 4.382, "peak_rss_kib": 29480},
+        {"exit": 0, "wall_seconds": 1.165, "cpu_seconds": 4.357, "peak_rss_kib": 29736},
+        {"exit": 0, "wall_seconds": 1.162, "cpu_seconds": 4.336, "peak_rss_kib": 29860},
+        {"exit": 0, "wall_seconds": 1.175, "cpu_seconds": 4.376, "peak_rss_kib": 29284},
+        {"exit": 0, "wall_seconds": 1.173, "cpu_seconds": 4.391, "peak_rss_kib": 29500}
+      ],
+      "median": {"wall_seconds": 1.173, "cpu_seconds": 4.376, "peak_rss_kib": 29500}
+    },
+    {
+      "jobs": 8,
+      "runs": [
+        {"exit": 0, "wall_seconds": 0.772, "cpu_seconds": 5.693, "peak_rss_kib": 39020},
+        {"exit": 0, "wall_seconds": 0.765, "cpu_seconds": 5.714, "peak_rss_kib": 39664},
+        {"exit": 0, "wall_seconds": 0.838, "cpu_seconds": 5.663, "peak_rss_kib": 39076},
+        {"exit": 0, "wall_seconds": 0.767, "cpu_seconds": 5.696, "peak_rss_kib": 39208},
+        {"exit": 0, "wall_seconds": 0.769, "cpu_seconds": 5.713, "peak_rss_kib": 39276}
+      ],
+      "median": {"wall_seconds": 0.769, "cpu_seconds": 5.696, "peak_rss_kib": 39208}
+    },
+    {
+      "jobs": 12,
+      "runs": [
+        {"exit": 0, "wall_seconds": 0.724, "cpu_seconds": 7.573, "peak_rss_kib": 49192},
+        {"exit": 0, "wall_seconds": 0.723, "cpu_seconds": 7.610, "peak_rss_kib": 49184},
+        {"exit": 0, "wall_seconds": 0.730, "cpu_seconds": 7.594, "peak_rss_kib": 49412},
+        {"exit": 0, "wall_seconds": 0.734, "cpu_seconds": 7.728, "peak_rss_kib": 48996},
+        {"exit": 0, "wall_seconds": 0.723, "cpu_seconds": 7.616, "peak_rss_kib": 49188}
+      ],
+      "median": {"wall_seconds": 0.724, "cpu_seconds": 7.610, "peak_rss_kib": 49188}
+    }
+  ],
+  "decision": "Keep all available CPUs as the default. QUILL_JOBS=8 is a useful lower-memory option but is slower. This measures only Quill's checker and does not establish a rustc speedup."
+}

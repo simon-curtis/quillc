@@ -1,0 +1,152 @@
+{
+  "experiment": "dead-helper backend-lowering pruning",
+  "rounds": 5,
+  "source": "/tmp/quill-dead-code-prune-bench.rs",
+  "source_lines": 30602,
+  "source_bytes": 655175,
+  "before_binary": "/tmp/quillc-dead-before/target/release/quillc",
+  "after_binary": "/tmp/quillc-dead-after/target/release/quillc",
+  "measurement": "systemd user scope cgroup v2 cpu.stat and memory.peak; wall via perf_counter; includes Python wrapper and linker child",
+  "rows": [
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.586682032997487,
+      "cpu_seconds": 25.54718,
+      "peak_memory_bytes": 69328896,
+      "stdout": "built /tmp/quill-prune-output-before-1",
+      "stderr": "",
+      "round": 1,
+      "variant": "before",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.323370145997615,
+      "cpu_seconds": 25.274782,
+      "peak_memory_bytes": 69275648,
+      "stdout": "built /tmp/quill-prune-output-after-1",
+      "stderr": "",
+      "round": 1,
+      "variant": "after",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.79577372400672,
+      "cpu_seconds": 25.749465,
+      "peak_memory_bytes": 69595136,
+      "stdout": "built /tmp/quill-prune-output-after-2",
+      "stderr": "",
+      "round": 2,
+      "variant": "after",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.57301387899497,
+      "cpu_seconds": 25.525435,
+      "peak_memory_bytes": 69341184,
+      "stdout": "built /tmp/quill-prune-output-before-2",
+      "stderr": "",
+      "round": 2,
+      "variant": "before",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.673389620991657,
+      "cpu_seconds": 25.62778,
+      "peak_memory_bytes": 69595136,
+      "stdout": "built /tmp/quill-prune-output-before-3",
+      "stderr": "",
+      "round": 3,
+      "variant": "before",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.793485742993653,
+      "cpu_seconds": 25.74842,
+      "peak_memory_bytes": 71172096,
+      "stdout": "built /tmp/quill-prune-output-after-3",
+      "stderr": "",
+      "round": 3,
+      "variant": "after",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.072419284988428,
+      "cpu_seconds": 25.027709,
+      "peak_memory_bytes": 71168000,
+      "stdout": "built /tmp/quill-prune-output-after-4",
+      "stderr": "",
+      "round": 4,
+      "variant": "after",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.80389644400566,
+      "cpu_seconds": 25.75684,
+      "peak_memory_bytes": 69591040,
+      "stdout": "built /tmp/quill-prune-output-before-4",
+      "stderr": "",
+      "round": 4,
+      "variant": "before",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.62485209100123,
+      "cpu_seconds": 25.582192,
+      "peak_memory_bytes": 69337088,
+      "stdout": "built /tmp/quill-prune-output-before-5",
+      "stderr": "",
+      "round": 5,
+      "variant": "before",
+      "program_exit_code": 42
+    },
+    {
+      "exit_code": 0,
+      "wall_seconds": 25.32123754300119,
+      "cpu_seconds": 25.280269,
+      "peak_memory_bytes": 69328896,
+      "stdout": "built /tmp/quill-prune-output-after-5",
+      "stderr": "",
+      "round": 5,
+      "variant": "after",
+      "program_exit_code": 42
+    }
+  ],
+  "timestamp_local": "2026-10-13T00:57:54+01:00",
+  "host": {
+    "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12,
+    "cpu_governor": "powersave"
+  },
+  "toolchain": {
+    "rustc": "rustc 1.101.0-nightly (080cc2714 2026-10-11)",
+    "cargo": "cargo 1.101.0-nightly (29c5daa1a 2026-10-07)",
+    "profile": "release",
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "workload": {
+    "kind": "dead-code lowering stress microbenchmark",
+    "private_dead_helpers": 3400,
+    "body": "each helper has two initialized locals, a while loop, arithmetic and a tail value",
+    "reachable_helpers": 1,
+    "expected_program_exit": 42
+  },
+  "comparison": {
+    "before": "same code with the unreachable and uninstantiated checks removed only from the helper-body lowering loop; object-emission reachability guard retained",
+    "after": "current code performs an all-body call-target scan, then lowers only reachable, instantiated helpers",
+    "interpretation": "medians show about 1.18% lower wall and CPU time, while peak memory is about 0.36% higher; run ranges overlap substantially, so this does not establish a reliable improvement"
+  },
+  "compiler_sha256": {
+    "before": "5cfca571bb7c0dfed9df3d3cf2b0ee64f74df3b5542ac820cea4c547a6d3afe7",
+    "after": "f97ce2014e249b129262772759ff64727c78cefae67ce300529877093361fa45"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13",
+  "experiment": "index source line starts for repeated AST span conversion",
+  "hypothesis": "Syn span conversion repeatedly scans from byte zero to locate line starts. Reusing SourceFile's line-start index should reduce CPU while preserving span coordinates and memory use.",
+  "measurement": "Quill check-subset front-end only; not a Cargo build or rustc comparison.",
+  "workload": {
+    "name": "catalog-flow",
+    "source_lines": 30977,
+    "rust_source_files": 50,
+    "rust_roots": 9,
+    "function_bodies_checked": 3454,
+    "diagnostics": 0
+  },
+  "command": "target/debug/quillc check-subset benchmarks/catalog-flow/*/src/lib.rs benchmarks/catalog-flow/catalog-flow/src/main.rs",
+  "host": {
+    "platform": "Linux x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "logical_cpus": 12
+  },
+  "measurement_method": "Seven fresh processes after the change; Linux wait4 rusage for process CPU and peak RSS; perf_counter wall time. Before medians use the immediately preceding shared-pool experiment on the same command and corpus.",
+  "before": {
+    "source": "shared-pool-20261013.json after median",
+    "median": {"wall_seconds": 0.726, "cpu_seconds": 7.623, "peak_rss_kib": 49208},
+    "perf_stat_single_run": {
+      "wall_seconds": 0.716622,
+      "cpu_user_seconds": 7.531239,
+      "cpu_system_seconds": 0.047762,
+      "cycles": 32546761955,
+      "instructions": 39295970277,
+      "branches": 6954926760,
+      "branch_misses": 71058529,
+      "cache_misses": 9440227
+    }
+  },
+  "after": {
+    "runs": [
+      {"wall_seconds": 0.269547, "cpu_seconds": 2.596446, "peak_rss_kib": 49184, "exit_code": 0},
+      {"wall_seconds": 0.260628, "cpu_seconds": 2.588563, "peak_rss_kib": 48864, "exit_code": 0},
+      {"wall_seconds": 0.262386, "cpu_seconds": 2.597588, "peak_rss_kib": 49004, "exit_code": 0},
+      {"wall_seconds": 0.262990, "cpu_seconds": 2.571503, "peak_rss_kib": 49244, "exit_code": 0},
+      {"wall_seconds": 0.262018, "cpu_seconds": 2.615116, "peak_rss_kib": 49184, "exit_code": 0},
+      {"wall_seconds": 0.261730, "cpu_seconds": 2.594550, "peak_rss_kib": 49300, "exit_code": 0},
+      {"wall_seconds": 0.265401, "cpu_seconds": 2.553254, "peak_rss_kib": 49288, "exit_code": 0}
+    ],
+    "median": {"wall_seconds": 0.262386, "cpu_seconds": 2.594550, "peak_rss_kib": 49184},
+    "perf_stat_single_run": {
+      "wall_seconds": 0.260481,
+      "cpu_user_seconds": 2.498670,
+      "cpu_system_seconds": 0.043752,
+      "cycles": 10921417813,
+      "instructions": 9131379850,
+      "branches": 1744590009,
+      "branch_misses": 52897425,
+      "cache_misses": 8545155
+    }
+  },
+  "median_change_percent": {"wall_time": -63.86, "cpu_time": -65.97, "peak_rss": -0.05},
+  "decision": "Keep the indexed span lookup. The repeated-run wall and CPU reductions are large, with effectively unchanged peak RSS. Span mapping and the 3454-body corpus acceptance check passed.",
+  "correctness_gate": "Nightly workspace tests passed; all 3454 function bodies checked with zero diagnostics after the change. SourceFile span mapping has explicit multi-byte UTF-8, trailing newline, out-of-range, and line-zero coverage."
+}

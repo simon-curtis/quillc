@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "timestamp_local": "2026-10-13T08:08:15+01:00",
+  "git_revision": "uncommitted",
+  "host": {
+    "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz",
+    "cpu_governor": "powersave",
+    "logical_cpus": 12
+  },
+  "rustc_version": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "cargo_version": "cargo 1.100.0-nightly (e8cb624d5 2026-08-22)",
+  "source_lines": 30977,
+  "program_output": "catalog-flow records=128 digest=0000a53352b1a3d7",
+  "metrics_note": "systemd scope cgroup v2 cpu.stat and memory.peak deltas; memory includes the lightweight Python measurement wrapper.",
+  "runs": [
+    {
+      "round": 1,
+      "mode": "cold",
+      "wall_seconds": 2.658969067997532,
+      "cpu_user_seconds": 5.046801,
+      "cpu_system_seconds": 0.472495,
+      "cpu_total_seconds": 5.519296,
+      "peak_memory_bytes": 337043456,
+      "exit_code": 0
+    },
+    {
+      "round": 1,
+      "mode": "warm",
+      "wall_seconds": 0.036614742974052206,
+      "cpu_user_seconds": 0.022769,
+      "cpu_system_seconds": 0.014197,
+      "cpu_total_seconds": 0.036966,
+      "peak_memory_bytes": 34258944,
+      "exit_code": 0
+    },
+    {
+      "round": 1,
+      "mode": "incremental",
+      "wall_seconds": 0.09900485997786745,
+      "cpu_user_seconds": 0.074436,
+      "cpu_system_seconds": 0.035808,
+      "cpu_total_seconds": 0.110244,
+      "peak_memory_bytes": 115724288,
+      "exit_code": 0
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+[package]
+name = "catalog-index"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+catalog_validate = { package = "catalog-validate", path = "../catalog-validate" }
