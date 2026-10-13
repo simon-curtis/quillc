@@ -27,17 +27,17 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.661 s | 5.581 s | 560.8 MiB |
-| `quillc cargo-build-subset` | Cold | 0.331 s | 1.875 s | 145.6 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.019 s | 18.6 MiB |
-| `quillc cargo-build-subset` | Warm | 0.006 s | 0.002 s | 18.1 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.285 s | 0.408 s | 229.8 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.024 s | 0.078 s | 32.6 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.429 s | 227.2 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.107 s | 0.201 s | 76.4 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.658 s | 5.581 s | 565.9 MiB |
+| `quillc cargo-build-subset` | Cold | 0.326 s | 1.891 s | 145.4 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 18.9 MiB |
+| `quillc cargo-build-subset` | Warm | 0.006 s | 0.002 s | 18.3 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.282 s | 0.407 s | 236.3 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.023 s | 0.077 s | 32.6 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.301 s | 0.425 s | 227.4 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.103 s | 0.190 s | 73.5 MiB |
 
-Quill's median wall-time ratios were 8.04× cold, 3.17× warm, 11.88× for the
-comment edit, and 2.82× for the semantic edit. It used less sampled peak RSS
+Quill's median wall-time ratios were 8.15× cold, 3.17× warm, 12.26× for the
+comment edit, and 2.92× for the semantic edit. It used less sampled peak RSS
 in all four states. The semantic-edit result is below the 3× target.
 
 The implementation work behind the latest run includes restricting the

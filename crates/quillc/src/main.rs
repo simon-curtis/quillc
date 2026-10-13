@@ -1585,10 +1585,27 @@ fn compile_parsed_sources(
         return Err(errors.join("\n"));
     }
 
+    let direct_object_paths = fast_object_cache_paths.is_some_and(|paths| {
+        parsed_files
+            .iter()
+            .filter_map(|file| file.owner.as_ref().map(CrateTargetId::key))
+            .all(|target| paths.contains_key(&target))
+    });
     let mut preloaded_objects = HashMap::<String, Vec<u8>>::new();
+    let mut cached_object_paths = HashSet::<String>::new();
     if let Some(paths) = fast_object_cache_paths {
         for (target, path) in paths {
-            if let Ok(object) = std::fs::read(path)
+            if direct_object_paths {
+                let mut magic = [0; 4];
+                use std::io::Read;
+                if std::fs::File::open(path)
+                    .and_then(|mut file| file.read_exact(&mut magic))
+                    .is_ok()
+                    && &magic == b"\x7fELF"
+                {
+                    cached_object_paths.insert(target.clone());
+                }
+            } else if let Ok(object) = std::fs::read(path)
                 && object.starts_with(b"\x7fELF")
             {
                 if std::env::var_os("QUILL_PROFILE").is_some() {
@@ -1598,7 +1615,11 @@ fn compile_parsed_sources(
             }
         }
     }
-    let cached_target_keys: HashSet<_> = preloaded_objects.keys().cloned().collect();
+    let cached_target_keys: HashSet<_> = if direct_object_paths {
+        cached_object_paths
+    } else {
+        preloaded_objects.keys().cloned().collect()
+    };
 
     let enum_definitions = parsed_files
         .iter()
@@ -2139,7 +2160,7 @@ fn compile_parsed_sources(
         let mut target_objects_by_key = preloaded_objects;
         let mut target_tasks = Vec::new();
         for target in &target_order {
-            if target_objects_by_key.contains_key(target) {
+            if cached_target_keys.contains(target) {
                 continue;
             }
             let mut parse = target_parses
@@ -2250,23 +2271,31 @@ fn compile_parsed_sources(
         };
         for result in prepared_objects {
             let (target, object) = result?;
-            target_objects_by_key.insert(target, object);
+            if !direct_object_paths {
+                target_objects_by_key.insert(target, object);
+            }
         }
-        for target in &target_order {
-            target_objects.push(
-                target_objects_by_key
-                    .remove(target)
-                    .expect("every target has a prepared or cached object"),
-            );
+        if !direct_object_paths {
+            for target in &target_order {
+                target_objects.push(
+                    target_objects_by_key
+                        .remove(target)
+                        .expect("every target has a prepared or cached object"),
+                );
+            }
         }
         profile_checkpoint("prepare and fetch package objects", &mut profile_timer);
-        let cached_paths = fast_object_cache_paths.and_then(|paths| {
-            target_order
+        if direct_object_paths {
+            let paths =
+                fast_object_cache_paths.expect("direct object paths require a complete path map");
+            let paths = target_order
                 .iter()
-                .map(|target| paths.get(target))
-                .collect::<Option<Vec<_>>>()
-        });
-        if let Some(paths) = cached_paths {
+                .map(|target| {
+                    paths
+                        .get(target)
+                        .expect("every target has a direct object cache path")
+                })
+                .collect::<Vec<_>>();
             quill_link::link_elf_object_paths(&paths, output_path, "_start")
                 .map_err(|error| error.to_string())?;
         } else {
