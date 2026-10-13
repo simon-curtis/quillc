@@ -25,14 +25,14 @@
       ], { duration: 850, easing: ease, delay: Number(entry.target.dataset.entranceDelay || 0) });
     }
   }, { threshold: .08 });
-  const selectors = '.hero-copy > *, .quickstart-copy, .quickstart-commands, .project-overview > h2, .overview-columns > div, .approach > *, .performance-intro > *, .measurement-controls, .benchmark-table, .benchmark-context, .stack-heading, .compiler-pipeline, .pipeline-panels, .stack-footer, .inspiration-intro > *, .inspiration-list > div, .inspiration-footnote, .development-heading, .development-copy, .footer';
+  const selectors = '.hero-copy > *, .quickstart-copy, .quickstart-commands, .project-overview > h2, .overview-columns > div, .approach > *, .performance-intro > *, .measurement-controls, .benchmark-table, .benchmark-context, .stack-heading, .compiler-pipeline, .pipeline-panels, .stack-footer, .inspiration-intro > *, .inspiration-list > div, .inspiration-footnote, .footer';
   document.querySelectorAll(selectors).forEach(element => entrances.observe(element));
   document.querySelectorAll('.hero-copy > *').forEach((element, index) => {
     element.dataset.entranceDelay = String((index % 3) * 70);
   });
 
   // Artwork follows scrolling slightly. No continuous redraw or idle animation.
-  const artwork = [...document.querySelectorAll('.print-transition, .development-print')];
+  const artwork = [...document.querySelectorAll('.print-transition')];
   const visible = new Set();
   let frame = 0;
   function draw() {

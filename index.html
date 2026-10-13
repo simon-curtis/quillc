@@ -175,29 +175,6 @@
       <div class="inspiration-footnote"><p>These are ideas to investigate, with correctness and measurements deciding what stays.</p><a class="text-link" href="docs/architecture.md#research-references">Read the research references <span aria-hidden="true">↗</span></a></div>
     </section>
 
-    <section class="development" id="development" aria-labelledby="development-title">
-      <div class="shell development-inner">
-        <div class="development-heading">
-          <h2 id="development-title">Taking shape.</h2>
-        </div>
-        <div class="development-copy">
-          <p>Quill can already turn a supported subset of Rust into native Linux x86-64 programs. Full language compatibility, general Cargo support, and Windows support are still ahead.</p>
-          <a class="text-link" href="compatibility.html">Explore Rust compatibility <span aria-hidden="true">↗</span></a>
-          <details class="build-details">
-            <summary>Try the current compiler <span class="disclosure" aria-hidden="true"></span></summary>
-            <div class="build-content">
-              <p>From a local Quill checkout, build a supported Cargo package. The current path accepts one default binary, at most one library, and workspace-local library dependencies.</p>
-              <div class="command">
-                <pre tabindex="0" aria-label="Build command"><code>cargo run -p quillc -- cargo-build-subset path/to/Cargo.toml -o ./program</code></pre>
-                <button type="button" id="copy-command">Copy</button>
-              </div>
-              <p id="copy-status" class="copy-status" aria-live="polite"></p>
-            </div>
-          </details>
-        </div>
-      </div>
-      <div class="development-print" aria-hidden="true"><canvas data-print="landscape"></canvas></div>
-    </section>
   </main>
 
   <footer class="footer shell">
@@ -210,41 +187,5 @@
           <a class="github-link" href="https://github.com/simon-curtis/quillc">GitHub <span aria-hidden="true">↗</span></a>
     </nav>
   </footer>
-  <script>
-    const copyButton = document.querySelector('#copy-command');
-    copyButton.addEventListener('click', async () => {
-      const status = document.querySelector('#copy-status');
-      const command = document.querySelector('.command code').textContent;
-      try {
-        await navigator.clipboard.writeText(command);
-        copyButton.textContent = 'Copied';
-        status.textContent = 'Command copied to clipboard.';
-        setTimeout(() => { copyButton.textContent = 'Copy'; }, 2200);
-      } catch {
-        const field = document.createElement('textarea');
-        field.value = command;
-        field.setAttribute('readonly', '');
-        field.style.cssText = 'position:fixed;left:-9999px;top:0';
-        document.body.append(field);
-        field.select();
-        let copied = false;
-        try { copied = document.execCommand('copy'); } catch {}
-        field.remove();
-        copyButton.focus({ preventScroll: true });
-        if (copied) {
-          copyButton.textContent = 'Copied';
-          status.textContent = 'Command copied to clipboard.';
-          setTimeout(() => { copyButton.textContent = 'Copy'; }, 2200);
-        } else {
-          const range = document.createRange();
-          range.selectNodeContents(document.querySelector('.command code'));
-          const selection = window.getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
-          status.textContent = 'Command selected. Use your device’s Copy action.';
-        }
-      }
-    });
-  </script>
 </body>
 </html>
