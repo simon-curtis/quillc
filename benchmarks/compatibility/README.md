@@ -57,34 +57,35 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The latest clean baseline run passes 30 of 42 cases (71.4%) against Quill
-revision `41a2eec` and probes 28 of 29 tracked categories. The 14 added cases
-exercise variations in integer conversion, tuples, slices, `Result`, collections,
-generic dispatch, macro repetition, and Rust editions. Five of those 14 match
-rustc: loop break/continue, Rust 2018 async syntax parsing, Rust 2021 format
-capture, Rust 2024 if-let-chain parsing, and experimental `future` edition
-async parsing.
+The latest clean candidate passes 31 of 42 cases (73.8%). It is isolated at
+`d0361b4`: the last clean baseline `41a2eec` plus the signed `i32` widening
+change from [`31da520`](https://github.com/simon-curtis/quillc/commit/31da520).
+The code-generation source in this candidate is identical to that main-branch
+commit. The candidate resolves the signed integer cast mismatch; the full
+candidate report is
+[`results/2026-10-13-signed-i32-widening-expanded-linux.json`](results/2026-10-13-signed-i32-widening-expanded-linux.json).
 
-The report at
-[`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
-records the exact source revision, compiler-source cleanliness, binary hash,
-and build time. The compatibility page links to [`TARGET.md`](TARGET.md), which
-defines the full destination: language, diagnostics, standard library, Cargo,
-and the project's Linux and Windows platforms. The 71.4% rate is only for
-these curated cases; it is not a general Rust compatibility score and cannot
-be compared directly to the manually curated 10.3% feature index.
+The report records the exact candidate source revision, compiler-source
+cleanliness, binary hash, and build time. The compatibility page links to
+[`TARGET.md`](TARGET.md), which defines the full destination: language,
+diagnostics, standard library, Cargo, and the project's Linux and Windows
+platforms. The 73.8% rate is only for these curated cases; it is not a general
+Rust compatibility score and cannot be compared directly to the manually
+curated 10.3% feature index. The previous clean baseline at `41a2eec` passed
+30 of 42 cases (71.4%).
 
-Windows output remains unprobed. Twelve cases fail: generic trait dispatch,
+Windows output remains unprobed. Eleven cases fail: generic trait dispatch,
 panic behavior, rustc's inability to consume Quill's object as an `--extern`
-library, signed integer casts, tuple field access, array-to-slice coercion,
-`Result` status checks, `Vec<String>` indexing, `BTreeMap::get`, generic
-`AsRef<str>` dispatch, macro repetition, and Rust 2015's valid `async`
-identifier. Build-script support currently covers the tested native script
-that emits `rustc-cfg`; other directives and build dependencies remain
-incomplete.
+library, tuple field access, array-to-slice coercion, `Result` status checks,
+`Vec<String>` indexing, `BTreeMap::get`, generic `AsRef<str>` dispatch, macro
+repetition, and Rust 2015's valid `async` identifier. Four edition probes pass: Rust 2018 async syntax parsing, Rust 2021 format
+capture, Rust 2024 if-let-chain parsing, and experimental `future` edition
+async parsing. Loop break/continue and signed widening also pass. Build-script support covers the
+tested native script that emits `rustc-cfg`; other directives and build
+dependencies remain incomplete.
 
-The clean baseline is revision `41a2eec`. A clean checkout of newer commit
-`456aabc` failed to build because its driver references `quill_lsp`, which is
-not present in that committed workspace. The shared working tree contains
-ongoing compiler and LSP edits; reports from it must remain marked dirty until
-those changes are committed and rebuilt from a clean checkout.
+The latest main checkout still has uncommitted LSP wiring, and a clean build
+of its newer driver commit fails because `quill_lsp` is absent from that
+commit. The clean candidate above isolates the committed code-generation
+change from that integration work; it does not validate those newer Cargo/LSP
+changes or Windows output.
