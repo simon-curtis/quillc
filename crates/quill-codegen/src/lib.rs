@@ -4103,7 +4103,7 @@ fn lower_statements(
                             } else {
                                 CollectionKind::Vector
                             },
-                            element_type: None,
+                            element_type: type_text.as_deref().and_then(collection_element_type),
                             indirect: false,
                         },
                     );
@@ -4457,7 +4457,7 @@ fn lower_statements(
                             "`Vec::push` requires a typed local collection field",
                         ));
                     };
-                    let value = match &arguments[0].kind {
+                    let mut value = match &arguments[0].kind {
                         BodyExprKind::Path(name) => environment
                             .get(name)
                             .filter(|value| matches!(value, Value::StructLocal { .. }))
@@ -4491,7 +4491,22 @@ fn lower_statements(
                             *stored_type = element_type.clone();
                         }
                     }
+                    if let Some(element_type) = element_type.as_deref() {
+                        coerce_annotated_integer_values(&mut value, element_type);
+                    }
                     match (element_type.as_deref(), value) {
+                        (Some(element_type), value)
+                            if is_word_type(element_type) && is_word_value(&value) =>
+                        {
+                            lowered.push(Statement::VecPushAggregate {
+                                pointer_slot,
+                                length_slot,
+                                capacity_slot,
+                                fields: vec![value],
+                                widths: vec![1],
+                                indirect,
+                            });
+                        }
                         (Some(element_type), value)
                             if element_type.rsplit("::").next() == Some("String")
                                 && is_slice_value(&value) =>
@@ -4913,6 +4928,73 @@ fn lower_statements(
                         length_slot,
                         index_slot,
                         body: field_loads,
+                    });
+                    continue;
+                }
+                if let Value::CollectionLocal {
+                    pointer_slot,
+                    length_slot,
+                    kind: CollectionKind::Vector,
+                    element_type: Some(element_type),
+                    indirect: false,
+                    ..
+                } = &iterable
+                {
+                    if names.len() != 1 || !is_word_type(element_type) {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "native Vec iteration currently supports one unsigned integer binding",
+                        ));
+                    }
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: Value::Word(0),
+                    });
+                    let item_slot = *next_slot;
+                    *next_slot += 1;
+                    let mut loop_environment = environment.clone();
+                    loop_environment.insert(
+                        names[0].clone(),
+                        Value::TypedWordLocal {
+                            slot: item_slot,
+                            type_name: element_type.clone(),
+                        },
+                    );
+                    let mut loop_mutable_names = mutable_names.clone();
+                    loop_mutable_names.remove(&names[0]);
+                    let BodyExprKind::Block { statements, tail } = &body.kind else {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "for-each body must be a block",
+                        ));
+                    };
+                    if tail.is_some() {
+                        return Err(CodegenError::UnsupportedProgram(
+                            "for-each body must contain statements only",
+                        ));
+                    }
+                    let mut loop_body = vec![Statement::Let {
+                        slot: item_slot,
+                        initializer: Value::SliceElement {
+                            pointer_slot: *pointer_slot,
+                            index_slot,
+                            element_size: 8,
+                            element_offset: 0,
+                            element_stride: 8,
+                        },
+                    }];
+                    loop_body.extend(lower_statements(
+                        statements,
+                        &mut loop_environment,
+                        &mut loop_mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                    lowered.push(Statement::ForSlice {
+                        length_slot: *length_slot,
+                        index_slot,
+                        body: loop_body,
                     });
                     continue;
                 }
