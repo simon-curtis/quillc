@@ -3308,7 +3308,7 @@ fn rewrite_enum_references(
                     );
                 }
             }
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 rewrite(
                     base,
                     module_path,
@@ -3750,7 +3750,7 @@ fn rewrite_calls(
                     )?;
                 }
             }
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 visit(base, prefixes, paths, aliases, resolution_cache, context)?;
                 visit(index, prefixes, paths, aliases, resolution_cache, context)?;
             }
@@ -4000,7 +4000,7 @@ fn function_call_targets(functions: &[quill_syntax::FunctionItem]) -> HashSet<St
             | BodyExprKind::Not(expression)
             | BodyExprKind::Try(expression)
             | BodyExprKind::Parenthesized(expression) => walk!(expression),
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 walk!(base);
                 walk!(index);
             }

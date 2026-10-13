@@ -469,6 +469,9 @@ pub enum BodyExprKind {
     Index {
         base: Box<BodyExpr>,
         index: Box<BodyExpr>,
+        source_path: String,
+        line: usize,
+        column: usize,
     },
     Binary {
         operator: BinaryOperator,
@@ -2456,10 +2459,18 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 field: index.index.to_string(),
             },
         },
-        syn::Expr::Index(index) => BodyExprKind::Index {
-            base: Box::new(lower_expr(&index.expr, source)),
-            index: Box::new(lower_expr(&index.index, source)),
-        },
+        syn::Expr::Index(index) => {
+            let open = index.bracket_token.span.open().start();
+            let bracket_offset = source.byte_offset(open.line, open.column);
+            let (line, column) = source.line_column(bracket_offset);
+            BodyExprKind::Index {
+                base: Box::new(lower_expr(&index.expr, source)),
+                index: Box::new(lower_expr(&index.index, source)),
+                source_path: source.path().to_string_lossy().into_owned(),
+                line,
+                column,
+            }
+        }
         syn::Expr::Array(array) => BodyExprKind::FixedArrayLiteral(
             array
                 .elems

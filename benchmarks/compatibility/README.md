@@ -59,12 +59,18 @@ Use explicitly pinned reports for comparisons.
 
 The [Vec scalar-index run](results/2026-10-13-vec-u64-index.json) adds
 rustc differential cases for `Vec<u64>` growth beyond its initial capacity,
-`Vec<i32>` and `Vec<u64>` local indexing, and integer iteration. Quill now
-passes these behaviors for an in-range index used to initialize a local.
-Vector bounds panics are not implemented, and these cases do not establish
-general `Index` compatibility. The full pinned corpus passes 60/60 cases
-(100.0%) at the recorded source
-revision; this is regression coverage, not an overall Rust compatibility
+`Vec<i32>` and `Vec<u64>` local indexing, and integer iteration. Quill passes
+these behaviors for an in-range index used to initialize a local; the report
+does not cover bounds panics or other indexing forms. The full pinned corpus
+passes 60/60 cases (100.0%) at its recorded source revision. This is regression
+coverage, not an overall Rust compatibility percentage.
+
+The [Vec bounds-panic run](results/2026-10-13-vec-index-bounds-clean.json)
+adds an out-of-range `Vec<u64>` access and matches rustc's exit status, stderr,
+panic location, index, and length. It tests the supported local-initializer
+indexing path; general `Index` compatibility remains incomplete. The combined
+pinned corpus passes 61/61 cases (100.0%) at the report's recorded source
+revision; this remains regression coverage rather than an overall compatibility
 percentage.
 
 The [self-contained rlib interoperability run](results/2026-10-13-rlib-extern-clean.json)

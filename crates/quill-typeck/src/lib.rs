@@ -1534,7 +1534,7 @@ fn check_call_targets(
                 check_call_targets(element, locals, signatures, diagnostics);
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_call_targets(base, locals, signatures, diagnostics);
             check_call_targets(index, locals, signatures, diagnostics);
         }
@@ -1750,7 +1750,7 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
                 check_loop_control(element, depth, diagnostics);
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_loop_control(base, depth, diagnostics);
             check_loop_control(index, depth, diagnostics);
         }
@@ -1822,7 +1822,7 @@ fn check_mutability(
                 check_mutability(element, locals, diagnostics);
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_mutability(base, locals, diagnostics);
             check_mutability(index, locals, diagnostics);
         }
@@ -2171,7 +2171,7 @@ fn infer_with_structs(
                 }
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             let base_type = infer_with_structs(
                 base,
                 locals,

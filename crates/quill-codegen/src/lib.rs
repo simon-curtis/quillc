@@ -386,6 +386,8 @@ enum Statement {
 enum PrintPart {
     Text(String),
     Panic(String),
+    PanicText(String),
+    PanicDecimal(Value),
     Slice(Value),
     Decimal(Value),
     Hex16(Value),
@@ -749,6 +751,7 @@ fn emit_subset_object(
     let mut static_arrays = HashMap::new();
     collect_static_arrays(&exit_value, &mut static_arrays);
     let mut needs_decimal = has_print_kind(&exit_value, PrintKind::Decimal);
+    let mut needs_panic_decimal = has_print_kind(&exit_value, PrintKind::PanicDecimal);
     let mut needs_hex16 = has_print_kind(&exit_value, PrintKind::Hex16);
     let mut needs_format_decimal = contains_format_decimal(&exit_value);
     let mut needs_utf8_chars = value_uses_character_iteration(&exit_value);
@@ -757,6 +760,7 @@ fn emit_subset_object(
         collect_value_text(value, &mut print_text);
         collect_static_arrays(value, &mut static_arrays);
         needs_decimal |= has_print_kind(value, PrintKind::Decimal);
+        needs_panic_decimal |= has_print_kind(value, PrintKind::PanicDecimal);
         needs_hex16 |= has_print_kind(value, PrintKind::Hex16);
         needs_format_decimal |= contains_format_decimal(value);
         needs_utf8_chars |= value_uses_character_iteration(value);
@@ -764,6 +768,10 @@ fn emit_subset_object(
     if needs_decimal {
         let symbol = add_internal_function_symbol(&mut object, "__quill_print_decimal");
         helper_symbols.insert("__quill_print_decimal".to_owned(), symbol);
+    }
+    if needs_panic_decimal {
+        let symbol = add_internal_function_symbol(&mut object, "__quill_print_decimal_stderr");
+        helper_symbols.insert("__quill_print_decimal_stderr".to_owned(), symbol);
     }
     if needs_hex16 {
         let symbol = add_internal_function_symbol(&mut object, "__quill_print_hex16");
@@ -899,7 +907,12 @@ fn emit_subset_object(
 
     if needs_decimal {
         let symbol = helper_symbols["__quill_print_decimal"];
-        let code = print_decimal_helper();
+        let code = print_decimal_helper(1);
+        object.add_symbol_data(symbol, text, &code, 1);
+    }
+    if needs_panic_decimal {
+        let symbol = helper_symbols["__quill_print_decimal_stderr"];
+        let code = print_decimal_helper(2);
         object.add_symbol_data(symbol, text, &code, 1);
     }
     if needs_hex16 {
@@ -1062,7 +1075,7 @@ fn validate_struct_expr(
         | BodyExprKind::Cast {
             expression: base, ..
         } => validate_struct_expr(base, structs, functions)?,
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             validate_struct_expr(base, structs, functions)?;
             validate_struct_expr(index, structs, functions)?;
         }
@@ -1345,7 +1358,7 @@ fn validate_call_targets(
             }
         }
         BodyExprKind::FieldAccess { base, .. } => validate_call_targets(base, functions)?,
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             validate_call_targets(base, functions)?;
             validate_call_targets(index, functions)?;
         }
@@ -1686,7 +1699,7 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
             | BodyExprKind::Not(base)
             | BodyExprKind::Parenthesized(base)
             | BodyExprKind::Try(base) => visit(base, substitutions),
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 visit(base, substitutions);
                 visit(index, substitutions);
             }
@@ -2037,8 +2050,9 @@ fn collect_generic_statement(statement: &Statement, output: &mut BTreeSet<String
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => collect_generic_instances(value, output),
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => collect_generic_instances(value, output),
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -3974,7 +3988,7 @@ fn lower_statements(
                 } = &initializer.kind
                     && method == "clone"
                     && arguments.is_empty()
-                    && let BodyExprKind::Index { base, index } = &receiver.kind
+                    && let BodyExprKind::Index { base, index, .. } = &receiver.kind
                     && let BodyExprKind::Path(collection_name) = &base.kind
                     && let Some(Value::CollectionLocal {
                         pointer_slot,
@@ -4117,22 +4131,58 @@ fn lower_statements(
                     });
                     continue;
                 }
-                if let BodyExprKind::Index { base, index } = &initializer.kind
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
+                    line,
+                    column,
+                } = &initializer.kind
                     && let BodyExprKind::Path(collection_name) = &base.kind
                     && let Some(Value::CollectionLocal {
                         pointer_slot,
+                        length_slot,
                         kind: CollectionKind::Vector,
                         element_type: Some(element_type),
                         ..
                     }) = environment.get(collection_name)
                     && (is_word_type(element_type) || element_type == "i32")
                 {
-                    let index = value_from_expression(index, environment, functions)?;
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native vector indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
                     let index_slot = *next_slot;
                     *next_slot += 1;
                     lowered.push(Statement::Let {
                         slot: index_slot,
                         initializer: index,
+                    });
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{line}:{column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::WordLocal(*length_slot)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::WordLocal(*length_slot)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
                     });
                     let value = Value::SliceElement {
                         pointer_slot: *pointer_slot,
@@ -6324,7 +6374,7 @@ fn value_from_expression(
                 CodegenError::UnsupportedProgram("struct field does not exist"),
             )
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             let array = value_from_expression(base, environment, functions)?;
             let index = value_from_expression(index, environment, functions)?;
             let index = match index {
@@ -7757,10 +7807,11 @@ fn validate_statement_targets_at_depth(
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         validate_value_target(value, functions, items, parameter_count)?;
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
             Ok(())
@@ -9322,6 +9373,30 @@ fn encode_statement_into(
                             0x0f, 0x05, // syscall
                         ]);
                     }
+                    PrintPart::PanicText(text) => {
+                        code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + panic text]
+                        let offset = code.len() as u64;
+                        code.extend_from_slice(&[0; 4]);
+                        relocations.push(PendingRelocation {
+                            offset,
+                            target: text_symbol_name(text),
+                        });
+                        code.extend_from_slice(&[0xbf, 2, 0, 0, 0]); // mov edi, stderr
+                        code.push(0xba); // mov edx, byte length
+                        code.extend_from_slice(&(text.len() as u32).to_le_bytes());
+                        code.extend_from_slice(&[0xb8, 1, 0, 0, 0, 0x0f, 0x05]); // write syscall
+                    }
+                    PrintPart::PanicDecimal(value) => {
+                        append_encoded_value(code, value, in_function, relocations);
+                        code.extend_from_slice(&[0x48, 0x89, 0xc7]); // mov rdi, rax
+                        code.push(0xe8);
+                        let offset = code.len() as u64;
+                        code.extend_from_slice(&[0; 4]);
+                        relocations.push(PendingRelocation {
+                            offset,
+                            target: "__quill_print_decimal_stderr".to_owned(),
+                        });
+                    }
                     PrintPart::Text(text) if !text.is_empty() => {
                         code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + disp32]
                         let offset = code.len() as u64;
@@ -10039,6 +10114,7 @@ fn required_frame_slots(value: &Value, parameter_count: usize) -> usize {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PrintKind {
     Decimal,
+    PanicDecimal,
     Hex16,
 }
 
@@ -10077,7 +10153,7 @@ fn print_parts(value: &Value, visit: &mut impl FnMut(&PrintPart)) {
 
 fn collect_print_text(value: &Value, output: &mut HashSet<String>) {
     print_parts(value, &mut |part| {
-        if let PrintPart::Text(text) | PrintPart::Panic(text) = part {
+        if let PrintPart::Text(text) | PrintPart::Panic(text) | PrintPart::PanicText(text) = part {
             output.insert(text.clone());
         }
     });
@@ -10129,8 +10205,10 @@ fn collect_value_text(value: &Value, output: &mut HashSet<String>) {
                     Statement::Println(parts) => {
                         for part in parts {
                             match part {
-                                PrintPart::Slice(value) => collect_value_text(value, output),
-                                PrintPart::Panic(text) => {
+                                PrintPart::Slice(value) | PrintPart::PanicDecimal(value) => {
+                                    collect_value_text(value, output)
+                                }
+                                PrintPart::Panic(text) | PrintPart::PanicText(text) => {
                                     output.insert(text.clone());
                                 }
                                 _ => {}
@@ -10466,10 +10544,11 @@ fn collect_static_array_statement(statement: &Statement, output: &mut HashMap<St
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         collect_static_arrays(value, output);
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -10570,6 +10649,7 @@ fn has_print_kind(value: &Value, kind: PrintKind) -> bool {
         found |= matches!(
             (kind, part),
             (PrintKind::Decimal, PrintPart::Decimal(_)) | (PrintKind::Hex16, PrintPart::Hex16(_))
+                | (PrintKind::PanicDecimal, PrintPart::PanicDecimal(_))
         );
     });
     found
@@ -11302,10 +11382,11 @@ fn visit_statement(statement: &Statement, max_slot: &mut usize) {
                 match part {
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
-                    | PrintPart::Hex16(value) => {
+                    | PrintPart::Hex16(value)
+                    | PrintPart::PanicDecimal(value) => {
                         visit_value(value, max_slot);
                     }
-                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) | PrintPart::PanicText(_) => {}
                 }
             }
         }
@@ -11489,7 +11570,7 @@ fn visit_condition(condition: &Condition, max_slot: &mut usize) {
     }
 }
 
-fn print_decimal_helper() -> Vec<u8> {
+fn print_decimal_helper(file_descriptor: u8) -> Vec<u8> {
     let mut code = vec![
         0x55, // push rbp
         0x48, 0x89, 0xe5, // mov rbp, rsp
@@ -11516,7 +11597,7 @@ fn print_decimal_helper() -> Vec<u8> {
     code.extend_from_slice(&[
         0x48, 0xff, 0xc6, // inc rsi
         0x89, 0xca, // mov edx, ecx
-        0xbf, 1, 0, 0, 0, // mov edi, 1
+        0xbf, file_descriptor, 0, 0, 0, // mov edi, file descriptor
         0xb8, 1, 0, 0, 0, // mov eax, 1
         0x0f, 0x05, // syscall
         0xc9, 0xc3, // leave; ret
