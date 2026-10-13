@@ -58,12 +58,12 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The latest Linux run passes 36 of 43 cases (83.7%) using compiler revision
-`472b040`. The report records the exact binary hash and notes the modified LSP
-source file present during the run:
-[`results/2026-10-13-vec-string-index.json`](results/2026-10-13-vec-string-index.json).
+The latest Linux run passes 37 of 44 cases (84.1%) using a clean compiler
+build at revision `8931ddd`. The report records the exact binary hash and
+verifies both first- and second-element `Vec<String>` indexing:
+[`results/2026-10-13-vec-string-second-index.json`](results/2026-10-13-vec-string-second-index.json).
 Borrowed integer slice iteration and `Vec<String>` growth, indexing, cloning,
-and output now match rustc in the maintained cases. Windows output remains
+and output match rustc in the maintained cases. Windows output remains
 unprobed.
 
 Seven cases fail: generic trait dispatch, panic behavior, rustc's inability to
@@ -78,7 +78,7 @@ signed widening, tuple projections, borrowed slice iteration, `Vec<String>`
 indexing, and the tested `Result` status check also match rustc. Build-script support covers the tested native script that emits
 `rustc-cfg`; other directives and build dependencies remain incomplete.
 
-The 83.7% rate is only for these curated cases; it is not an overall Rust
+The 84.1% rate is only for these curated cases; it is not an overall Rust
 compatibility score and cannot be compared directly to the manually curated
 10.3% feature index. The full destination remains in [`TARGET.md`](TARGET.md),
 including language, diagnostics, standard library, Cargo, and Linux and

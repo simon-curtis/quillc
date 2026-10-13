@@ -406,6 +406,18 @@
     "source": "fn main() { let mut values: Vec<String> = Vec::new(); values.push(String::from(\"quill\")); values.push(String::from(\"rust\")); let first = values[0].clone(); println!(\"{first}\"); }"
   },
   {
+    "id": "vec-string-second-element-index",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "owned-strings",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<String> = Vec::new(); values.push(String::from(\"quill\")); values.push(String::from(\"rust\")); let second = values[1].clone(); println!(\"{second}\"); }"
+  },
+  {
     "id": "btreemap-string-insert-and-get",
     "kind": "run",
     "features": [
