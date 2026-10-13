@@ -28,7 +28,10 @@
       float density=mix(1.,dots,illustration);
       gl_FragColor=vec4(ink,density*edge);
     }`;
-  for (const logo of document.querySelectorAll('.brand-feather, .hero-feather')) {
+  // Small identity marks use the SVG directly. Their shader has no halftone
+  // effect, and replacing the image with a WebGL surface can lose the mark
+  // when mobile browsers discard or fail to rasterize that surface.
+  for (const logo of document.querySelectorAll('.hero-feather')) {
     const fallback = logo.querySelector('img');
     const canvas = logo.querySelector('canvas');
     const gl = canvas.getContext('webgl', { alpha:true, antialias:true, premultipliedAlpha:false, powerPreference:'low-power' });
