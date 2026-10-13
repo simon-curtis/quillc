@@ -57,6 +57,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [borrowed-slice runtime-index run](results/2026-10-13-borrowed-slice-index-clean.json)
+passes 74/74 cases at clean revision `746950b`. It checks runtime `u64` and
+`i32` indexing through borrowed slices plus an out-of-bounds `u64` access with
+matching panic text and source location. Other slice element layouts and
+indexing contexts remain incomplete. This curated pass rate is not an overall
+Rust compatibility percentage.
+
 The [fixed-array runtime-index run](results/2026-10-13-fixed-array-runtime-index-clean.json)
 passes 71/71 cases at clean revision `39f0b91`. It adds runtime `u64`/`usize`
 subscripts for selected immutable integer arrays and checks both a successful
