@@ -21,6 +21,7 @@ pub struct TypeDiagnostic {
 pub struct ExternalFunctionSignature {
     /// Fully qualified call spelling as it appears in the caller's source.
     pub path: String,
+    pub scope: Vec<String>,
     pub parameter_types: Vec<String>,
     pub return_type: Option<String>,
     pub generic_parameters: Vec<String>,
@@ -483,6 +484,62 @@ fn trait_is_implemented_for_type(
                     && implementation.has_abi == trait_method.has_abi
             })
         })
+}
+
+fn error_type_converts_to(
+    signatures: &SignatureIndex<'_>,
+    source: &Ty,
+    target: &Ty,
+) -> bool {
+    if types_compatible(target, source) {
+        return true;
+    }
+    let (Ty::Named(source), Ty::Named(target)) = (source, target) else {
+        return false;
+    };
+    let source = source.rsplit("::").next().unwrap_or(source);
+    let target = target.rsplit("::").next().unwrap_or(target);
+    signatures
+        .trait_impl_methods
+        .get(&("From", target))
+        .into_iter()
+        .flatten()
+        .any(|implementation| {
+            implementation.name.rsplit("::").next() == Some("from")
+                && implementation.parameters.get(1).is_some_and(|parameter| {
+                    parameter
+                        .type_text
+                        .trim_start_matches('&')
+                        .trim_start_matches("mut ")
+                        .trim()
+                        .rsplit("::")
+                        .next()
+                        == Some(source)
+                })
+        })
+}
+
+fn expression_always_diverges(expression: &BodyExpr) -> bool {
+    match &expression.kind {
+        BodyExprKind::Return(_) => true,
+        BodyExprKind::Block { statements, tail } => tail
+            .as_deref()
+            .is_some_and(expression_always_diverges)
+            || statements.last().is_some_and(|statement| {
+                matches!(statement, BodyStatement::Expression { expression, .. }
+                    if expression_always_diverges(expression))
+            }),
+        BodyExprKind::If {
+            then_branch,
+            else_branch: Some(else_branch),
+            ..
+        } => expression_always_diverges(then_branch)
+            && expression_always_diverges(else_branch),
+        BodyExprKind::Match { arms, .. } => {
+            !arms.is_empty() && arms.iter().all(|arm| expression_always_diverges(&arm.body))
+        }
+        _ => false,
+    }
 }
 
 fn normalized_crate_path(path: &str) -> &str {
@@ -1014,7 +1071,7 @@ fn check_selected_functions<'a>(
         .iter()
         .map(|signature| FunctionItem {
             name: signature.path.clone(),
-            scope: Vec::new(),
+            scope: signature.scope.clone(),
             calls: Vec::new(),
             qualified_calls: Vec::new(),
             name_span: 0..0,
@@ -2430,6 +2487,10 @@ fn check_move_expression(
             then_branch,
             else_branch,
         } => {
+            let then_diverges = expression_always_diverges(then_branch);
+            let else_diverges = else_branch
+                .as_deref()
+                .is_some_and(expression_always_diverges);
             check_move_expression(
                 condition,
                 false,
@@ -2451,7 +2512,7 @@ fn check_move_expression(
                 &mut then_moved,
                 diagnostics,
             );
-            let mut else_moved = incoming;
+            let mut else_moved = incoming.clone();
             if let Some(else_branch) = else_branch {
                 let mut else_locals = locals.clone();
                 check_move_expression(
@@ -2467,8 +2528,15 @@ fn check_move_expression(
             // A value is considered moved if any reachable branch consumes
             // it; this is the conservative join used by definite-initialization
             // analysis at the following program point.
-            then_moved.extend(else_moved);
-            *moved = then_moved;
+            *moved = match (then_diverges, else_diverges) {
+                (true, true) => incoming,
+                (true, false) => else_moved,
+                (false, true) => then_moved,
+                (false, false) => {
+                    then_moved.extend(else_moved);
+                    then_moved
+                }
+            };
         }
         BodyExprKind::Match { scrutinee, arms } => {
             // A match scrutinee is inspected as a place. It is consumed only
@@ -2492,6 +2560,7 @@ fn check_move_expression(
             );
             let incoming = moved.clone();
             let mut joined = HashSet::new();
+            let mut has_reachable_arm = false;
             for arm in arms {
                 let mut arm_moved = incoming.clone();
                 let mut arm_locals = locals.clone();
@@ -2508,9 +2577,12 @@ fn check_move_expression(
                     &mut arm_moved,
                     diagnostics,
                 );
-                joined.extend(arm_moved);
+                if !expression_always_diverges(&arm.body) {
+                    joined.extend(arm_moved);
+                    has_reachable_arm = true;
+                }
             }
-            *moved = joined;
+            *moved = if has_reachable_arm { joined } else { incoming };
         }
         BodyExprKind::Call {
             callee,
@@ -4688,6 +4760,9 @@ fn infer_with_structs(
             }
             if let Ty::RawPointer(element, mutable) = receiver_base {
                 match method.as_str() {
+                    "as_usize" | "addr" if arguments.is_empty() => {
+                        return Ty::Integer("usize".to_owned());
+                    }
                     "cast" if arguments.is_empty() => {
                         if matches!(expected_return, Ty::RawPointer(_, _)) {
                             return expected_return.clone();
@@ -5698,7 +5773,13 @@ fn infer_with_structs(
                 | BinaryOperator::Divide
                 | BinaryOperator::Remainder
                 | BinaryOperator::BitXor => {
-                    if *operator == BinaryOperator::Add
+                    if left_ty == Ty::Unknown
+                        && right_ty.is_numeric()
+                    {
+                        right_ty.clone()
+                    } else if right_ty == Ty::Unknown && left_ty.is_numeric() {
+                        left_ty.clone()
+                    } else if *operator == BinaryOperator::Add
                         && left_ty == right_ty
                         && is_add_type(&left_ty)
                     {
@@ -5820,7 +5901,7 @@ fn infer_with_structs(
                     Ty::Unknown
                 }
                 (Ty::Result(ok_type, err_type), Ty::Result(_, expected_err))
-                    if types_compatible(expected_err, err_type) =>
+                    if error_type_converts_to(signatures, err_type, expected_err) =>
                 {
                     (**ok_type).clone()
                 }
@@ -7293,6 +7374,7 @@ mod tests {
         assert!(!parsed.had_error);
         let external = [
             ExternalFunctionSignature {
+                scope: Vec::new(),
                 path: "catalog::Record::new".to_owned(),
                 parameter_types: vec!["impl Into<String>".to_owned(), "u64".to_owned()],
                 return_type: Some("Self".to_owned()),
@@ -7303,6 +7385,7 @@ mod tests {
                 generic_has_bounds: false,
             },
             ExternalFunctionSignature {
+                scope: Vec::new(),
                 path: "catalog::Record::label".to_owned(),
                 parameter_types: vec!["Self".to_owned(), "impl Into<String>".to_owned()],
                 return_type: Some("Self".to_owned()),
@@ -7448,6 +7531,7 @@ mod tests {
         let parsed = parse(&source);
         assert!(!parsed.had_error);
         let external = ExternalFunctionSignature {
+            scope: Vec::new(),
             path: "model_alias::api::count".to_owned(),
             parameter_types: vec!["u64".to_owned()],
             return_type: Some("bool".to_owned()),
@@ -8257,6 +8341,18 @@ mod tests {
                 .message
                 .contains("error[E0597]: `value` does not live long enough")
         }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn allows_a_dead_inner_reference_assignment_to_end_with_its_scope() {
+        let source = SourceFile::from_text(
+            "dead-scope-escape.rs",
+            "fn valid() { let mut reference = &0i32; { let value = 1i32; reference = &value; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 
     #[test]

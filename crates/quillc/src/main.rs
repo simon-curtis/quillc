@@ -64,6 +64,7 @@ struct ParsedSource {
     module_path: Vec<String>,
     parse: quill_syntax::Parse,
     owner: Option<CrateTargetId>,
+    summary_only: bool,
 }
 
 #[derive(Clone)]
@@ -281,7 +282,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
         })
         .collect();
     let mut pool = None;
-    let (parsed_files, module_errors) = match parse_cargo_module_trees(&roots, &mut pool) {
+    let (parsed_files, module_errors) = match parse_cargo_module_trees(&roots, &mut pool, false) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("quillc: could not parse Cargo target roots: {error}");
@@ -426,7 +427,11 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                     signatures.clone(),
                     parsed_files
                         .iter()
-                        .filter(|candidate| candidate.owner.as_ref() == Some(&owner))
+                        .filter(|candidate| {
+                            candidate.owner.as_ref() == Some(&owner)
+                                && candidate.module_path.len() <= file.module_path.len()
+                                && file.module_path.starts_with(&candidate.module_path)
+                        })
                         .flat_map(typeck_struct_signatures)
                         .collect::<Vec<_>>(),
                     owner.cfg.clone(),
@@ -519,11 +524,12 @@ fn signatures_for_target(
 ) -> Vec<quill_typeck::ExternalFunctionSignature> {
     let mut signatures = Vec::new();
     for function in &hir.functions {
-        if function
-            .def_path
-            .scope
-            .iter()
-            .any(|scope| !scope.starts_with("mod:") && !scope.starts_with("impl:"))
+        if function.def_path.scope.iter().any(|scope| {
+            !scope.starts_with("mod:")
+                && !scope.starts_with("impl:")
+                && !scope.starts_with("trait:")
+                && !scope.starts_with("traitimpl:")
+        })
         {
             continue;
         }
@@ -535,14 +541,23 @@ fn signatures_for_target(
                 scope
                     .strip_prefix("mod:")
                     .or_else(|| scope.strip_prefix("impl:"))
+                    .or_else(|| scope.strip_prefix("trait:"))
             })
             .map(str::to_owned)
             .collect();
         path.push(function.def_path.name.clone());
         if path.len() > 1 {
-            signatures.push(typeck_signature(path.join("::"), &function.signature));
+            signatures.push(typeck_signature(
+                path.join("::"),
+                &function.signature,
+                function.def_path.scope.clone(),
+            ));
             let crate_path = format!("crate::{}", path.join("::"));
-            signatures.push(typeck_signature(crate_path, &function.signature));
+            signatures.push(typeck_signature(
+                crate_path,
+                &function.signature,
+                function.def_path.scope.clone(),
+            ));
         }
     }
     if let Some(aliases) = dependency_aliases.get(&hir.name) {
@@ -557,6 +572,7 @@ fn signatures_for_target(
                 signatures.push(typeck_signature(
                     format!("{alias}::{}", exported.path),
                     &exported.signature,
+                    Vec::new(),
                 ));
             }
         }
@@ -569,8 +585,10 @@ fn signatures_for_target(
 fn typeck_signature(
     path: String,
     signature: &quill_hir::FunctionSignature,
+    scope: Vec<String>,
 ) -> quill_typeck::ExternalFunctionSignature {
     quill_typeck::ExternalFunctionSignature {
+        scope,
         path,
         parameter_types: signature.parameter_types.clone(),
         return_type: signature.return_type.clone(),
@@ -717,6 +735,7 @@ fn compile_library_object(source_path: &str, output_path: &str) -> Result<(), St
         module_path: Vec::new(),
         parse: parsed,
         owner: None,
+        summary_only: false,
     };
     let diagnostics = quill_typeck::check_functions_strict_with_structs(
         &parsed_source.parse.functions,
@@ -1122,7 +1141,7 @@ fn compile_cargo_subset_for_target_with_workspace(
         roots.push((owner, library.source_path.display().to_string()));
     }
     let mut pool = None;
-    let (parsed_files, module_errors) = parse_cargo_module_trees(&roots, &mut pool)
+    let (parsed_files, module_errors) = parse_cargo_module_trees(&roots, &mut pool, true)
         .map_err(|error| format!("could not read Cargo target sources: {error}"))?;
     profile_checkpoint("parse source graph", &mut profile_timer);
     if !module_errors.is_empty() {
@@ -1976,6 +1995,18 @@ fn compile_parsed_sources(
         preloaded_objects.keys().cloned().collect()
     };
 
+    for file in &mut parsed_files {
+        let Some(owner) = file.owner.as_ref() else {
+            continue;
+        };
+        if file.summary_only && !cached_target_keys.contains(&owner.key()) {
+            let cache = quill_query::ParseCache::for_source(&file.source);
+            file.parse =
+                cache.parse_file_with_cfg_and_edition(&file.source, &owner.cfg, &owner.edition);
+            file.summary_only = false;
+        }
+    }
+
     let enum_definitions = parsed_files
         .iter()
         .flat_map(|file| {
@@ -2143,6 +2174,7 @@ fn compile_parsed_sources(
         .iter()
         .flatten()
         .map(|function| quill_typeck::ExternalFunctionSignature {
+            scope: function.scope.clone(),
             path: function.name.clone(),
             parameter_types: function
                 .parameters
@@ -2606,8 +2638,12 @@ fn compile_parsed_sources(
             )
             .map_err(|error| format!("could not fingerprint package object: {error}"))?;
             let object_fingerprint = *object_hasher.finalize().as_bytes();
-            let (object, cache_hit) =
-                emit_target_object_cached(object_fingerprint, parse, &imports, object_cache_root)?;
+            let (object, cache_hit) = emit_target_object_cached(
+                object_fingerprint,
+                std::mem::take(parse),
+                &imports,
+                object_cache_root,
+            )?;
             if cache_hit && std::env::var_os("QUILL_PROFILE").is_some() {
                 eprintln!("quill-profile package object cache hit: {target}");
             }
@@ -2670,7 +2706,7 @@ fn compile_parsed_sources(
 
 fn emit_target_object_cached(
     fingerprint: [u8; 32],
-    parse: &quill_syntax::Parse,
+    parse: quill_syntax::Parse,
     imports: &[quill_codegen::ExternalFunctionImport],
     cache_root: Option<&Path>,
 ) -> Result<(Vec<u8>, bool), String> {
@@ -2692,9 +2728,9 @@ fn emit_target_object_cached(
         .iter()
         .any(|function| function.name == "main");
     let object = if has_main {
-        quill_codegen::emit_subset_main_object_with_imports(parse, imports)
+        quill_codegen::emit_subset_main_object_owned_with_imports(parse, imports)
     } else {
-        quill_codegen::emit_subset_library_object_with_imports(parse, imports)
+        quill_codegen::emit_subset_library_object_owned_with_imports(parse, imports)
     }
     .map_err(|error| error.to_string())?;
 
@@ -4258,7 +4294,7 @@ fn parse_module_trees(
     pool: &mut Option<quill_parallel::WorkPool>,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let roots: Vec<_> = roots.iter().map(|path| (None, path.clone())).collect();
-    parse_module_roots(&roots, pool)
+    parse_module_roots(&roots, pool, false)
 }
 
 fn parse_module_trees_with_cfg(
@@ -4272,23 +4308,25 @@ fn parse_module_trees_with_cfg(
         cfg: cfg.clone(),
         edition: "2024".into(),
     };
-    parse_module_roots(&[(Some(owner), root.to_owned())], pool)
+    parse_module_roots(&[(Some(owner), root.to_owned())], pool, false)
 }
 
 fn parse_cargo_module_trees(
     roots: &[(CrateTargetId, String)],
     pool: &mut Option<quill_parallel::WorkPool>,
+    summaries: bool,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let roots: Vec<_> = roots
         .iter()
         .map(|(owner, path)| (Some(owner.clone()), path.clone()))
         .collect();
-    parse_module_roots(&roots, pool)
+    parse_module_roots(&roots, pool, summaries)
 }
 
 fn parse_module_roots(
     roots: &[(Option<CrateTargetId>, String)],
     pool: &mut Option<quill_parallel::WorkPool>,
+    summaries: bool,
 ) -> std::io::Result<(Vec<ParsedSource>, Vec<String>)> {
     let root_requests = roots
         .iter()
@@ -4353,7 +4391,16 @@ fn parse_module_roots(
             inputs
                 .iter()
                 .map(|(source, cfg, edition)| {
-                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
+                    if summaries {
+                        let (parse, compact) =
+                            cache.parse_file_summary_with_cfg_and_edition(source, cfg, edition);
+                        (parse, compact)
+                    } else {
+                        (
+                            cache.parse_file_with_cfg_and_edition(source, cfg, edition),
+                            false,
+                        )
+                    }
                 })
                 .collect()
         } else {
@@ -4363,11 +4410,18 @@ fn parse_module_roots(
             pool.as_ref()
                 .expect("pool initialized")
                 .map(&inputs, |(source, cfg, edition)| {
-                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
+                    if summaries {
+                        cache.parse_file_summary_with_cfg_and_edition(source, cfg, edition)
+                    } else {
+                        (
+                            cache.parse_file_with_cfg_and_edition(source, cfg, edition),
+                            false,
+                        )
+                    }
                 })
         };
         let mut next_requests = Vec::new();
-        for ((source, module_path, path_is_override, owner), parse) in
+        for ((source, module_path, path_is_override, owner), (parse, summary_only)) in
             frontier.into_iter().zip(parses)
         {
             let (requests, file_errors) =
@@ -4379,6 +4433,7 @@ fn parse_module_roots(
                 module_path,
                 parse,
                 owner,
+                summary_only,
             });
         }
         let load_module = |(path, module_path, path_is_override, owner): &(
@@ -4601,6 +4656,7 @@ mod tests {
             module_path: vec!["api".to_owned()],
             parse: quill_syntax::Parse::default(),
             owner: None,
+            summary_only: false,
         };
         assert_eq!(
             canonical_struct_path(&file, &structure, "catalog"),
@@ -4814,6 +4870,7 @@ mod tests {
             source,
             module_path: Vec::new(),
             owner: None,
+            summary_only: false,
         };
         assert!(
             module_import_aliases(&file, &HashSet::new(), "")
@@ -4830,6 +4887,7 @@ mod tests {
             source,
             module_path: Vec::new(),
             owner: None,
+            summary_only: false,
         };
         assert!(module_import_aliases(&file, &HashSet::new(), "").is_err());
     }

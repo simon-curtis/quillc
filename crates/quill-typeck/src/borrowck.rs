@@ -307,6 +307,7 @@ pub(super) fn check(
         struct_signatures,
         local_types: local_types.clone(),
         expected_return_lifetimes: return_lifetime_contract(function),
+        live_after: Vec::new(),
     };
     let mut state = State::default();
     for parameter in &function.parameters {
@@ -372,6 +373,7 @@ struct Checker<'a, 'b> {
     struct_signatures: &'a [StructSignature],
     local_types: HashMap<String, Ty>,
     expected_return_lifetimes: Option<Vec<String>>,
+    live_after: Vec<HashSet<Place>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1240,7 +1242,9 @@ impl Checker<'_, '_> {
                         })
                 })
             });
+            self.live_after.push(future);
             self.statement(statement, state, &mut declarations);
+            self.live_after.pop();
         }
         let result = tail.map_or_else(Vec::new, |tail| self.expression(tail, state));
         for loan in &result {
@@ -1261,6 +1265,11 @@ impl Checker<'_, '_> {
             if declarations.contains(&loan.place.root)
                 && !declarations.contains(holder)
                 && original_mutability.contains_key(holder)
+                && self.live_after.iter().any(|live_places| {
+                    live_places.iter().any(|place| {
+                        holder_projection_live(holder, &loan.holder_projection, place)
+                    })
+                })
             {
                 self.report(
                     loan.origin.clone(),

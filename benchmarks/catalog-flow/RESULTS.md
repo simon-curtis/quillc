@@ -90,6 +90,42 @@ time rose 0.57%; all wall-time ranges overlapped. No stable CPU reduction was
 measured, so this candidate was rejected too. The [patch](../experiments/struct-table-ownership.patch)
 and [raw comparison](../results/struct-table-ownership-20261013.json) are retained.
 
+A compact parse-summary cache keeps module declarations, item signatures, and
+generic bodies while omitting non-generic function bodies for targets whose
+package object is reusable. The clean five-round run at `db5f270`, after
+rebasing onto parser recovery commit `d8465f4`, measured comment-only
+incremental medians of 13.8 ms wall and 30.1 ms CPU, versus 25.0 ms and 83 ms
+in the baseline. Semantic incremental CPU fell from 175 ms to 146 ms, while
+wall time rose from 82.0 ms to 85.0 ms. Cold time was effectively unchanged
+at 331 ms / 1.819 s CPU versus 331 ms / 1.823 s. Peak RSS remained below the
+rustc baseline in all states, and semantic-edit output matched. An earlier
+candidate at `3f0c376` measured 12.9 ms comment-only wall and 77.9 ms semantic
+wall; the later runs show the semantic wall result is not a reliable
+improvement. The measured benefit is comment-only incremental work; semantic
+edits use less aggregate CPU with a small wall-time regression. Raw runs:
+[`results-20261013-db5f270-parse-summaries.json`](results-20261013-db5f270-parse-summaries.json),
+[`results-20261013-79e11e0-parse-summaries.json`](results-20261013-79e11e0-parse-summaries.json),
+and [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
+
+The native object emitter previously cloned each target's complete parse tree
+before appending external declarations. An ownership-taking path removes that
+clone. At `9edab5c`, the semantic-edit medians moved from 85.0 ms / 146 ms CPU
+to 80.1 ms / 131 ms CPU; the five-sample ranges overlap, so this remains an
+inconclusive candidate. Comment-only incremental medians were 13.1 ms / 29.8
+ms CPU, close to the prior 13.8 ms / 30.1 ms. Program output still matched.
+The clean paired samples are in
+[`results-20261013-9edab5c-owned-emission.json`](results-20261013-9edab5c-owned-emission.json).
+
+I also tried using the existing direct-call graph to filter unreachable
+functions before HIR construction. This preserved all generic definitions
+after a corpus check caught shifted generic-instance indices, but the 31k
+five-round comparison did not show a gain. Semantic incremental medians were
+83.7 ms / 135 ms CPU, versus 80.1 ms / 131 ms CPU before the change; comment
+incremental was effectively unchanged. The sample ranges overlap, while
+sampled cold and semantic RSS were higher. The candidate was reverted at
+`b397f87`. Raw samples:
+[`results-20261013-2c53afc-early-hir-prune.json`](results-20261013-2c53afc-early-hir-prune.json).
+
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
 input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
