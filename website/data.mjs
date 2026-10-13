@@ -118,7 +118,7 @@ export async function siteData() {
         title: (await read(name)).match(/^#\s+(.+)$/m)?.[1] || name,
       })),
   );
-  const [catalog, compatibility, lsp, syntax] = await Promise.all([
+  const [catalog, compatibility, lsp, syntax, crates] = await Promise.all([
     report("benchmarks/catalog-flow/results.json"),
     latest(
       files,
@@ -138,12 +138,16 @@ export async function siteData() {
       "benchmarks/results/",
       (d) => d.benchmark === "quill-lsp-rust-syntax-compatibility",
     ),
+    files.includes("benchmarks/crates/results.json")
+      ? report("benchmarks/crates/results.json")
+      : null,
   ]);
   return {
     revision: revision(),
     counts,
     languageCounts,
     stageAreas,
+    crates,
     docs,
     catalog,
     compatibility,
@@ -321,6 +325,36 @@ export function renderStats(html, data) {
       "Run the LSP latency benchmark to publish measurements.",
     );
     $(".lsp-source a").remove();
+  }
+
+  // Real-crate results are compatibility probes, not paired performance runs.
+  if (data.crates) {
+    const report = data.crates.value;
+    if (!Array.isArray(report.packages)) throw new Error(`Invalid crate report: ${data.crates.path}`);
+    const outcome = (result) => Number.isInteger(result?.exit_code)
+      ? result.exit_code === 0 ? "Pass" : "Rejected"
+      : "Not measured";
+    const packages = report.packages;
+    const parsed = packages.filter(p => p.quill_cargo_parse?.exit_code === 0).length;
+    const checked = packages.filter(p => p.quill_cargo_check_subset?.exit_code === 0).length;
+    $("[data-crate-summary]").text(`${parsed} of ${packages.length} crates parse · ${checked} of ${packages.length} pass Quill’s subset checker`);
+    $("[data-crate-rows]").html(packages.map(p => `<tr>
+      <th scope="row">${escape(p.name)} <span>${escape(p.version)}</span></th>
+      <td>${Number.isFinite(p.rust_source_lines) ? number(p.rust_source_lines) : "—"}</td>
+      <td>${outcome(p.quill_cargo_parse)}</td>
+      <td>${outcome(p.quill_cargo_check_subset)}</td>
+      <td>Not measured</td>
+      <td>${outcome(p.rustc_cargo_check)}</td>
+    </tr>`).join(""));
+    const binary = report.quill_binary || {};
+    const source = binary.source_revision ? `Compiler revision ${binary.source_revision}` : "Compiler source revision unknown";
+    $("[data-crate-provenance]").text(
+      `Recorded ${report.recorded_at || "date unknown"}. ${source}.${binary.last_modified_utc ? ` Binary last built ${binary.last_modified_utc}.` : ""} These results describe that binary, not necessarily the current compiler.`,
+    );
+    $("[data-crate-report]").attr("href", "/" + data.crates.path);
+  } else {
+    $("[data-crate-summary]").text("Crate results have not been published yet.");
+    $("[data-crate-table], [data-crate-provenance], [data-crate-report]").remove();
   }
 
   // Project notes use the same report, rather than keeping another copied summary.

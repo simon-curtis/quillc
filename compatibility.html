@@ -42,6 +42,22 @@
 </div>
 <p class="project-fit-note">Percentages count tracked areas with partial or full support, with equal weight per area. Partial means gaps remain. These stage inventories measure implementation breadth, not conformance to every Rust rule; they are not averaged into an overall score. Libraries, Cargo, and platforms are tracked separately.</p>
 </section>
+<section class="crate-benchmarks" aria-labelledby="crate-benchmarks-title">
+  <div class="crate-benchmarks-heading">
+    <h2 id="crate-benchmarks-title">How familiar crates fare.</h2>
+    <p data-crate-summary>Loading crate results.</p>
+  </div>
+  <div class="crate-table-scroll" data-crate-table tabindex="0" role="region" aria-label="Crate compatibility results; scroll horizontally on narrow screens">
+    <table class="crate-table">
+      <caption>Pinned crate versions · Quill compiler probes</caption>
+      <thead><tr><th scope="col">Crate / version</th><th scope="col">Source lines</th><th scope="col">Quill parsing</th><th scope="col">Quill checking (subset)</th><th scope="col">Quill native build</th><th scope="col">rustc checking</th></tr></thead>
+      <tbody data-crate-rows></tbody>
+    </table>
+  </div>
+  <p class="crate-note">Parsing means Quill discovered and parsed the selected crate roots. A checker pass covers its implemented subset. Neither establishes a working native build; builds and runtime were not measured in this report. Single-run timings are not comparable performance benchmarks.</p>
+  <p class="crate-note" data-crate-provenance></p>
+  <div class="crate-links"><a class="text-link" href="/benchmarks/crates/results.json" data-crate-report>Raw results <span aria-hidden="true">↗</span></a><a class="text-link" href="/benchmarks/crates/RESULTS.md">Method and limitations <span aria-hidden="true">↗</span></a></div>
+</section>
 <section class="project-overview" aria-labelledby="project-fit-title">
   <h2 id="project-fit-title">Check these first.</h2>
   <dl class="project-fit">
