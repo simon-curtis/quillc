@@ -2929,6 +2929,35 @@ fn infer_with_structs(
                 }
                 return Ty::Unknown;
             }
+            if method == "get"
+                && let Ty::Map(key_type, value_type) = receiver_base
+            {
+                if arguments.len() != 1 {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "method `BTreeMap::get` expects 1 argument but received {}",
+                            arguments.len()
+                        ),
+                    });
+                    return Ty::Unknown;
+                }
+                let actual = infer_with_structs(
+                    &arguments[0], locals, signatures, struct_signatures, key_type, diagnostics,
+                );
+                if !(**key_type == Ty::String
+                    && matches!(&actual, Ty::Reference(inner) if **inner == Ty::StringSlice))
+                {
+                    require_type(
+                        diagnostics,
+                        arguments[0].span.clone(),
+                        key_type,
+                        &actual,
+                        "BTreeMap::get key",
+                    );
+                }
+                return Ty::Option(Box::new(Ty::Reference(value_type.clone())));
+            }
             if method == "is_some" {
                 if !matches!(receiver_type, Ty::Option(_)) && receiver_type != Ty::Unknown {
                     diagnostics.push(TypeDiagnostic {
@@ -2948,6 +2977,26 @@ fn infer_with_structs(
                     return Ty::Unknown;
                 }
                 return Ty::Bool;
+            }
+            if method == "unwrap" {
+                if !arguments.is_empty() {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!("method `unwrap` expects 0 arguments but received {}", arguments.len()),
+                    });
+                    return Ty::Unknown;
+                }
+                return match receiver_type {
+                    Ty::Option(payload) | Ty::Result(payload, _) => *payload,
+                    Ty::Unknown => Ty::Unknown,
+                    other => {
+                        diagnostics.push(TypeDiagnostic {
+                            span: receiver.span.clone(),
+                            message: format!("method `unwrap` requires an Option or Result receiver, found `{}`", other.display_name()),
+                        });
+                        Ty::Unknown
+                    }
+                };
             }
             if method == "unwrap_or" {
                 let payload_type = match receiver_type {

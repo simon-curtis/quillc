@@ -115,6 +115,11 @@ enum Value {
         element_offset: usize,
         element_stride: usize,
     },
+    BTreeMapGetString {
+        pointer_slot: usize,
+        length_slot: usize,
+        key: Box<Value>,
+    },
     CollectionLocal {
         pointer_slot: usize,
         length_slot: usize,
@@ -1893,6 +1898,7 @@ fn collect_generic_instances(value: &Value, output: &mut BTreeSet<String>) {
             collect_generic_instances(then_value, output);
             collect_generic_instances(else_value, output);
         }
+        Value::BTreeMapGetString { key, .. } => collect_generic_instances(key, output),
         Value::Integer(_)
         | Value::Word(_)
         | Value::TypedWord { .. }
@@ -2590,6 +2596,7 @@ fn is_slice_value(value: &Value) -> bool {
         | Value::StaticArray(_)
         | Value::TextSlice(_)
         | Value::SliceElementString { .. }
+        | Value::BTreeMapGetString { .. }
         | Value::OwnedString(_)
         | Value::FormatString(_)
         | Value::SliceParameter { .. }
@@ -4302,7 +4309,7 @@ fn lower_statements(
                             kind: if is_supported_string_buffer_expression(initializer) {
                                 CollectionKind::StringBuffer
                             } else {
-                                CollectionKind::Vector
+                                type_text.as_deref().map(collection_kind).unwrap_or(CollectionKind::Vector)
                             },
                             element_type: type_text.as_deref().and_then(collection_element_type),
                             indirect: false,
@@ -5393,9 +5400,12 @@ fn materialize_method_receivers(
     };
     if matches!(
         method.as_str(),
-        "is_ok" | "is_err" | "is_some" | "unwrap_or"
+        "is_ok" | "is_err" | "is_some" | "unwrap_or" | "unwrap"
     ) && matches!(receiver.kind, BodyExprKind::Call { .. })
     {
+        return;
+    }
+    if method == "unwrap" {
         return;
     }
     if method == "clone" && matches!(receiver.kind, BodyExprKind::Index { .. }) {
@@ -5579,6 +5589,15 @@ fn type_name_for_receiver(
             Value::StructLocal { type_name, .. } | Value::StructReference { type_name, .. } => {
                 Some(type_name.clone())
             }
+            Value::CollectionLocal { kind, .. } => Some(
+                match kind {
+                    CollectionKind::Vector => "Vec",
+                    CollectionKind::BTreeMap => "BTreeMap",
+                    CollectionKind::HashMap => "HashMap",
+                    CollectionKind::StringBuffer => "String",
+                }
+                .to_owned(),
+            ),
             _ => None,
         },
         BodyExprKind::FieldAccess { base, field } => {
@@ -5669,6 +5688,30 @@ fn value_from_expression(
     functions: &[FunctionItem],
 ) -> Result<Value, CodegenError> {
     match &expr.kind {
+        BodyExprKind::MethodCall { receiver, method, arguments }
+            if method == "unwrap"
+                && arguments.is_empty()
+                && let BodyExprKind::MethodCall { receiver: map, method: get, arguments: keys } = &receiver.kind
+                && get == "get" && keys.len() == 1 =>
+        {
+            let Value::CollectionLocal {
+                pointer_slot,
+                length_slot,
+                kind: CollectionKind::BTreeMap,
+                ..
+            } = value_from_expression(map, environment, functions)? else {
+                return Err(CodegenError::UnsupportedProgram("BTreeMap::get requires a local BTreeMap"));
+            };
+            let key = value_from_expression(&keys[0], environment, functions)?;
+            if !is_slice_value(&key) {
+                return Err(CodegenError::UnsupportedProgram("BTreeMap::get currently requires a string key"));
+            }
+            Ok(Value::BTreeMapGetString {
+                pointer_slot,
+                length_slot,
+                key: Box::new(key),
+            })
+        }
         BodyExprKind::MethodCall {
             receiver,
             method,
@@ -6852,9 +6895,10 @@ fn value_from_expression(
                         receiver.kind
                     ))
                 })?;
-            let function = resolve_impl_method(&owner, method, functions).ok_or(
-                CodegenError::UnsupportedProgram("method is not a supported inherent method"),
-            )?;
+            let function = resolve_impl_method(&owner, method, functions).ok_or_else(|| {
+                eprintln!("unresolved inherent method during compatibility probe: {owner}::{method}; receiver={:?}", receiver.kind);
+                CodegenError::UnsupportedProgram("method is not a supported inherent method")
+            })?;
             if function.is_generic || function.parameters.len() != arguments.len() + 1 {
                 return Err(CodegenError::UnsupportedProgram(
                     "method must have a concrete receiver and matching argument count",
@@ -7471,6 +7515,9 @@ fn validate_value_target(
             }
             Ok(())
         }
+        Value::BTreeMapGetString { key, .. } => {
+            validate_value_target(key, functions, items, parameter_count)
+        }
         Value::If {
             condition,
             then_value,
@@ -7782,6 +7829,9 @@ fn encode_value(
             }
             code.extend_from_slice(&[0x48, 0x8b, 0x50, 0x08]);
             code.extend_from_slice(&[0x48, 0x8b, 0x00]);
+        }
+        Value::BTreeMapGetString { pointer_slot, length_slot, key } => {
+            code.extend(encode_btree_map_get_string(*pointer_slot, *length_slot, key, in_function, relocations));
         }
         Value::CollectionLocal {
             pointer_slot,
@@ -8553,6 +8603,85 @@ fn encode_btree_map_insert(
     patch_rel32(&mut code, have_capacity, write_entry);
     patch_rel32(&mut code, empty_capacity, first_capacity);
     patch_rel32(&mut code, capacity_ready, store_capacity);
+    code
+}
+
+fn encode_btree_map_get_string(
+    pointer_slot: usize,
+    length_slot: usize,
+    key: &Value,
+    in_function: bool,
+    relocations: &mut Vec<PendingRelocation>,
+) -> Vec<u8> {
+    // BTreeMap's current native representation is a flat array of 32-byte
+    // string entries. A missing key traps rather than returning a fabricated
+    // value; Option branching is a later slice.
+    let mut code = Vec::new();
+    emit_rsp_adjust(&mut code, true, 64);
+    append_encoded_value(&mut code, key, in_function, relocations);
+    encode_rsp_store_rax(&mut code, 0);
+    encode_rsp_store_rdx(&mut code, 8);
+    encode_rbp_load_rax(&mut code, -8 * (pointer_slot as i32 + 1));
+    encode_rsp_store_rax(&mut code, 16);
+    encode_rbp_load_rax(&mut code, -8 * (length_slot as i32 + 1));
+    encode_rsp_store_rax(&mut code, 24);
+    code.extend_from_slice(&[0x48, 0xc7, 0x44, 0x24, 0x20, 0, 0, 0, 0]); // index = 0
+    let scan = code.len();
+    encode_rsp_load_rax(&mut code, 32);
+    encode_rsp_load_rcx(&mut code, 24);
+    code.extend_from_slice(&[0x48, 0x39, 0xc8, 0x0f, 0x83]); // exhausted => trap
+    let missing = code.len();
+    code.extend_from_slice(&[0; 4]);
+    code.extend_from_slice(&[0x48, 0xc1, 0xe0, 0x05]); // index *= 32
+    encode_rsp_load_rcx(&mut code, 16);
+    code.extend_from_slice(&[0x48, 0x01, 0xc8]);
+    encode_rsp_store_rax(&mut code, 40); // current entry
+    code.extend_from_slice(&[0x48, 0x8b, 0x48, 0x08]); // current key length
+    encode_rsp_load_rax(&mut code, 8);
+    code.extend_from_slice(&[0x48, 0x39, 0xc1, 0x0f, 0x85]);
+    let next_length = code.len();
+    code.extend_from_slice(&[0; 4]);
+    code.extend_from_slice(&[0x48, 0xc7, 0x44, 0x24, 0x30, 0, 0, 0, 0]); // byte = 0
+    let compare = code.len();
+    encode_rsp_load_rdx(&mut code, 48);
+    encode_rsp_load_rcx(&mut code, 8);
+    code.extend_from_slice(&[0x48, 0x39, 0xca, 0x0f, 0x83]); // all bytes matched
+    let equal = code.len();
+    code.extend_from_slice(&[0; 4]);
+    encode_rsp_load_rax(&mut code, 40);
+    code.extend_from_slice(&[0x48, 0x8b, 0x38]); // entry key pointer
+    encode_rsp_load_rsi(&mut code, 0);
+    encode_rsp_load_rdx(&mut code, 48);
+    code.extend_from_slice(&[0x8a, 0x04, 0x17, 0x8a, 0x0c, 0x16, 0x38, 0xc8, 0x0f, 0x85]);
+    let next_byte = code.len();
+    code.extend_from_slice(&[0; 4]);
+    code.extend_from_slice(&[0x48, 0x83, 0x44, 0x24, 0x30, 1]);
+    code.push(0xe9);
+    let loop_back = code.len();
+    code.extend_from_slice(&[0; 4]);
+    let found = code.len();
+    encode_rsp_load_rcx(&mut code, 40);
+    code.extend_from_slice(&[0x48, 0x8b, 0x41, 0x10]); // value pointer
+    code.extend_from_slice(&[0x48, 0x8b, 0x51, 0x18]); // value length
+    code.push(0xe9);
+    let found_jump = code.len();
+    code.extend_from_slice(&[0; 4]);
+    let next = code.len();
+    code.extend_from_slice(&[0x48, 0x83, 0x44, 0x24, 0x20, 1]);
+    code.push(0xe9);
+    let next_loop = code.len();
+    code.extend_from_slice(&[0; 4]);
+    let trap = code.len();
+    code.extend_from_slice(&[0x0f, 0x0b]);
+    let done = code.len();
+    emit_rsp_adjust(&mut code, false, 64);
+    patch_rel32(&mut code, missing, trap);
+    patch_rel32(&mut code, next_length, next);
+    patch_rel32(&mut code, equal, found);
+    patch_rel32(&mut code, next_byte, next);
+    patch_rel32(&mut code, loop_back, compare);
+    patch_rel32(&mut code, found_jump, done);
+    patch_rel32(&mut code, next_loop, scan);
     code
 }
 
@@ -9733,6 +9862,7 @@ fn collect_print_text(value: &Value, output: &mut HashSet<String>) {
 
 fn collect_value_text(value: &Value, output: &mut HashSet<String>) {
     match value {
+        Value::BTreeMapGetString { key, .. } => collect_value_text(key, output),
         Value::TextSlice(text) => {
             output.insert(text.clone());
         }
@@ -9940,6 +10070,7 @@ fn static_array_symbol_name(values: &[Value]) -> String {
 
 fn collect_static_arrays(value: &Value, output: &mut HashMap<String, Vec<Value>>) {
     match value {
+        Value::BTreeMapGetString { key, .. } => collect_static_arrays(key, output),
         Value::StaticArray(values) => {
             output.insert(static_array_symbol_name(values), values.clone());
         }
@@ -10303,6 +10434,7 @@ fn contains_format_decimal(value: &Value) -> bool {
         | Value::AddressOfLocal(_)
         | Value::IndirectLocal { .. }
         | Value::StructLocal { .. } => false,
+        Value::BTreeMapGetString { key, .. } => contains_format_decimal(key),
         Value::StructReference { fields, .. } => fields.iter().any(contains_format_decimal),
         Value::SliceIsEmpty(value) => contains_format_decimal(value),
     }
@@ -10756,6 +10888,10 @@ fn visit_value(value: &Value, max_slot: &mut usize) {
         }
         Value::PairField { aggregate, .. } | Value::OwnedString(aggregate) => {
             visit_value(aggregate, max_slot)
+        }
+        Value::BTreeMapGetString { pointer_slot, length_slot, key } => {
+            *max_slot = (*max_slot).max(pointer_slot + 1).max(length_slot + 1);
+            visit_value(key, max_slot);
         }
         Value::ResultIsOk(result)
         | Value::OptionIsSome(result)
