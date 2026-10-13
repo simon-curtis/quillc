@@ -58,19 +58,18 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The latest Linux run passes 40 of 46 cases (87.0%) using a clean compiler
-build at revision `8e9b939`. The report records the exact binary hash and
+The latest Linux run passes 42 of 46 cases (91.3%) using a clean compiler
+build at revision `7288f7f`. The report records the exact binary hash and
 verifies first- and second-element `Vec<String>` indexing, string-keyed
-`BTreeMap` lookup, generic `AsRef<str>` dispatch, and comma-separated
-macro repetition with a trailing comma:
-[`results/2026-10-13-macro-repetition-matrix.json`](results/2026-10-13-macro-repetition-matrix.json).
+`BTreeMap` lookup, generic `AsRef<str>` dispatch, and comma-plus, semicolon-plus,
+and zero-or-more macro repetition:
+[`results/2026-10-13-macro-repetition-complete.json`](results/2026-10-13-macro-repetition-complete.json).
 Borrowed integer slice iteration and `Vec<String>` growth, indexing, cloning,
 and output match rustc in the maintained cases. Windows output remains
 unprobed.
 
-Six cases fail: generic trait dispatch, panic behavior, rustc's inability to
-consume Quill's object as an `--extern` library, macro repetition with a
-semicolon separator, zero-or-more macro repetition, and Rust 2015's valid
+Four cases fail: generic trait dispatch, panic behavior, rustc's inability to
+consume Quill's object as an `--extern` library, and Rust 2015's valid
 `async` identifier. The paired Rust
 2015/2018 tests show that Quill rejects the identifier in both editions, while
 rustc accepts it in 2015 and rejects it in 2018. Four edition probes pass: Rust
@@ -80,7 +79,7 @@ signed widening, tuple projections, borrowed slice iteration, `Vec<String>`
 indexing, and the tested `Result` status check also match rustc. Build-script support covers the tested native script that emits
 `rustc-cfg`; other directives and build dependencies remain incomplete.
 
-The 87.0% rate is only for these curated cases; it is not an overall Rust
+The 91.3% rate is only for these curated cases; it is not an overall Rust
 compatibility score and cannot be compared directly to the manually curated
 10.3% feature index. The full destination remains in [`TARGET.md`](TARGET.md),
 including language, diagnostics, standard library, Cargo, and Linux and
