@@ -233,6 +233,7 @@ const PARITY_FIXTURES: &[&str] = &[
     "fn f(x: i32) -> i32 { match x { -1 => 0, -5..=-2 => 1, 0 ... 9 => 2, '0'...'9' => 3, _ => 4 } }",
     "fn decode(b0: u8) -> u8 { match b0 { b'a'..=b'f' => 10 + (b0 - b'a'), _ => 0 } }",
     "fn decode(b0: u8) -> u8 { let mut ch = 0; ch += 0x10 * match b0 { b'0'..=b'9' => b0 - b'0', b'a'..=b'f' => 10 + (b0 - b'a'), b'A'..=b'F' => 10 + (b0 - b'A'), _ => return 0 }; ch }",
+    "fn call<T>(x: T, y: i32, z: i32) { g::<T>(y + (y + z), x); }",
     "fn f() { while 'w: { let mut c = 0; if c == 1 { break 'w false; } true } {} let v = 'b: { 1 }; let u = unsafe { 2 }; }",
     "fn f() -> f64 { 3.402e+38 + 1e-3 + 2E+5_f64 }",
     "fn f() -> &'static str {\r\n    let s = \"a\\\r\n        b\";\r\n    let t = \"x\r\ny\";\r\n    println!(\"one\\\r\n  two\");\r\n    concat!(\"p\r\nq\", 1)\r\n}\r\n",

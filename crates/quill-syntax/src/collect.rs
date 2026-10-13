@@ -395,7 +395,18 @@ fn is_type_bound_context(bytes: &[u8], open: usize) -> bool {
         }
     }
     let context = &bytes[context_start..open];
-    context.contains(&b'<') || context.contains(&b':')
+    let mut angle_depth = 0usize;
+    for byte in context {
+        match byte {
+            b'<' => angle_depth += 1,
+            b'>' => angle_depth = angle_depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    angle_depth > 0
+        || context
+            .split(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+            .any(|word| word == b"where")
 }
 
 fn skip_quoted(bytes: &[u8], start: usize, quote: u8) -> usize {
