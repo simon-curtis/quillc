@@ -27,22 +27,22 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.681 s | 5.606 s | 569.2 MiB |
-| `quillc cargo-build-subset` | Cold | 0.326 s | 1.914 s | 133.5 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 21.5 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.681 s | 5.650 s | 570.0 MiB |
+| `quillc cargo-build-subset` | Cold | 0.322 s | 1.874 s | 133.2 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.019 s | 21.5 MiB |
 | `quillc cargo-build-subset` | Warm | 0.006 s | 0.001 s | 21.5 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.285 s | 0.407 s | 226.9 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.086 s | 35.6 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.303 s | 0.431 s | 229.6 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.177 s | 51.9 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.291 s | 0.414 s | 232.7 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.085 s | 35.4 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.303 s | 0.427 s | 228.6 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.085 s | 0.178 s | 58.2 MiB |
 
-Quill's median wall-time ratios were 8.22× cold, 3.17× warm, 10.96× for the
-comment edit, and 3.65× for the semantic edit. Peak RSS was lower in three
+Quill's median wall-time ratios were 8.33× cold, 3.17× warm, 10.78× for the
+comment edit, and 3.56× for the semantic edit. Peak RSS was lower in three
 states and equal in the warm state. The semantic-edit CPU-time ratio was 2.44×
-(0.177 s vs. 0.431 s). This clears the 3× wall-time bar in all four states on
+(0.178 s vs. 0.427 s). This clears the 3× wall-time bar in all four states on
 this fixture; it does not establish general Rust compiler performance. The
-latest raw run was built from revision `abd6617`; its dirty-source list records
-separate Cargo/LSP workspace edits, and its binary hash is recorded in the JSON.
+latest raw run was built from revision `e7c7444`; its dirty-source list records
+an LSP edit, and its binary hash is recorded in the JSON.
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
