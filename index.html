@@ -51,26 +51,23 @@
     <div class="section-impression shell" aria-hidden="true"><canvas data-print="divider" data-phase="0"></canvas></div>
 
     <section class="project-overview shell" aria-labelledby="overview-title">
-      <h2 id="overview-title">Where Quill stands.</h2>
+      <h2 id="overview-title">Can Quill build your project?</h2>
       <div class="overview-columns">
-        <div class="overview-compatibility">
-          <p class="overview-label">Regression suite · Linux x86-64</p>
-          <p class="overview-score"><span id="compatibility-score">—</span><span class="score-unit"></span><span class="score-description">regression checks<br>passing</span></p>
-          <a class="text-link" href="/compatibility.html#differential-results">Explore compatibility <span aria-hidden="true">↗</span></a>
-          <p class="coverage-method">Each check compares a specific program or diagnostic with rustc. The total counts cases in our suite; missing Rust features may have no case yet. Even a full pass would not mean full Rust compatibility.</p>
-          <p class="coverage-evidence">Comparison report unavailable.</p>
-          <p class="coverage-counts" id="coverage-counts"></p>
-          <p class="coverage-method">The inventory describes broader capabilities. “Partial” means some forms work and others remain unsupported—even when their regression checks pass. These counts are not a completion percentage.</p>
+        <div class="overview-progress">
+          <p class="overview-label">Compatibility today</p>
+          <h3>Experimental. Selected Rust projects.</h3>
+          <p>Quill can build supported programs and workspace-local libraries into Linux x86-64 executables. The Catalog Flow workspace is a working example.</p>
+          <p>It is not yet a drop-in replacement for rustc. Projects using third-party crates, procedural macros, or broader standard-library APIs can encounter unsupported features.</p>
+          <a class="text-link" href="/compatibility.html">Check your project’s requirements <span aria-hidden="true">↗</span></a>
         </div>
         <div class="overview-progress">
-          <p class="overview-label">Current stage</p>
-          <h3>Native subset.</h3>
-          <p>Quill builds supported Rust programs into native Linux executables. The first end-to-end benchmark produces matching output with rustc.</p>
-          <ol class="project-milestones" aria-label="Project milestones">
-            <li class="milestone-current">Native Linux subset <span>Working</span></li>
-            <li>Full Rust &amp; Cargo parity <span>Ahead</span></li>
-            <li>Windows support <span>Ahead</span></li>
-          </ol>
+          <p class="overview-label">Before you try it</p>
+          <dl class="project-fit">
+            <div><dt>Your target</dt><dd>Linux x86-64 for supported programs. Windows output is still ahead.</dd></div>
+            <div><dt>Your dependencies</dt><dd>Workspace-local libraries have limited support. General crates.io and Git dependency support is incomplete.</dd></div>
+            <div><dt>Your workflow</dt><dd>Selected Cargo builds work. Cargo tests, doctests, and rustc-compatible library artifacts are not ready.</dd></div>
+          </dl>
+          <p class="coverage-method">There is no reliable percentage for an arbitrary project yet. Its language features, dependencies, and build steps determine whether it will work.</p>
         </div>
       </div>
     </section>

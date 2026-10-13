@@ -499,6 +499,55 @@ h2 {
 
 /* Project overview */
 
+.project-fit {
+  margin: 0;
+}
+
+.project-fit > div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.3fr) minmax(0, 1fr);
+  gap: 18px;
+  padding-block: 10px;
+}
+
+.project-fit dt {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.project-fit dd,
+.project-fit-note {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.project-fit a,
+.project-fit-note a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.project-fit-note {
+  margin-top: 22px;
+  max-width: 800px;
+}
+
+.compatibility-evidence-title {
+  margin-top: 56px;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+@media (max-width: 480px) {
+  .project-fit > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+
 .project-overview {
   padding-block: 28px 38px;
   border-bottom: 0;
