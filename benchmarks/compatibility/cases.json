@@ -1231,5 +1231,17 @@
     ],
     "edition": "2024",
     "source": "fn consume(value: String) { let _ = value; }\nfn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    consume(value);\n}"
+  },
+  {
+    "id": "diagnostic-mutate-vec-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `values` as mutable because it is also borrowed as immutable",
+    "source": "fn main() {\n    let mut values: Vec<u64> = Vec::new();\n    let first = &values;\n    values.push(42);\n    println!(\"{first:?}\");\n}"
   }
 ]
