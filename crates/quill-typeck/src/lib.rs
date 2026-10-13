@@ -865,6 +865,13 @@ fn check_one_function(
             "function body",
         );
     }
+    check_move_uses(
+        function,
+        body,
+        signatures,
+        function_structs,
+        &mut diagnostics,
+    );
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
     check_loop_control(body, 0, &mut diagnostics);
     if strict_calls {
@@ -876,6 +883,394 @@ fn check_one_function(
         check_call_targets(body, &mut names, signatures, &mut diagnostics);
     }
     diagnostics
+}
+
+/// Diagnose use of a local after a move along straight-line control flow.
+/// This is deliberately a separate pass from type inference: move state is
+/// flow-sensitive, while the current type environment is reused by many
+/// recursive inference paths.
+fn check_move_uses(
+    function: &FunctionItem,
+    body: &BodyExpr,
+    signatures: &SignatureIndex<'_>,
+    struct_signatures: &[StructSignature],
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    let mut locals = HashMap::new();
+    for parameter in &function.parameters {
+        if let Some(name) = &parameter.name {
+            locals.insert(
+                name.clone(),
+                type_from_syntax(&parameter.type_text, struct_signatures),
+            );
+        }
+    }
+    let mut moved = HashSet::new();
+    check_move_expression(
+        body,
+        true,
+        signatures,
+        struct_signatures,
+        &mut locals,
+        &mut moved,
+        diagnostics,
+    );
+}
+
+fn check_move_expression(
+    expression: &BodyExpr,
+    consume: bool,
+    signatures: &SignatureIndex<'_>,
+    struct_signatures: &[StructSignature],
+    locals: &mut HashMap<String, Ty>,
+    moved: &mut HashSet<String>,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    match &expression.kind {
+        BodyExprKind::Path(name) => {
+            let Some(ty) = locals.get(name) else {
+                return;
+            };
+            if moved.contains(name) {
+                diagnostics.push(TypeDiagnostic {
+                    span: expression.span.clone(),
+                    message: format!(
+                        "error[E0382]: {} of moved value: `{name}`",
+                        if consume { "use" } else { "borrow" }
+                    ),
+                });
+            } else if consume && !is_copy_type(ty, struct_signatures) {
+                moved.insert(name.clone());
+            }
+        }
+        BodyExprKind::Reference { expression, .. } => check_move_expression(
+            expression,
+            false,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        ),
+        BodyExprKind::Parenthesized(inner) => check_move_expression(
+            inner,
+            consume,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        ),
+        BodyExprKind::Block { statements, tail } => {
+            let original_locals = locals.clone();
+            for statement in statements {
+                match statement {
+                    BodyStatement::Let {
+                        name,
+                        type_text,
+                        initializer,
+                        ..
+                    } => {
+                        let binding_type = initializer.as_ref().map(|initializer| {
+                            check_move_expression(
+                                initializer,
+                                true,
+                                signatures,
+                                struct_signatures,
+                                locals,
+                                moved,
+                                diagnostics,
+                            );
+                            let mut ignored = Vec::new();
+                            infer_with_structs(
+                                initializer,
+                                locals,
+                                signatures,
+                                struct_signatures,
+                                &Ty::Unknown,
+                                &mut ignored,
+                            )
+                        });
+                        if let Some(name) = name {
+                            let ty = type_text
+                                .as_deref()
+                                .map(|text| type_from_syntax(text, struct_signatures))
+                                .or(binding_type)
+                                .unwrap_or(Ty::Unknown);
+                            locals.insert(name.clone(), ty);
+                            moved.remove(name);
+                        }
+                    }
+                    BodyStatement::LetTuple {
+                        initializer, names, ..
+                    } => {
+                        check_move_expression(
+                            initializer,
+                            true,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        let mut ignored = Vec::new();
+                        let ty = infer_with_structs(
+                            initializer,
+                            locals,
+                            signatures,
+                            struct_signatures,
+                            &Ty::Unknown,
+                            &mut ignored,
+                        );
+                        if let Ty::Tuple(types) = ty {
+                            locals.extend(names.iter().cloned().zip(types));
+                        }
+                    }
+                    BodyStatement::Assign { name, value, .. } => {
+                        check_move_expression(
+                            value,
+                            true,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        moved.remove(name);
+                    }
+                    BodyStatement::Expression { expression, .. } => check_move_expression(
+                        expression,
+                        true,
+                        signatures,
+                        struct_signatures,
+                        locals,
+                        moved,
+                        diagnostics,
+                    ),
+                    BodyStatement::MacroInvocation {
+                        path,
+                        tokens,
+                        format_string,
+                        span,
+                        ..
+                    } if path == "println" => {
+                        check_format_capture_moves(
+                            path,
+                            tokens,
+                            format_string.as_deref(),
+                            span,
+                            locals,
+                            moved,
+                            struct_signatures,
+                            diagnostics,
+                        );
+                    }
+                    BodyStatement::While {
+                        condition, body, ..
+                    } => {
+                        check_move_expression(
+                            condition,
+                            false,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        let mut loop_locals = locals.clone();
+                        let mut loop_moved = moved.clone();
+                        check_move_expression(
+                            body,
+                            false,
+                            signatures,
+                            struct_signatures,
+                            &mut loop_locals,
+                            &mut loop_moved,
+                            diagnostics,
+                        );
+                    }
+                    BodyStatement::ForRange {
+                        start, end, body, ..
+                    } => {
+                        for value in [start, end, body] {
+                            check_move_expression(
+                                value,
+                                false,
+                                signatures,
+                                struct_signatures,
+                                locals,
+                                moved,
+                                diagnostics,
+                            );
+                        }
+                    }
+                    BodyStatement::ForEach { iterator, body, .. } => {
+                        check_move_expression(
+                            iterator,
+                            true,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                        check_move_expression(
+                            body,
+                            false,
+                            signatures,
+                            struct_signatures,
+                            locals,
+                            moved,
+                            diagnostics,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(tail) = tail {
+                check_move_expression(
+                    tail,
+                    consume,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+            *locals = original_locals;
+        }
+        BodyExprKind::Call { arguments, .. } => {
+            for argument in arguments {
+                check_move_expression(
+                    argument,
+                    true,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            method,
+            arguments,
+        } => {
+            check_move_expression(
+                receiver,
+                matches!(
+                    method.as_str(),
+                    "into_iter" | "into_bytes" | "unwrap" | "expect"
+                ),
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            for argument in arguments {
+                check_move_expression(
+                    argument,
+                    true,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
+            for element in elements {
+                check_move_expression(
+                    element,
+                    true,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Binary { left, right, .. } => {
+            check_move_expression(
+                left,
+                true,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            check_move_expression(
+                right,
+                true,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+        }
+        BodyExprKind::Return(Some(value)) => check_move_expression(
+            value,
+            true,
+            signatures,
+            struct_signatures,
+            locals,
+            moved,
+            diagnostics,
+        ),
+        _ => {}
+    }
+}
+
+fn check_format_capture_moves(
+    path: &str,
+    tokens: &str,
+    format: Option<&str>,
+    macro_span: &Range<usize>,
+    locals: &HashMap<String, Ty>,
+    moved: &HashSet<String>,
+    struct_signatures: &[StructSignature],
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    let Some(format) = format else {
+        return;
+    };
+    let mut cursor = 0;
+    while let Some(open) = format[cursor..].find('{') {
+        let open = cursor + open;
+        let Some(close_relative) = format[open + 1..].find('}') else {
+            break;
+        };
+        let close = open + 1 + close_relative;
+        let name = &format[open + 1..close];
+        if !name.is_empty()
+            && name
+                .chars()
+                .all(|character| character == '_' || character.is_alphanumeric())
+            && moved.contains(name)
+            && locals
+                .get(name)
+                .is_some_and(|ty| !is_copy_type(ty, struct_signatures))
+        {
+            let placeholder = format!("{{{name}}}");
+            if let Some(token_offset) = tokens.find(&placeholder) {
+                let capture_start = macro_span.start + path.len() + 2 + token_offset + 1;
+                diagnostics.push(TypeDiagnostic {
+                    span: capture_start..capture_start + name.len(),
+                    message: format!("error[E0382]: borrow of moved value: `{name}`"),
+                });
+            }
+        }
+        cursor = close + 1;
+    }
 }
 
 fn check_call_targets(
@@ -2885,9 +3280,10 @@ fn infer_with_structs(
                                 if actual != Ty::Never && !types_compatible(&declared, &actual) {
                                     mismatch(
                                         diagnostics,
-                                        initializer
-                                            .as_ref()
-                                            .map_or_else(|| span.clone(), |value| value.span.clone()),
+                                        initializer.as_ref().map_or_else(
+                                            || span.clone(),
+                                            |value| value.span.clone(),
+                                        ),
                                         &declared,
                                         &actual,
                                         "local binding",
@@ -3703,7 +4099,14 @@ fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
 
 fn is_copy_type(ty: &Ty, structs: &[StructSignature]) -> bool {
     match ty {
-        Ty::Bool | Ty::Char | Ty::Integer(_) | Ty::Float(_) | Ty::Reference(_) | Ty::Never => true,
+        Ty::Bool
+        | Ty::Char
+        | Ty::Integer(_)
+        | Ty::InferInteger
+        | Ty::Float(_)
+        | Ty::InferFloat
+        | Ty::Reference(_)
+        | Ty::Never => true,
         Ty::Tuple(fields) => fields.iter().all(|field| is_copy_type(field, structs)),
         Ty::Array(element, _) => is_copy_type(element, structs),
         Ty::Named(name) if name.starts_with("\0quill_generic:") => {
@@ -3783,7 +4186,8 @@ mod tests {
         );
         let parsed = parse(&source);
         assert!(!parsed.had_error);
-        assert!(check_functions(&parsed.functions).is_empty());
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 
     #[test]
@@ -4304,7 +4708,8 @@ mod tests {
         );
         let parsed = parse(&valid);
         assert!(!parsed.had_error);
-        assert!(check_functions(&parsed.functions).is_empty());
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
         let immutable = SourceFile::from_text(
             "immutable.rs",
@@ -4317,6 +4722,24 @@ mod tests {
                 .iter()
                 .any(|diagnostic| { diagnostic.message.contains("immutable variable `value`") })
         );
+    }
+
+    #[test]
+    fn reports_borrow_of_moved_string_in_format_capture() {
+        let source = SourceFile::from_text(
+            "move.rs",
+            "fn main() { let value = String::from(\"owned\"); let moved = value; println!(\"{value}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_eq!(
+            diagnostics[0].message,
+            "error[E0382]: borrow of moved value: `value`"
+        );
+        let capture = source.text().find("{value}").unwrap() + 1;
+        assert_eq!(diagnostics[0].span, capture..capture + "value".len());
     }
 
     #[test]
