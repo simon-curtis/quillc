@@ -61,14 +61,20 @@ The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
 at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
 clean source status. It is the earlier baseline snapshot, not the current count.
 
-The [Cargo feature selection run](results/2026-10-13-cargo-feature-selection.json)
+The [clean stringify run](results/2026-10-13-stringify-clean.json) passes
+57/58 cases (98.3%) at clean revision `ae21997`. It adds a `stringify!`
+runtime comparison and retains checks for Cargo features, selected `cfg`,
+`env!`, and other implemented forms. The one failure is rustc consuming a
+Quill object through `--extern`. `stringify!` currently matches the tested
+arithmetic-token form; token punctuation spacing can still differ for other
+forms. The report includes the toolchain, binary hash, and exact case outcomes.
+
+The earlier [Cargo feature selection run](results/2026-10-13-cargo-feature-selection.json)
 passes 56/57 cases (98.2%). It verifies selected features through both
 `--no-default-features --features=slow` and `--all-features` during builds, a
 feature-selected type check, and `env!` expansion against the compiler's
-environment. Those cases match rustc. The report records revision `f186db2`,
-unrelated dirty parser/LSP paths, and the binary hash. The remaining failure is
-rustc consuming a Quill object through `--extern`. This report is evidence for
-the named cases and current corpus only.
+environment. Its remaining failure is rustc consuming a Quill object through
+`--extern`. This report is evidence for its named cases and corpus snapshot.
 
 The [clean post-index run](results/2026-10-13-clean-40834d9.json) passes 54/55
 cases at clean revision `40834d9`, with a clean compiler source tree and binary
@@ -77,6 +83,10 @@ hash. Its only failure remains the `.o` artifact passed through `rustc --extern`
 The [latest clean run](results/2026-10-13-clean-1301f37.json) passes 56/57
 cases at revision `1301f37` and includes the compile-time `env!` compatibility
 case. The same `.o`/`--extern` interop case is the only failure.
+
+The [clean HIR-copy run](results/2026-10-13-clean-a364f73.json) also passes
+56/57 cases at `a364f73`; the only failure remains `.o`/`--extern`
+interoperability.
 
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
