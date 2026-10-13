@@ -367,7 +367,8 @@
   }
   .differential-stats > div {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    justify-content: normal;
     align-items: baseline;
     gap: 16px;
   }
@@ -375,6 +376,8 @@
   .differential-stats .differential-unprobed {
     font-size: 22px;
     line-height: 1.4;
+    white-space: nowrap;
+    text-align: right;
   }
   .differential-caveat {
     margin-top: 23px;
