@@ -363,6 +363,29 @@
     "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let selected = if true { values[1] } else { values[0] }; println!(\"{selected}\"); }"
   },
   {
+    "id": "vec-index-in-explicit-return",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn first() -> u64 { let mut values: Vec<u64> = Vec::new(); values.push(42); return values[0]; }\nfn main() { let value = first(); println!(\"{value}\"); }"
+  },
+  {
+    "id": "vec-index-in-explicit-return-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn first() -> u64 { let mut values: Vec<u64> = Vec::new(); values.push(42); return values[1]; }\nfn main() { let value = first(); println!(\"{value}\"); }"
+  },
+  {
     "id": "builtin-env-macro",
     "kind": "run",
     "features": [

@@ -4811,7 +4811,26 @@ fn lower_statements(
                     continue;
                 }
                 if let BodyExprKind::Return(Some(value)) = &expression.kind {
-                    let value = value_from_expression(value, environment, functions)?;
+                    let mut rewritten_value = (**value).clone();
+                    let mut index_temporaries = Vec::new();
+                    materialize_vector_indices(
+                        &mut rewritten_value,
+                        environment,
+                        &mut index_temporaries,
+                        *next_slot,
+                        "__quill_return",
+                    );
+                    if !index_temporaries.is_empty() {
+                        lowered.extend(lower_statements(
+                            &index_temporaries,
+                            environment,
+                            mutable_names,
+                            next_slot,
+                            functions,
+                            structs,
+                        )?);
+                    }
+                    let value = value_from_expression(&rewritten_value, environment, functions)?;
                     if matches!(&value, Value::Tuple(_)) {
                         return Err(CodegenError::UnsupportedProgram(
                             "explicit pair returns are outside the current codegen slice",
