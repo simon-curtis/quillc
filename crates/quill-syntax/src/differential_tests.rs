@@ -466,19 +466,6 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
     );
 }
 
-#[test]
-fn debug_core_flt_parse() {
-    let sysroot = Command::new("rustc").arg("--print").arg("sysroot").output().unwrap();
-    let path = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
-        .join("lib/rustlib/src/rust/library/core/src/num/imp/flt2dec/mod.rs");
-    let source = SourceFile::load(path).unwrap();
-    let parser_text = crate::collect::parser_text(source.text());
-    let parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra_ap_syntax::Edition::Edition2024);
-    eprintln!("normalized={} errors={:?}", parser_text.len() != source.text().len(), parse.errors());
-    let actual = parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2024");
-    eprintln!("collect={:?}", actual.diagnostics);
-}
-
 fn rustc_parser_accepts(text: &str, edition: &str) -> bool {
     use std::io::Write;
 
