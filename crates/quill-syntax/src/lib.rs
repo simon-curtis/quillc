@@ -746,8 +746,11 @@ struct LocalMacroExpansion {
 #[derive(Clone)]
 enum LocalMacroRule {
     ZeroArgLiteral(syn::Expr),
-    RepeatCommaExpr {
+    RepeatSeparatedExpr {
         capture: String,
+        separator: char,
+        allow_empty: bool,
+        allow_trailing_separator: bool,
         transcriber: proc_macro2::TokenStream,
     },
 }
@@ -1211,17 +1214,43 @@ fn supported_macro_rule(item: &syn::ItemMacro) -> Option<LocalMacroRule> {
     }
 
     let pattern_tokens = pattern.stream().into_iter().collect::<Vec<_>>();
-    let [capture_dollar, capture_group, separator, plus, optional_dollar, optional_group, question] =
+    let [capture_dollar, capture_group, separator_token, repetition, optional_tail @ ..] =
         pattern_tokens.as_slice()
     else {
         return None;
     };
-    if !is_macro_punct(capture_dollar, '$')
-        || !is_macro_punct(separator, ',')
-        || !is_macro_punct(plus, '+')
-        || !is_macro_punct(optional_dollar, '$')
-        || !is_macro_punct(question, '?')
-    {
+    if !is_macro_punct(capture_dollar, '$') {
+        return None;
+    }
+    let proc_macro2::TokenTree::Punct(separator) = separator_token else {
+        return None;
+    };
+    if !matches!(separator.as_char(), ',' | ';') {
+        return None;
+    }
+    let proc_macro2::TokenTree::Punct(repetition) = repetition else {
+        return None;
+    };
+    let allow_empty = match repetition.as_char() {
+        '+' => false,
+        '*' => true,
+        _ => return None,
+    };
+    let allow_trailing_separator = match optional_tail {
+        [] => false,
+        [optional_dollar, optional_group, question]
+            if is_macro_punct(optional_dollar, '$') && is_macro_punct(question, '?') =>
+        {
+            let proc_macro2::TokenTree::Group(optional_group) = optional_group else {
+                return None;
+            };
+            let optional_tokens = optional_group.stream().into_iter().collect::<Vec<_>>();
+            optional_tokens.len() == 1
+                && is_macro_punct(&optional_tokens[0], separator.as_char())
+        }
+        _ => false,
+    };
+    if !allow_trailing_separator && !optional_tail.is_empty() {
         return None;
     }
     let proc_macro2::TokenTree::Group(capture_group) = capture_group else {
@@ -1240,15 +1269,11 @@ fn supported_macro_rule(item: &syn::ItemMacro) -> Option<LocalMacroRule> {
     let proc_macro2::TokenTree::Ident(capture) = ident else {
         return None;
     };
-    let proc_macro2::TokenTree::Group(optional_group) = optional_group else {
-        return None;
-    };
-    let optional_tokens = optional_group.stream().into_iter().collect::<Vec<_>>();
-    if optional_tokens.len() != 1 || !is_macro_punct(&optional_tokens[0], ',') {
-        return None;
-    }
-    Some(LocalMacroRule::RepeatCommaExpr {
+    Some(LocalMacroRule::RepeatSeparatedExpr {
         capture: capture.to_string(),
+        separator: separator.as_char(),
+        allow_empty,
+        allow_trailing_separator,
         transcriber: body.stream(),
     })
 }
@@ -1308,11 +1333,17 @@ fn expand_local_macro(
         LocalMacroRule::ZeroArgLiteral(expression) if arguments.is_empty() => {
             Some(expression.clone())
         }
-        LocalMacroRule::RepeatCommaExpr { capture, transcriber } => {
+        LocalMacroRule::RepeatSeparatedExpr {
+            capture,
+            separator,
+            allow_empty,
+            allow_trailing_separator,
+            transcriber,
+        } => {
             let mut groups = Vec::<proc_macro2::TokenStream>::new();
             let mut current = proc_macro2::TokenStream::new();
             for token in arguments.clone() {
-                if is_macro_punct(&token, ',') {
+                if is_macro_punct(&token, *separator) {
                     if current.is_empty() {
                         return None;
                     }
@@ -1325,8 +1356,10 @@ fn expand_local_macro(
             if !current.is_empty() {
                 syn::parse2::<syn::Expr>(current.clone()).ok()?;
                 groups.push(current);
+            } else if !groups.is_empty() && !allow_trailing_separator {
+                return None;
             }
-            if groups.is_empty() {
+            if groups.is_empty() && !allow_empty {
                 return None;
             }
 
