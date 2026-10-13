@@ -14,11 +14,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import asdict, dataclass
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CASES = pathlib.Path(__file__).with_name("cases.json")
+TOOLCHAIN = tomllib.loads((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"))["toolchain"]["channel"]
 
 
 @dataclass
@@ -37,6 +39,10 @@ class Result:
 
 
 def invoke(argv: list[str], cwd: pathlib.Path) -> subprocess.CompletedProcess[bytes]:
+    if argv and argv[0] in {"cargo", "rustc"} and not any(
+        argument.startswith("+") for argument in argv[1:2]
+    ):
+        argv = [argv[0], f"+{TOOLCHAIN}", *argv[1:]]
     try:
         return subprocess.run(argv, cwd=cwd, capture_output=True, check=False)
     except OSError as error:
@@ -340,6 +346,7 @@ def main() -> int:
                 "failed": [case["id"] for case in probes if not by_case[case["id"]].passed],
             })
         report = {
+            "toolchain": TOOLCHAIN,
             "rustc": version.stdout.decode("utf-8", "replace").strip(),
             "quillc": str(quill),
             "quillc_source_revision": revision.stdout.decode().strip(),

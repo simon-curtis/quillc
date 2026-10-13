@@ -5,6 +5,11 @@ This directory holds executable comparisons against the Rust compiler named by
 website's 29 manually categorized entries remain an implementation index, not
 a conformance score.
 
+The runner reads the pinned `channel` and passes it explicitly to every
+`rustc` and `cargo` command. Cases run in temporary directories, so relying on
+rustup's directory-based toolchain override would otherwise silently select
+the machine's default compiler instead.
+
 Run the corpus with:
 
 ```sh
@@ -39,30 +44,30 @@ does not build the compiler itself.
 
 ## Initial Linux baseline
 
-On 13 October 2026, the initial 11-case executable set passed 7 cases (63.6%)
-against `rustc 1.100.0-nightly` on x86-64 Linux. The saved machine-readable
-report is [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
-The four observed mismatches are two loop cases whose computed values are
-rejected by the `println!` capture type gate, a struct field initializer, and
-fixed-array indexing. This small initial set is only a reproducible starting
-point; the full compatibility target remains all stable Rust behavior, Rust
-diagnostics, Cargo workflows, and Linux and Windows targets described in the
-project specification.
+On 13 October 2026, the initial report showed 7 of 11 cases passing (63.6%).
+It predates explicit toolchain pinning: it recorded the repository rustc
+version, but ran cases outside the repository where rustup selected the system
+default. Do not treat it as a valid rustc comparison; the corrected current
+report below supersedes it. The saved historical report is
+[`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 28-case run passes 17 (60.7%) against clean Quill revision `cdbcbb6` and
-probes 28 of 29 tracked categories. The local workspace dependency and feature
+The current 28-case run passes 18 (64.3%) against clean Quill revision
+`8c79dda` and probes 28 of 29 tracked categories. The local workspace
+dependency and feature
 cfg cases match rustc. A narrow two-`u64` Rust ABI call also links from a
 Quill object into a rustc host and matches output. The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
 records the exact source revision, compiler-source cleanliness, binary hash, and
 build time. The website reports this result separately from the manually curated
-10.3% documentation index.
+10.3% documentation index. The full compatibility target remains stable Rust
+behavior, Rust diagnostics, Cargo workflows, and Linux and Windows targets as
+described in the project specification.
 
-Windows output is the only tracked category with no probe. Eleven cases fail,
+Windows output is the only tracked category with no probe. Ten cases fail,
 covering multiple binary targets, build scripts, diagnostic parity for type
-mismatch and use-after-move, Option status checks, owned strings, derive
-implementations, trait dispatch, Vec iteration, panic behavior, and rustc's
+mismatch and use-after-move, Option status checks, derive implementations,
+trait dispatch, Vec iteration, panic behavior, and rustc's
 inability to consume Quill's object as an `--extern` library. Macro syntax and
-one literal macro expansion now pass. The 60.7% figure applies only to these
+one literal macro expansion now pass. The 64.3% figure applies only to these
 28 curated cases; it is not a general Rust compatibility score and cannot be
 compared directly to the manual 10.3% index ratio.
