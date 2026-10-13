@@ -614,14 +614,15 @@ fn typeck_struct_signatures_with_prefix(
                 fields: structure
                     .fields
                     .iter()
+                    .enumerate()
                     .filter_map(|field| {
-                        field
-                            .name
-                            .as_ref()
-                            .map(|name| quill_typeck::StructFieldSignature {
-                                name: name.clone(),
-                                type_text: field.type_text.clone(),
-                            })
+                        let (index, field) = field;
+                        Some(quill_typeck::StructFieldSignature {
+                            // Tuple-struct fields have no source name. Keep
+                            // their Rust positional field number for `.0`, `.1`, etc.
+                            name: field.name.clone().unwrap_or_else(|| index.to_string()),
+                            type_text: field.type_text.clone(),
+                        })
                     })
                     .collect(),
                 is_enum: false,
@@ -3066,6 +3067,14 @@ fn rewrite_enum_references(
                     );
                 }
             }
+            BodyExprKind::ArrayRepeat { element, .. } => rewrite(
+                element,
+                module_path,
+                enums,
+                enum_paths,
+                impl_owner,
+                struct_paths,
+            ),
             BodyExprKind::Index { base, index } => {
                 rewrite(
                     base,
@@ -3508,6 +3517,16 @@ fn rewrite_calls(
                     )?;
                 }
             }
+            BodyExprKind::ArrayRepeat { element, .. } => {
+                visit(
+                    element,
+                    prefixes,
+                    paths,
+                    aliases,
+                    resolution_cache,
+                    context,
+                )?;
+            }
             BodyExprKind::Index { base, index } => {
                 visit(base, prefixes, paths, aliases, resolution_cache, context)?;
                 visit(index, prefixes, paths, aliases, resolution_cache, context)?;
@@ -3769,6 +3788,7 @@ fn function_call_targets(functions: &[quill_syntax::FunctionItem]) -> HashSet<St
                     walk!(item);
                 }
             }
+            BodyExprKind::ArrayRepeat { element, .. } => walk!(element),
             BodyExprKind::StructLiteral { fields, .. } => {
                 for (_, value) in fields {
                     walk!(value);

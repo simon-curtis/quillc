@@ -1094,6 +1094,9 @@ fn validate_struct_expr(
                 validate_struct_expr(element, structs, functions)?;
             }
         }
+        BodyExprKind::ArrayRepeat { element, .. } => {
+            validate_struct_expr(element, structs, functions)?;
+        }
         BodyExprKind::Binary { left, right, .. } => {
             validate_struct_expr(left, structs, functions)?;
             validate_struct_expr(right, structs, functions)?;
@@ -1338,6 +1341,9 @@ fn validate_call_targets(
             for element in elements {
                 validate_call_targets(element, functions)?;
             }
+        }
+        BodyExprKind::ArrayRepeat { element, .. } => {
+            validate_call_targets(element, functions)?;
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
@@ -1671,6 +1677,7 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
                     visit(element, substitutions);
                 }
             }
+            BodyExprKind::ArrayRepeat { element, .. } => visit(element, substitutions),
             BodyExprKind::StructLiteral { path, fields } => {
                 *path = substitute_generic_types(path, substitutions);
                 for (_, value) in fields {
@@ -6319,6 +6326,13 @@ fn value_from_expression(
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         }
+        BodyExprKind::ArrayRepeat { element, length: Some(length) } => {
+            let value = value_from_expression(element, environment, functions)?;
+            Ok(Value::StaticArray(vec![value; *length]))
+        }
+        BodyExprKind::ArrayRepeat { length: None, .. } => Err(
+            CodegenError::UnsupportedProgram("array repeat length must be a literal"),
+        ),
         BodyExprKind::Call {
             callee, arguments, ..
         } if matches!(

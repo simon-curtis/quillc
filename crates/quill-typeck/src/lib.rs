@@ -185,11 +185,14 @@ fn find_enum_variant<'a>(
     let (enum_path, variant_name) = path.rsplit_once("::")?;
     let requested_enum_name = enum_path.rsplit("::").next().unwrap_or(enum_path);
     let mut matches = signatures.iter().filter_map(|item| {
-        if !item.is_enum
-            || (item.path != enum_path
-                && !item.path.ends_with(&format!("::{enum_path}"))
-                && item.path.rsplit("::").next() != Some(requested_enum_name))
-        {
+        let matches_enum = if enum_path == "Self" {
+            item.path != "Self"
+        } else {
+            item.path == enum_path
+                || item.path.ends_with(&format!("::{enum_path}"))
+                || item.path.rsplit("::").next() == Some(requested_enum_name)
+        };
+        if !item.is_enum || !matches_enum {
             return None;
         }
         item.enum_variants
@@ -266,6 +269,23 @@ fn type_from_function_syntax(
     }
     if let Some(value) = text.strip_prefix("mut ") {
         return type_from_function_syntax(value, function, structs);
+    }
+    if let Some((ok_type, err_type)) = generic_pair(text, "Result")
+        .or_else(|| generic_pair(text, "std::result::Result"))
+        .or_else(|| generic_pair(text, "core::result::Result"))
+    {
+        return Ty::Result(
+            Box::new(type_from_function_syntax(ok_type, function, structs)),
+            Box::new(type_from_function_syntax(err_type, function, structs)),
+        );
+    }
+    if let Some(value_type) = generic_single(text, "Option")
+        .or_else(|| generic_single(text, "std::option::Option"))
+        .or_else(|| generic_single(text, "core::option::Option"))
+    {
+        return Ty::Option(Box::new(type_from_function_syntax(
+            value_type, function, structs,
+        )));
     }
     type_from_syntax(text, structs)
 }
@@ -358,20 +378,47 @@ fn trait_methods_for_generic<'a>(
         return Vec::new();
     }
     let traits: HashSet<_> = generic_marker_traits(name).collect();
-    signatures
-        .methods
-        .get(method)
-        .into_iter()
+    let candidates: Vec<_> = traits
+        .iter()
+        .filter_map(|trait_name| signatures.trait_methods.get(trait_name))
         .flatten()
-        .filter(|function| {
-            function.scope.iter().any(|scope| {
-                scope
-                    .strip_prefix("trait:")
-                    .is_some_and(|owner| traits.contains(owner.rsplit("::").next().unwrap_or(owner)))
-            })
-        })
+        .filter(|function| function.name.rsplit("::").next() == Some(method))
         .copied()
-        .collect()
+        .collect();
+    if std::env::var_os("QUILL_DEBUG_TRAIT_INDEX").is_some()
+        && matches!(method, "config" | "internal_encode")
+    {
+        eprintln!("TIDX {method} traits={traits:?} available={:?}", signatures.trait_methods.keys().collect::<Vec<_>>());
+    }
+    candidates
+}
+
+fn trait_methods_for_concrete<'a>(
+    signatures: &'a SignatureIndex<'a>,
+    receiver_type: &Ty,
+    method: &str,
+) -> Vec<&'a FunctionItem> {
+    let Ty::Named(receiver_name) = without_references(receiver_type) else {
+        return Vec::new();
+    };
+    let receiver_basename = receiver_name.rsplit("::").next().unwrap_or(receiver_name);
+    let traits: HashSet<_> = signatures
+        .trait_impl_methods
+        .keys()
+        .filter_map(|(trait_name, implementor)| {
+            (*implementor == receiver_basename).then_some(*trait_name)
+        })
+        .collect();
+    let mut candidates: Vec<_> = traits
+        .into_iter()
+        .filter_map(|trait_name| signatures.trait_methods.get(trait_name))
+        .flatten()
+        .filter(|function| function.name.rsplit("::").next() == Some(method))
+        .copied()
+        .collect();
+    candidates.sort_by(|left, right| left.name.cmp(&right.name));
+    candidates.dedup_by(|left, right| left.name == right.name);
+    candidates
 }
 
 fn trait_is_implemented_for_type(
@@ -513,6 +560,16 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
             .unwrap_or(pointer);
         return Ty::RawPointer(Box::new(type_from_syntax(referent, structs)), mutable);
     }
+    if matches!(text, "fmt::Result" | "std::fmt::Result" | "core::fmt::Result") {
+        return Ty::Result(
+            Box::new(Ty::Unit),
+            Box::new(Ty::Named("core::fmt::Error".to_owned())),
+        );
+    }
+    let nominal_head = text.split('<').next().unwrap_or(text).trim();
+    if nominal_head.rsplit("::").next() == Some("Formatter") {
+        return Ty::Named("core::fmt::Formatter".to_owned());
+    }
     if let Some((ok_type, err_type)) = generic_pair(text, "Result") {
         return Ty::Result(
             Box::new(type_from_syntax(ok_type, structs)),
@@ -544,6 +601,21 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
         generic_single(text, "Option").or_else(|| generic_single(text, "std::option::Option"))
     {
         return Ty::Option(Box::new(type_from_syntax(value_type, structs)));
+    }
+    if let Some(trait_bounds) = text
+        .strip_prefix("impl ")
+        .or_else(|| text.strip_prefix("dyn "))
+    {
+        let traits = trait_bounds
+            .split('+')
+            .map(str::trim)
+            .filter(|bound| !bound.is_empty() && !bound.contains("="))
+            .map(|bound| bound.rsplit("::").next().unwrap_or(bound))
+            .collect::<Vec<_>>()
+            .join("+");
+        if !traits.is_empty() {
+            return Ty::Named(format!("\0quill_generic:_opaque:traits={traits}:0:0:0"));
+        }
     }
     if let Some(target) = generic_single(text, "impl Into") {
         return Ty::Into(Box::new(type_from_syntax(target, structs)));
@@ -939,10 +1011,6 @@ fn check_selected_functions<'a>(
         let mut methods = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut trait_methods = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut trait_impl_methods = HashMap::<(&str, &str), Vec<&FunctionItem>>::new();
-        let needs_trait_index = declarations
-            .iter()
-            .chain(&external_functions)
-            .any(|function| !function.generic_trait_bounds.is_empty());
         for function in declarations {
             add_signature_suffixes(&mut exact, &mut suffix, function);
             if method_owner(function).is_some()
@@ -950,13 +1018,11 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
-            if needs_trait_index {
-                index_trait_method(
-                    &mut trait_methods,
-                    &mut trait_impl_methods,
-                    function,
-                );
-            }
+        index_trait_method(
+            &mut trait_methods,
+            &mut trait_impl_methods,
+            function,
+        );
             // Root-module items remain directly addressable by their source
             // name even when stored under a canonical crate-qualified path.
             if function.scope.is_empty()
@@ -973,13 +1039,11 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
-            if needs_trait_index {
-                index_trait_method(
-                    &mut trait_methods,
-                    &mut trait_impl_methods,
-                    function,
-                );
-            }
+        index_trait_method(
+            &mut trait_methods,
+            &mut trait_impl_methods,
+            function,
+        );
         }
         SignatureIndex {
             exact,
@@ -1049,14 +1113,14 @@ fn check_one_function(
         .find_map(|scope| scope.strip_prefix("impl:"))
     {
         let mut function_structs = struct_signatures.to_vec();
-        if let Some(structure) = find_struct_signature(&function_structs, self_type).cloned() {
+        if let Some(structure) = find_nominal_signature(&function_structs, self_type).cloned() {
             function_structs.push(StructSignature {
                 path: "Self".to_owned(),
                 generic_parameters: structure.generic_parameters,
                 derived_traits: structure.derived_traits,
                 fields: structure.fields,
-                is_enum: false,
-                enum_variants: Vec::new(),
+                is_enum: structure.is_enum,
+                enum_variants: structure.enum_variants,
             });
         }
         Cow::Owned(function_structs)
@@ -1193,13 +1257,14 @@ enum MoveLoopExit {
 
 fn move_loop_fixed_point(
     incoming: &HashSet<String>,
-    mut transfer: impl FnMut(&mut HashSet<String>) -> MoveLoopExit,
+    mut transfer: impl FnMut(&mut HashSet<String>, &mut HashSet<String>) -> MoveLoopExit,
 ) -> (HashSet<String>, HashSet<String>) {
     let mut header = incoming.clone();
     let mut break_exits = HashSet::new();
     loop {
         let mut back_edge = header.clone();
-        match transfer(&mut back_edge) {
+        let mut side_back_edges = HashSet::new();
+        match transfer(&mut back_edge, &mut side_back_edges) {
             MoveLoopExit::Break(_) => {
                 break_exits.extend(back_edge.iter().cloned());
                 back_edge.clone_from(&header);
@@ -1210,6 +1275,7 @@ fn move_loop_fixed_point(
         }
         let mut next = incoming.clone();
         next.extend(back_edge);
+        next.extend(side_back_edges);
         if next == header {
             return (header, break_exits);
         }
@@ -1411,6 +1477,7 @@ fn check_move_loop_transfer(
     moved: &mut HashSet<String>,
     diagnostics: &mut Vec<TypeDiagnostic>,
     branch_breaks: &mut Vec<HashSet<String>>,
+    outer_back_edges: &mut HashSet<String>,
 ) -> MoveLoopExit {
     let BodyExprKind::Block {
         statements: block_statements,
@@ -1505,6 +1572,7 @@ fn check_move_loop_transfer(
                 moved,
                 diagnostics,
                 branch_breaks,
+                outer_back_edges,
             );
             if matches!(
                 &outcome,
@@ -1611,6 +1679,7 @@ fn check_move_loop_transfer(
                 &mut branch_moved,
                 diagnostics,
                 branch_breaks,
+                outer_back_edges,
             ) {
                 MoveLoopExit::BackEdge => continuing.push(branch_moved),
                 MoveLoopExit::Break(target)
@@ -1631,6 +1700,9 @@ fn check_move_loop_transfer(
                     propagated_exits.push((MoveLoopExit::Break(target), branch_moved));
                 }
                 MoveLoopExit::Continue(target) => {
+                    if parent_label.is_some() && target.as_deref() == parent_label {
+                        outer_back_edges.extend(branch_moved.iter().cloned());
+                    }
                     propagated_exits.push((MoveLoopExit::Continue(target), branch_moved));
                 }
                 MoveLoopExit::Return => {}
@@ -1691,6 +1763,7 @@ fn check_move_loop_transfer(
             moved,
             diagnostics,
             branch_breaks,
+            outer_back_edges,
         );
     }
     let branch_match = statements.iter().enumerate().find_map(|(index, statement)| {
@@ -1775,6 +1848,7 @@ fn check_move_loop_transfer(
                 &mut arm_moved,
                 diagnostics,
                 branch_breaks,
+                outer_back_edges,
             );
             for name in &bindings {
                 arm_moved.remove(name);
@@ -1795,7 +1869,19 @@ fn check_move_loop_transfer(
                 {
                     continuing.push(arm_moved)
                 }
-                exit @ (MoveLoopExit::Break(_) | MoveLoopExit::Continue(_)) => {
+                MoveLoopExit::Break(target) => {
+                    if parent_label.is_some() && target.as_deref() == parent_label {
+                        branch_breaks.push(arm_moved.clone());
+                    }
+                    propagated_exits.push((MoveLoopExit::Break(target), arm_moved));
+                }
+                exit @ MoveLoopExit::Continue(_) => {
+                    if let MoveLoopExit::Continue(target) = &exit
+                        && parent_label.is_some()
+                        && target.as_deref() == parent_label
+                    {
+                        outer_back_edges.extend(arm_moved.iter().cloned());
+                    }
                     propagated_exits.push((exit, arm_moved));
                 }
                 MoveLoopExit::Return => {}
@@ -1822,7 +1908,10 @@ fn check_move_loop_transfer(
             }
             return MoveLoopExit::Break(current_label.map(str::to_owned));
         }
-        continuing.extend(propagated_exits.into_iter().map(|(_, state)| state));
+        // Outer breaks are exit states, not back edges of the current loop.
+        continuing.extend(propagated_exits.into_iter().filter_map(|(exit, state)| {
+            matches!(exit, MoveLoopExit::Continue(_)).then_some(state)
+        }));
         moved.clear();
         for state in continuing {
             moved.extend(state);
@@ -1847,6 +1936,7 @@ fn check_move_loop_transfer(
             moved,
             diagnostics,
             branch_breaks,
+            outer_back_edges,
         );
     }
     let terminal = statements.iter().position(|statement| match statement {
@@ -2064,9 +2154,21 @@ fn check_move_expression(
                         path,
                         tokens,
                         format_string,
+                        arguments,
                         span,
                         ..
                     } if path == "println" => {
+                        for argument in arguments {
+                            check_move_expression(
+                                argument,
+                                false,
+                                signatures,
+                                struct_signatures,
+                                locals,
+                                moved,
+                                diagnostics,
+                            );
+                        }
                         check_format_capture_moves(
                             path,
                             tokens,
@@ -2084,7 +2186,7 @@ fn check_move_expression(
                     } => {
                         let incoming = moved.clone();
                         let mut branch_breaks = Vec::new();
-                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved, outer_back_edges| {
                             let mut loop_locals = locals.clone();
                             check_move_expression(
                                 condition,
@@ -2105,6 +2207,7 @@ fn check_move_expression(
                                 loop_moved,
                                 diagnostics,
                                 &mut branch_breaks,
+                                outer_back_edges,
                             )
                         });
                         *moved = header;
@@ -2116,7 +2219,7 @@ fn check_move_expression(
                     BodyStatement::Loop { label, body, .. } => {
                         let incoming = moved.clone();
                         let mut branch_breaks = Vec::new();
-                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved, outer_back_edges| {
                             let mut loop_locals = locals.clone();
                             check_move_loop_transfer(
                                 body,
@@ -2128,6 +2231,7 @@ fn check_move_expression(
                                 loop_moved,
                                 diagnostics,
                                 &mut branch_breaks,
+                                outer_back_edges,
                             )
                         });
                         let mut all_breaks = break_exits;
@@ -2190,7 +2294,7 @@ fn check_move_expression(
                         );
                         let incoming = moved.clone();
                         let mut branch_breaks = Vec::new();
-                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved, outer_back_edges| {
                             let mut loop_locals = locals.clone();
                             loop_locals.insert(name.clone(), iteration_type.clone());
                             check_move_loop_transfer(
@@ -2203,6 +2307,7 @@ fn check_move_expression(
                                 loop_moved,
                                 diagnostics,
                                 &mut branch_breaks,
+                                outer_back_edges,
                             )
                         });
                         *moved = header;
@@ -2228,7 +2333,7 @@ fn check_move_expression(
                         );
                         let incoming = moved.clone();
                         let mut branch_breaks = Vec::new();
-                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved| {
+                        let (header, break_exits) = move_loop_fixed_point(&incoming, |loop_moved, outer_back_edges| {
                             let mut loop_locals = locals.clone();
                             check_move_loop_transfer(
                                 body,
@@ -2240,6 +2345,7 @@ fn check_move_expression(
                                 loop_moved,
                                 diagnostics,
                                 &mut branch_breaks,
+                                outer_back_edges,
                             )
                         });
                         *moved = header;
@@ -2586,15 +2692,39 @@ fn check_move_expression(
         BodyExprKind::Index { base, index } => {
             // Indexing borrows its base place; the index expression itself is
             // evaluated by value.
-            check_move_expression(
-                base,
-                false,
-                signatures,
-                struct_signatures,
-                locals,
-                moved,
-                diagnostics,
-            );
+            if let Some(place) = move_place(expression) {
+                let root = move_place_root(&place);
+                if locals.contains_key(root) {
+                    if is_uninitialized(&place, moved) {
+                        push_move_diagnostic(
+                            diagnostics,
+                            expression.span.clone(),
+                            format!(
+                                "error[E0381]: use of possibly-uninitialized variable: `{place}`"
+                            ),
+                        );
+                    } else if move_state_contains(&place, moved) {
+                        push_move_diagnostic(
+                            diagnostics,
+                            expression.span.clone(),
+                            format!(
+                                "error[E0382]: {} of moved value: `{place}`",
+                                if consume { "use" } else { "borrow" }
+                            ),
+                        );
+                    }
+                }
+            } else {
+                check_move_expression(
+                    base,
+                    false,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
             check_move_expression(
                 index,
                 true,
@@ -2679,17 +2809,99 @@ fn check_move_expression(
 fn move_state_contains(place: &str, moved: &HashSet<String>) -> bool {
     moved.iter().any(|moved_place| {
         marker_place(moved_place).is_none()
-            && (place == moved_place
-            || place
-                .strip_prefix(moved_place)
-                .is_some_and(|suffix| {
-                    (suffix.starts_with('.') || suffix.starts_with('['))
-                        && !is_initialized(place, moved)
-                })
-            || moved_place
-                .strip_prefix(place)
-                .is_some_and(|suffix| suffix.starts_with('.') || suffix.starts_with('[')))
+            && move_places_overlap(place, moved_place)
+            && !(move_place_is_strict_prefix(moved_place, place)
+                && is_initialized(place, moved))
     })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum MoveProjection {
+    Field(String),
+    Index(Option<usize>),
+}
+
+fn move_places_overlap(left: &str, right: &str) -> bool {
+    let (Some((left_root, left_projection)), Some((right_root, right_projection))) =
+        (parse_move_place(left), parse_move_place(right))
+    else {
+        return left == right;
+    };
+    left_root == right_root
+        && left_projection
+            .iter()
+            .zip(&right_projection)
+            .all(|(left, right)| match (left, right) {
+                (MoveProjection::Index(None), MoveProjection::Index(_))
+                | (MoveProjection::Index(_), MoveProjection::Index(None)) => true,
+                _ => left == right,
+            })
+}
+
+fn move_place_is_strict_prefix(prefix: &str, place: &str) -> bool {
+    let (Some((prefix_root, prefix_projection)), Some((place_root, place_projection))) =
+        (parse_move_place(prefix), parse_move_place(place))
+    else {
+        return false;
+    };
+    prefix_root == place_root
+        && prefix_projection.len() < place_projection.len()
+        && prefix_projection
+            .iter()
+            .zip(&place_projection)
+            .all(|(prefix, place)| match (prefix, place) {
+                (MoveProjection::Index(None), MoveProjection::Index(_))
+                | (MoveProjection::Index(_), MoveProjection::Index(None)) => true,
+                _ => prefix == place,
+            })
+}
+
+fn parse_move_place(place: &str) -> Option<(&str, Vec<MoveProjection>)> {
+    let root_end = place
+        .char_indices()
+        .take_while(|(_, character)| character.is_ascii_alphanumeric() || *character == '_')
+        .map(|(index, character)| index + character.len_utf8())
+        .last()?;
+    let root = &place[..root_end];
+    let mut rest = &place[root_end..];
+    let mut projections = Vec::new();
+    while !rest.is_empty() {
+        if let Some(after_dot) = rest.strip_prefix('.') {
+            let field_end = after_dot
+                .char_indices()
+                .take_while(|(_, character)| {
+                    character.is_ascii_alphanumeric() || *character == '_'
+                })
+                .map(|(index, character)| index + character.len_utf8())
+                .last()?;
+            projections.push(MoveProjection::Field(after_dot[..field_end].to_owned()));
+            rest = &after_dot[field_end..];
+        } else if let Some(after_open) = rest.strip_prefix('[') {
+            let close = after_open.find(']')?;
+            let index = parse_move_index(&after_open[..close]);
+            projections.push(MoveProjection::Index(index));
+            rest = &after_open[close + 1..];
+        } else {
+            return None;
+        }
+    }
+    Some((root, projections))
+}
+
+fn parse_move_index(text: &str) -> Option<usize> {
+    let text = text.replace('_', "");
+    if text == "*" {
+        return None;
+    }
+    if let Some(hex) = text.strip_prefix("0x") {
+        usize::from_str_radix(hex, 16).ok()
+    } else if let Some(octal) = text.strip_prefix("0o") {
+        usize::from_str_radix(octal, 8).ok()
+    } else if let Some(binary) = text.strip_prefix("0b") {
+        usize::from_str_radix(binary, 2).ok()
+    } else {
+        text.parse().ok()
+    }
 }
 
 fn aggregate_field_names(ty: &Ty, structs: &[StructSignature]) -> Option<Vec<String>> {
@@ -2714,18 +2926,85 @@ fn aggregate_field_type(ty: &Ty, field: &str, structs: &[StructSignature]) -> Op
     }
 }
 
+fn aggregate_index_type(ty: &Ty, index: usize) -> Option<Ty> {
+    match ty {
+        Ty::Array(element, length) if index < *length => Some((**element).clone()),
+        Ty::Tuple(fields) => fields.get(index).cloned(),
+        _ => None,
+    }
+}
+
+fn aggregate_fully_initialized(
+    place: &str,
+    ty: &Ty,
+    structs: &[StructSignature],
+    state: &HashSet<String>,
+) -> bool {
+    if is_initialized(place, state) {
+        return true;
+    }
+    if let Some(fields) = aggregate_field_names(ty, structs) {
+        return !fields.is_empty()
+            && fields
+                .iter()
+                .all(|field| is_initialized(&format!("{place}.{field}"), state));
+    }
+    let Ty::Array(_, length) = ty else {
+        return false;
+    };
+    initialized_array_indices(place, state)
+        .iter()
+        .filter(|index| **index < *length)
+        .count()
+        == *length
+}
+
+fn initialized_array_indices(place: &str, state: &HashSet<String>) -> HashSet<usize> {
+    let Some((root, parent_projection)) = parse_move_place(place) else {
+        return HashSet::new();
+    };
+    state
+        .iter()
+        .filter_map(|marker| {
+            let (marked_place, initialized) = marker_place(marker)?;
+            initialized.then_some(marked_place)
+        })
+        .filter_map(|marked_place| parse_move_place(marked_place))
+        .filter_map(|(marked_root, projection)| {
+            if marked_root != root
+                || projection.len() != parent_projection.len() + 1
+                || !parent_projection.iter().zip(&projection).all(|(parent, child)| {
+                    match (parent, child) {
+                        (MoveProjection::Index(None), MoveProjection::Index(_))
+                        | (MoveProjection::Index(_), MoveProjection::Index(None)) => true,
+                        _ => parent == child,
+                    }
+                })
+            {
+                return None;
+            }
+            match projection.last()? {
+                MoveProjection::Index(Some(index)) => Some(*index),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
 fn mark_assigned_place(
     place: &str,
     locals: &HashMap<String, Ty>,
     structs: &[StructSignature],
     state: &mut HashSet<String>,
 ) {
-    let root = move_place_root(place);
-    let Some(projection) = place.strip_prefix(root).and_then(|suffix| suffix.strip_prefix('.'))
-    else {
+    let Some((root, projections)) = parse_move_place(place) else {
         return;
     };
-    if projection.contains('[') {
+    if projections.is_empty()
+        || projections
+            .iter()
+            .any(|projection| matches!(projection, MoveProjection::Index(None)))
+    {
         return;
     }
     state.insert(initialized_marker(place));
@@ -2734,24 +3013,26 @@ fn mark_assigned_place(
     };
     let mut ancestors = vec![(root.to_owned(), ty.clone())];
     let mut projected = root.to_owned();
-    for field in projection.split('.') {
-        let Some(field_type) = aggregate_field_type(&ty, field, structs) else {
+    for projection in projections {
+        let (field_type, projection_text) = match projection {
+            MoveProjection::Field(field) => (
+                aggregate_field_type(&ty, &field, structs),
+                format!(".{field}"),
+            ),
+            MoveProjection::Index(Some(index)) => {
+                (aggregate_index_type(&ty, index), format!("[{index}]"))
+            }
+            MoveProjection::Index(None) => unreachable!("dynamic indices were filtered above"),
+        };
+        let Some(field_type) = field_type else {
             return;
         };
-        projected.push('.');
-        projected.push_str(field);
+        projected.push_str(&projection_text);
         ty = field_type;
         ancestors.push((projected.clone(), ty.clone()));
     }
     for (parent, parent_type) in ancestors.into_iter().rev().skip(1) {
-        let Some(fields) = aggregate_field_names(&parent_type, structs) else {
-            continue;
-        };
-        if fields.is_empty()
-            || !fields
-                .iter()
-                .all(|field| is_initialized(&format!("{parent}.{field}"), state))
-        {
+        if !aggregate_fully_initialized(&parent, &parent_type, structs, state) {
             continue;
         }
         state.remove(&uninitialized_marker(&parent));
@@ -2828,7 +3109,15 @@ fn move_place(expression: &BodyExpr) -> Option<String> {
         BodyExprKind::FieldAccess { base, field } => {
             Some(format!("{}.{field}", move_place(base)?))
         }
-        BodyExprKind::Index { base, .. } => Some(format!("{}[*]", move_place(base)?)),
+        BodyExprKind::Index { base, index } => {
+            let index = match &index.kind {
+                BodyExprKind::Literal(LiteralKind::Integer { text, .. }) => {
+                    parse_move_index(text).map_or_else(|| "*".to_owned(), |index| index.to_string())
+                }
+                _ => "*".to_owned(),
+            };
+            Some(format!("{}[{index}]", move_place(base)?))
+        }
         _ => None,
     }
 }
@@ -2853,22 +3142,28 @@ fn check_format_capture_moves(
             break;
         };
         let close = open + 1 + close_relative;
-        let name = &format[open + 1..close];
+        let field = &format[open + 1..close];
+        let name = field.split_once(':').map_or(field, |(name, _)| name);
         if !name.is_empty()
             && name
                 .chars()
                 .all(|character| character == '_' || character.is_alphanumeric())
-            && moved.contains(name)
-            && locals
-                .get(name)
-                .is_some_and(|ty| !is_copy_type(ty, struct_signatures))
+            && (is_uninitialized(name, moved)
+                || (move_state_contains(name, moved)
+                    && locals
+                        .get(name)
+                        .is_some_and(|ty| !is_copy_type(ty, struct_signatures))))
         {
-            let placeholder = format!("{{{name}}}");
+            let placeholder = format!("{{{name}");
             if let Some(token_offset) = tokens.find(&placeholder) {
                 let capture_start = macro_span.start + path.len() + 2 + token_offset + 1;
                 diagnostics.push(TypeDiagnostic {
                     span: capture_start..capture_start + name.len(),
-                    message: format!("error[E0382]: borrow of moved value: `{name}`"),
+                    message: if is_uninitialized(name, moved) {
+                        format!("error[E0381]: use of possibly-uninitialized variable: `{name}`")
+                    } else {
+                        format!("error[E0382]: borrow of moved value: `{name}`")
+                    },
                 });
             }
         }
@@ -4292,13 +4587,7 @@ fn infer_with_structs(
                 }
             }
             function.return_type.as_deref().map_or(Ty::Unit, |text| {
-                if text.trim() == "Self" {
-                    method_owner(function)
-                        .map(|owner| type_from_syntax(owner, struct_signatures))
-                        .unwrap_or(Ty::Unknown)
-                } else {
-                    type_from_syntax(text, struct_signatures)
-                }
+                type_from_function_syntax(text, function, struct_signatures)
             })
         }
         BodyExprKind::MethodCall {
@@ -4721,11 +5010,106 @@ fn infer_with_structs(
                 );
                 return accumulator_type;
             }
+            if matches!(receiver_base, Ty::Named(name) if name.split('<').next().unwrap_or(name).rsplit("::").next() == Some("Formatter"))
+                && matches!(method.as_str(), "debug_struct" | "debug_tuple" | "debug_list" | "debug_map" | "debug_set")
+            {
+                let expected_arguments = usize::from(matches!(method.as_str(), "debug_struct" | "debug_tuple"));
+                if arguments.len() != expected_arguments {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!("method `Formatter::{method}` expects {expected_arguments} arguments but received {}", arguments.len()),
+                    });
+                    return Ty::Unknown;
+                }
+                if let Some(argument) = arguments.first() {
+                    let expected_name = Ty::Reference(Box::new(Ty::StringSlice), false);
+                    let actual = infer_with_structs(
+                        argument,
+                        locals,
+                        signatures,
+                        struct_signatures,
+                        &expected_name,
+                        diagnostics,
+                    );
+                    require_type(
+                        diagnostics,
+                        argument.span.clone(),
+                        &expected_name,
+                        &actual,
+                        "Formatter builder name",
+                    );
+                }
+                return Ty::Named(format!("core::fmt::{}", match method.as_str() {
+                    "debug_struct" => "DebugStruct",
+                    "debug_tuple" => "DebugTuple",
+                    "debug_list" => "DebugList",
+                    "debug_map" => "DebugMap",
+                    _ => "DebugSet",
+                }));
+            }
+            if let Ty::Named(builder) = receiver_base
+                && let Some(builder_kind) = builder.rsplit("::").next()
+                && matches!(builder_kind, "DebugStruct" | "DebugTuple" | "DebugList" | "DebugMap" | "DebugSet")
+                && matches!(method.as_str(), "field" | "entry" | "key" | "value" | "finish" | "finish_non_exhaustive")
+            {
+                let expected_arguments = match (builder_kind, method.as_str()) {
+                    ("DebugStruct", "field") | ("DebugMap", "entry") => 2,
+                    ("DebugTuple", "field") | ("DebugList" | "DebugSet", "entry")
+                    | ("DebugMap", "key" | "value") => 1,
+                    (_, "finish" | "finish_non_exhaustive") => 0,
+                    _ => {
+                        diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!("method `{builder_kind}::{method}` is not available"),
+                        });
+                        return Ty::Unknown;
+                    }
+                };
+                if arguments.len() != expected_arguments {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!("method `{builder_kind}::{method}` expects {expected_arguments} arguments but received {}", arguments.len()),
+                    });
+                    return Ty::Unknown;
+                }
+                if method == "finish" || method == "finish_non_exhaustive" {
+                    return Ty::Result(
+                        Box::new(Ty::Unit),
+                        Box::new(Ty::Named("core::fmt::Error".to_owned())),
+                    );
+                }
+                if matches!(method.as_str(), "field" | "key")
+                    && let Some(argument) = arguments.first()
+                {
+                    let expected_name = Ty::Reference(Box::new(Ty::StringSlice), false);
+                    let actual = infer_with_structs(
+                        argument,
+                        locals,
+                        signatures,
+                        struct_signatures,
+                        &expected_name,
+                        diagnostics,
+                    );
+                    require_type(
+                        diagnostics,
+                        argument.span.clone(),
+                        &expected_name,
+                        &actual,
+                        "format builder field name",
+                    );
+                }
+                return Ty::Reference(Box::new(receiver_base.clone()), true);
+            }
             let generic_candidates = trait_methods_for_generic(signatures, &receiver_type, method);
-            let candidates = if generic_candidates.is_empty() {
-                method_signatures(&signatures.methods, &receiver_type, method)
-            } else {
+            let candidates = if !generic_candidates.is_empty() {
                 generic_candidates
+            } else {
+                let inherent = method_signatures(&signatures.methods, &receiver_type, method);
+                if inherent.is_empty() {
+                    trait_methods_for_concrete(signatures, &receiver_type, method)
+                } else {
+                    inherent
+                }
             };
             if candidates.len() > 1 {
                 diagnostics.push(TypeDiagnostic {
@@ -4773,13 +5157,7 @@ fn infer_with_structs(
                     }
                 }
                 return function.return_type.as_deref().map_or(Ty::Unit, |text| {
-                    if text.trim() == "Self" {
-                        method_owner(function)
-                            .map(|owner| type_from_syntax(owner, struct_signatures))
-                            .unwrap_or(Ty::Unknown)
-                    } else {
-                        type_from_syntax(text, struct_signatures)
-                    }
+                    type_from_function_syntax(text, function, struct_signatures)
                 });
             }
             if method == "chars"
@@ -7114,6 +7492,86 @@ mod tests {
     }
 
     #[test]
+    fn keeps_mixed_outer_break_and_inner_break_paths_separate() {
+        let source = SourceFile::from_text(
+            "mixed-labeled-loop-exits.rs",
+            "fn valid(condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { if condition { drop(value); break 'outer; } break; } println!(\"{value}\"); break 'outer; } } fn invalid(condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { if condition { drop(value); break 'outer; } break; } println!(\"{value}\"); break 'outer; } println!(\"{value}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0382]"));
+        let final_use = source.text().rfind("{value}").unwrap() + 1;
+        assert_eq!(
+            diagnostics[0].span,
+            final_use..final_use + "value".len()
+        );
+    }
+
+    #[test]
+    fn preserves_outer_break_moves_from_match_arms() {
+        let source = SourceFile::from_text(
+            "match-outer-break-move.rs",
+            "fn invalid(condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { match condition { true => { drop(value); break 'outer; }, false => { break; } } } println!(\"{value}\"); break 'outer; } let later = value; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                && diagnostic.message.contains("moved value: `value`")
+        }), "{diagnostics:?}");
+        let invalid_use = source.text().rfind("value").unwrap();
+        assert_eq!(
+            diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.message.contains("error[E0382]"))
+                .map(|diagnostic| diagnostic.span.clone()),
+            Some(invalid_use..invalid_use + "value".len()),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn propagates_outer_continue_moves_from_match_arms() {
+        let source = SourceFile::from_text(
+            "match-outer-continue-move.rs",
+            "fn invalid(mut condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { match condition { true => { drop(value); condition = false; continue 'outer; }, false => { break; } } } println!(\"{value}\"); break 'outer; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                && diagnostic.message.contains("moved value: `value`")
+        }), "{diagnostics:?}");
+        let invalid_use = source.text().find("{value}").unwrap() + 1;
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.span == (invalid_use..invalid_use + "value".len())));
+    }
+
+    #[test]
+    fn propagates_outer_continue_moves_from_if_branches() {
+        let source = SourceFile::from_text(
+            "if-outer-continue-move.rs",
+            "fn invalid(mut condition: bool) { let value = String::from(\"owned\"); 'outer: loop { loop { if condition { drop(value); condition = false; continue 'outer; } else { break; } } println!(\"{value}\"); break 'outer; } }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                && diagnostic.message.contains("moved value: `value`")
+        }), "{diagnostics:?}");
+        let invalid_use = source.text().find("{value}").unwrap() + 1;
+        assert!(diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.span == (invalid_use..invalid_use + "value".len())));
+    }
+
+    #[test]
     fn excludes_unreachable_moves_after_direct_loop_breaks() {
         let source = SourceFile::from_text(
             "move-loop-break.rs",
@@ -7381,6 +7839,17 @@ mod tests {
     }
 
     #[test]
+    fn resolves_methods_on_impl_trait_and_dyn_trait_parameters() {
+        let source = SourceFile::from_text(
+            "trait-objects.rs",
+            "trait Value { fn value(&self) -> u64; } fn read(value: &impl Value) -> u64 { value.value() } fn read_dyn(value: &dyn Value) -> u64 { value.value() }",
+        );
+        let parsed = parse(&source);
+        let diagnostics = check_functions_strict(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
     fn rejects_a_generic_trait_bound_without_a_matching_impl() {
         let source = SourceFile::from_text(
             "generic-trait-missing-impl.rs",
@@ -7639,6 +8108,18 @@ mod tests {
     }
 
     #[test]
+    fn excludes_returning_if_branches_from_post_branch_loan_state() {
+        let source = SourceFile::from_text(
+            "returning-branch-loan.rs",
+            "fn valid(condition: bool) { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; if condition { reference = &mut value; return; } value = 1; *reference = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[test]
     fn carries_loop_generated_loans_to_the_loop_exit() {
         let source = SourceFile::from_text(
             "loop-loan-exit.rs",
@@ -7830,6 +8311,91 @@ mod tests {
         assert!(diagnostics.iter().any(|diagnostic| {
             diagnostic.message.contains("cannot assign to `value` because it is borrowed")
                 && diagnostic.span.start > source.text().find("fn invalid_live_aggregate_field").unwrap()
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn tracks_initialized_fields_of_uninitialized_aggregates() {
+        let source = SourceFile::from_text(
+            "aggregate-initialization.rs",
+            "struct Pair { left: i32, right: i32 } fn valid() { let mut pair: Pair; pair.left = 1; pair.right = 2; let value = pair.left; } fn invalid() { let mut pair: Pair; pair.left = 1; let value = pair.right; } fn invalid_format() { let mut pair: Pair; pair.left = 1; println!(\"{}\", pair.right); } fn invalid_capture() { let mut pair: Pair; pair.left = 1; println!(\"{pair:?}\"); }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[pair_struct_signature()],
+        );
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.message.contains("error[E0381]"))
+                .count(),
+            3,
+            "{diagnostics:?}"
+        );
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0381]")
+                && diagnostic.message.contains("pair.right")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0381]")
+                && diagnostic.span.start < source.text().find("fn invalid").unwrap()
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn tracks_initialized_elements_of_uninitialized_arrays() {
+        let source = SourceFile::from_text(
+            "array-initialization.rs",
+            "fn valid() { let mut values: [i32; 2]; values[0] = 1; values[1] = 2; let first = values[0]; } fn invalid() { let mut values: [i32; 2]; values[0] = 1; let second = values[1]; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0381]")
+            && diagnostics[0].message.contains("values[1]"));
+        assert!(diagnostics[0].span.start > source.text().find("fn invalid").unwrap());
+    }
+
+    #[test]
+    fn reinitializes_moved_fields_without_restoring_siblings() {
+        let source = SourceFile::from_text(
+            "partial-reinitialization.rs",
+            "struct Pair { left: i32, right: i32 } fn valid() { let mut original = Pair { left: 1, right: 2 }; let moved = original; original.left = 3; original.right = 4; let complete = original; } fn invalid() { let mut original = Pair { left: 1, right: 2 }; let moved = original; original.left = 3; let missing = original.right; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions_with_structs(
+            &parsed.functions,
+            &[pair_struct_signature()],
+        );
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert!(diagnostics[0].message.contains("error[E0382]")
+            && diagnostics[0].message.contains("original.right"));
+        assert!(diagnostics[0].span.start > source.text().find("fn invalid").unwrap());
+    }
+
+    #[test]
+    fn transfers_mutable_reference_loans_through_tuple_destructuring() {
+        let source = SourceFile::from_text(
+            "tuple-reference-move.rs",
+            "fn valid() { let mut first = 0; let mut second = 0; let pair = (&mut first, &mut second); let (left, right) = pair; *left = 1; *right = 2; } fn invalid() { let mut first = 0; let mut second = 0; let pair = (&mut first, &mut second); let (left, right) = pair; *left = 1; first = 2; *left = 3; } fn moved(value: &mut i32, other: &mut i32) { let pair = (value, other); let (left, right) = pair; let third = pair.0; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0382]")
+                && diagnostic.message.contains("moved value: `pair.0`")
+        }), "{diagnostics:?}");
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0506]")
+                && diagnostic.message.contains("cannot assign to `first` because it is borrowed")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn invalid").unwrap()
         }), "{diagnostics:?}");
     }
 

@@ -11,9 +11,9 @@ use quill_typeck::{ExternalFunctionSignature, StructSignature, TypeDiagnostic};
 use serde::{Deserialize, Serialize};
 
 // Increment this when parse-cache contents or parser interpretation changes.
-const CACHE_SCHEMA: u32 = 28;
+const CACHE_SCHEMA: u32 = 29;
 // Increment when checker semantics or the cached diagnostic format changes.
-const TYPE_CHECK_CACHE_SCHEMA: u32 = 47;
+const TYPE_CHECK_CACHE_SCHEMA: u32 = 48;
 const MAX_CACHE_BYTES: u64 = 128 * 1024 * 1024;
 static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
