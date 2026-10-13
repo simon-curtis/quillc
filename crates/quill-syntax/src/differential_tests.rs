@@ -2,6 +2,7 @@
 //! the Syn collector produced for the same source, cfg and edition.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use quill_source::SourceFile;
 
@@ -280,6 +281,52 @@ fn matches_syn_edition_rules() {
         let actual = parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), edition);
         assert_eq!(expected.had_error, actual.had_error, "{edition}: {text}: {:?}", actual.diagnostics);
         assert_eq!(compare(&source, &quill_cfg::CfgSet::default(), edition), None, "{edition}: {text}");
+    }
+}
+
+#[test]
+fn matches_rustc_parser_acceptance_for_item_macro_paths() {
+    let cases = [
+        ("2021", "safe! { fn inside_macro() {} } fn after() {}", true),
+        ("2021", "safe ! { fn inside_macro() {} } fn after() {}", true),
+        ("2021", "safe!(); fn after() {}", true),
+        ("2024", "safe! { fn inside_macro() {} } fn after() {}", true),
+        ("2021", "fn main() { safe! {} }", true),
+        ("2021", "fn broken( {", false),
+    ];
+    for (edition, text, expected_acceptance) in cases {
+        let source = SourceFile::from_text("rustc-parser.rs", text);
+        let actual =
+            parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), edition);
+        let mut rustc = Command::new("rustc")
+            .args(["--edition", edition, "-Z", "unpretty=ast-tree", "-"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("pinned rustc is available for syntax compatibility tests");
+        let mut stdin = rustc.stdin.take().expect("stdin is piped");
+        use std::io::Write;
+        stdin.write_all(text.as_bytes()).expect("write Rust fixture");
+        drop(stdin);
+        let rustc_accepts = rustc
+            .wait_with_output()
+            .expect("wait for rustc")
+            .status
+            .success();
+        assert_eq!(rustc_accepts, expected_acceptance, "rustc fixture: {text}");
+        assert_eq!(
+            !actual.had_error,
+            rustc_accepts,
+            "edition {edition}, source {text:?}, diagnostics {:?}",
+            actual.diagnostics
+        );
+        if expected_acceptance && text.contains("fn after()") {
+            assert!(
+                actual.functions.iter().any(|function| function.name == "after"),
+                "following item disappeared after macro parse: {text}"
+            );
+        }
     }
 }
 

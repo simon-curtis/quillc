@@ -43,7 +43,23 @@ pub(crate) fn collect(
 ) -> Result<Collected, Diagnostic> {
     let text = source.text();
     let ra = ra_edition(edition);
-    let parse = ra_ap_syntax::SourceFile::parse(&parser_text(text), ra);
+    let parser_text = parser_text(text);
+    let mut parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
+    if let Some(error) = parse
+        .errors()
+        .iter()
+        .find(|error| !inside_token_tree(parse.tree().syntax(), error.range()))
+        && let Some(identifier) =
+            item_keyword_macro_identifier(&parser_text, error.range(), &error.to_string())
+    {
+        // RA currently interprets `safe!` as an item modifier
+        // before it checks for an item macro. Changing the final ASCII letter
+        // preserves token width and lets its ordinary macro-call grammar build
+        // the right node; the compiler model does not resolve item macros.
+        let mut repaired = parser_text.into_owned();
+        repaired.replace_range(identifier.end - 1..identifier.end, "E");
+        parse = ra_ap_syntax::SourceFile::parse(&repaired, ra);
+    }
     let file = parse.tree();
     if let Some(error) = parse
         .errors()
@@ -93,6 +109,41 @@ pub(crate) fn collect(
         imports: collector.imports,
         unsupported_item_count: collector.unsupported_item_count + file_attributes,
     })
+}
+
+fn item_keyword_macro_identifier(
+    text: &str,
+    error_range: ra_ap_syntax::TextRange,
+    message: &str,
+) -> Option<Range<usize>> {
+    if message != "expected fn, trait or impl" {
+        return None;
+    }
+    let error_start = usize::from(error_range.start());
+    let bang = error_start
+        + text[error_start..]
+            .len()
+            .saturating_sub(text[error_start..].trim_start().len());
+    if text.as_bytes().get(bang) != Some(&b'!') {
+        return None;
+    }
+    let path_end = text[..bang].trim_end().len();
+    let start = text[..path_end]
+        .char_indices()
+        .rev()
+        .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || *ch == '_')
+        .last()
+        .map(|(index, _)| index)?;
+    let identifier = &text[start..path_end];
+    if identifier != "safe"
+        || (start > 0
+            && (text.as_bytes()[start - 1].is_ascii_alphanumeric()
+                || matches!(text.as_bytes()[start - 1], b'_' | b'#')))
+    {
+        return None;
+    }
+    let delimiter = text[bang + 1..].trim_start().as_bytes().first().copied()?;
+    matches!(delimiter, b'{' | b'(' | b'[').then_some(start..path_end)
 }
 
 /// Macro bodies are token streams, not Rust expressions. Ignore grammar
