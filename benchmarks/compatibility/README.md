@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [nested-borrow run](results/2026-10-13-nested-borrow-clean.json) passes
+116/116 curated cases at clean revision `4d4140e`. It catches E0505 when a
+borrowed function parameter is moved into a call inside a nested block and
+accepts the move when the borrow's last use precedes that block. Quill matches
+rustc's checked diagnostic code, message, and primary location. This 100%
+corpus result does not establish overall Rust compatibility.
+
 The [parameter-borrow run](results/2026-10-13-parameter-borrow-clean.json)
 passes 114/114 curated cases at clean revision `71059d2`. Borrow checking now
 uses function parameter types, catching E0505 when a borrowed non-`Copy`
