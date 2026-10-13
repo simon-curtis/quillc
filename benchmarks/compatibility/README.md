@@ -58,6 +58,14 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [live-access run](results/2026-10-13-live-access-clean.json) passes
+103/103 curated cases at clean revision `7a0b586`. It catches E0506 for
+assigning through a local while a shared borrow remains live, E0503 for
+reading through a local while a mutable borrow remains live, and accepts the
+assignment after the reference's last use. Quill matches rustc's checked
+diagnostic codes, messages, and primary locations. This 100% corpus result does
+not establish overall Rust compatibility.
+
 The [reborrow run](results/2026-10-13-reborrow-clean.json) passes 100/100
 curated cases at clean revision `741cbf4`. It detects a live shared reborrow
 that conflicts with a new borrow of its origin, matching rustc's E0499 code,
