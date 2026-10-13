@@ -45,6 +45,22 @@ pub(crate) fn collect(
     let ra = ra_edition(edition);
     let mut parser_text = parser_text(text);
     let mut parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
+    while let Some(keyword) = parse.errors().iter().find_map(|error| {
+        let candidate = const_closure_keyword(&parser_text, error.range(), &error.to_string());
+        (!inside_token_tree(parse.tree().syntax(), error.range()))
+            .then_some(candidate)
+            .flatten()
+    }) {
+        // At statement start, RA's statement parser treats `const` as an item
+        // keyword before the expression parser can recognize a const closure.
+        // `async` has the same width and selects the same closure grammar; the
+        // Quill model does not represent closure modifiers, and all source
+        // spans remain aligned with the original text.
+        let mut repaired = parser_text.into_owned();
+        repaired.replace_range(keyword, "async");
+        parser_text = std::borrow::Cow::Owned(repaired);
+        parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra);
+    }
     if let Some(error) = parse
         .errors()
         .iter()
@@ -113,6 +129,31 @@ pub(crate) fn collect(
         imports: collector.imports,
         unsupported_item_count: collector.unsupported_item_count + file_attributes,
     })
+}
+
+fn const_closure_keyword(
+    text: &str,
+    range: ra_ap_syntax::TextRange,
+    message: &str,
+) -> Option<Range<usize>> {
+    if message != "expected fn, trait or impl" {
+        return None;
+    }
+    let offset = usize::from(range.start()).min(text.len());
+    let prefix = text[..offset].trim_end();
+    let start = prefix.len().checked_sub("const".len())?;
+    if &prefix[start..] != "const"
+        || (start > 0
+            && (text.as_bytes()[start - 1].is_ascii_alphanumeric()
+                || text.as_bytes()[start - 1] == b'_'))
+    {
+        return None;
+    }
+    let remainder = text[offset..].trim_start();
+    let closure_start = remainder.strip_prefix("move").unwrap_or(remainder).trim_start();
+    closure_start
+        .starts_with('|')
+        .then_some(start..start + "const".len())
 }
 
 /// rust-analyzer intentionally diagnoses a few incomplete or semantically

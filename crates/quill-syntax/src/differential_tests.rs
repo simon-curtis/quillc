@@ -415,6 +415,14 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
         ("2021", "fn where_bounds<T>() where T: (Copy) + (Send) {}"),
         ("2021", "type LegacyObject = Box<(Send) + (Sync)>;"),
         ("2021", "fn object() { let _: Box<(Send)>; }"),
+        (
+            "2024",
+            "#![feature(const_closures)] fn closure() { const move |a| wrap(a); }",
+        ),
+        (
+            "2024",
+            "#![feature(const_closures)] impl S { const fn one(f: F) { const move |a| f(a) } const fn two(f: F) { const move |a, b| f(a, b) } }",
+        ),
         ("2021", "impl impl NotType {}"),
         ("2021", "impl Trait2 for impl NotType {}"),
         ("2021", "impl impl AnotherType {}"),
@@ -456,6 +464,19 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
         actual.had_error,
         "malformed impl body was accepted: {malformed_impl}"
     );
+}
+
+#[test]
+fn debug_core_flt_parse() {
+    let sysroot = Command::new("rustc").arg("--print").arg("sysroot").output().unwrap();
+    let path = PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())
+        .join("lib/rustlib/src/rust/library/core/src/num/imp/flt2dec/mod.rs");
+    let source = SourceFile::load(path).unwrap();
+    let parser_text = crate::collect::parser_text(source.text());
+    let parse = ra_ap_syntax::SourceFile::parse(&parser_text, ra_ap_syntax::Edition::Edition2024);
+    eprintln!("normalized={} errors={:?}", parser_text.len() != source.text().len(), parse.errors());
+    let actual = parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2024");
+    eprintln!("collect={:?}", actual.diagnostics);
 }
 
 fn rustc_parser_accepts(text: &str, edition: &str) -> bool {
