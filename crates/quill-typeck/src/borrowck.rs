@@ -40,15 +40,39 @@ impl Place {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Holder {
+    root: String,
+    projection: Vec<String>,
+}
+
+impl Holder {
+    fn root(name: impl Into<String>) -> Self {
+        Self {
+            root: name.into(),
+            projection: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct Loan {
     holder: Option<String>,
     holder_projection: Vec<String>,
-    parent: Option<String>,
+    parent: Option<Holder>,
     place: Place,
     lifetimes: Vec<String>,
     mutable: bool,
     two_phase: bool,
     origin: Range<usize>,
+}
+
+impl Loan {
+    fn holder_key(&self) -> Option<Holder> {
+        Some(Holder {
+            root: self.holder.clone()?,
+            projection: self.holder_projection.clone(),
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -69,6 +93,24 @@ impl State {
         self.loans
             .iter()
             .filter(move |loan| loan.holder.as_deref() == Some(name))
+    }
+
+    fn for_holder_at(&self, holder: &Holder) -> impl Iterator<Item = &Loan> {
+        self.loans.iter().filter(move |loan| {
+            loan.holder.as_deref() == Some(&holder.root)
+                && loan.holder_projection == holder.projection
+        })
+    }
+
+    fn held_at_with_projection(&self, root: &str, projection: &[String]) -> Vec<Loan> {
+        self.loans
+            .iter()
+            .filter(|loan| {
+                loan.holder.as_deref() == Some(root)
+                    && loan.holder_projection.starts_with(projection)
+            })
+            .cloned()
+            .collect()
     }
 
     fn held_at(&self, root: &str, projection: &[String]) -> Vec<Loan> {
@@ -130,40 +172,41 @@ impl State {
             && self.loans.iter().all(|loan| other.loans.contains(loan))
     }
 
-    fn accessed_through(&self, loan: &Loan, through: Option<&str>) -> bool {
+    fn accessed_through(&self, loan: &Loan, through: Option<&Holder>) -> bool {
         let Some(through) = through else {
             return false;
         };
-        let mut pending = vec![through.to_owned()];
+        let mut pending = vec![through.clone()];
         let mut visited = HashSet::new();
         while let Some(current) = pending.pop() {
             if !visited.insert(current.clone()) {
                 continue;
             }
-            if loan.holder.as_deref() == Some(&current) {
+            if loan.holder.as_deref() == Some(&current.root)
+                && loan.holder_projection == current.projection
+            {
                 return true;
             }
             pending.extend(
-                self
-                .for_holder(&current)
-                .filter_map(|child| child.parent.clone())
+                self.for_holder_at(&current)
+                    .filter_map(|child| child.parent.clone()),
             );
         }
         false
     }
 
-    fn descends_from(&self, loan: &Loan, holder: &str) -> bool {
+    fn descends_from(&self, loan: &Loan, holder: &Holder) -> bool {
         let mut pending = loan.parent.iter().cloned().collect::<Vec<_>>();
         let mut visited = HashSet::new();
         while let Some(parent) = pending.pop() {
             if !visited.insert(parent.clone()) {
                 continue;
             }
-            if parent == holder {
+            if &parent == holder {
                 return true;
             }
             pending.extend(
-                self.for_holder(&parent)
+                self.for_holder_at(&parent)
                     .filter_map(|ancestor| ancestor.parent.clone()),
             );
         }
@@ -325,6 +368,24 @@ impl Checker<'_, '_> {
 
     fn check_move_access(&mut self, expression: &BodyExpr, state: &State) {
         let ty = self.infer_local_type(expression);
+        if matches!(ty, Ty::Reference(_, true))
+            && let Some(holder) = self.reference_holder(expression, state)
+            && state.for_holder_at(&holder).any(|source| {
+                state.loans.iter().any(|loan| {
+                    (loan.holder.as_deref() != Some(&holder.root)
+                        || loan.holder_projection != holder.projection)
+                        && source.place.overlaps(&loan.place)
+                        && state.descends_from(loan, &holder)
+                })
+            })
+        {
+            let name = place_name(&holder.root, &holder.projection);
+            self.report(
+                expression.span.clone(),
+                format!("error[E0505]: cannot move out of `{name}` because it is borrowed"),
+            );
+            return;
+        }
         if ty == Ty::Unknown
             || matches!(ty, Ty::Reference(_, _))
             || is_copy_type(&ty, self.struct_signatures)
@@ -354,17 +415,21 @@ impl Checker<'_, '_> {
         &mut self,
         place: &Place,
         write: bool,
-        through: Option<&str>,
+        through: Option<&Holder>,
         state: &State,
         span: Range<usize>,
     ) {
         if write {
             if let Some(holder) = through {
-                if state.for_holder(holder).any(|loan| !loan.mutable) {
+                if state
+                    .for_holder_at(holder)
+                    .any(|loan| loan.place.overlaps(place) && !loan.mutable)
+                {
                     self.report(
                         span,
                         format!(
-                            "error[E0594]: cannot assign to data in an immutable reference `{holder}`"
+                            "error[E0594]: cannot assign to data in an immutable reference `{}`",
+                            holder.root
                         ),
                     );
                     return;
@@ -374,8 +439,9 @@ impl Checker<'_, '_> {
         for loan in &state.loans {
             if loan.place.overlaps(place)
                 && through.is_some_and(|holder| {
-                    state.for_holder(holder).any(|active| active.mutable)
-                        && state.descends_from(loan, holder)
+                    state.for_holder_at(holder).any(|active| {
+                        active.mutable && active.place.overlaps(place)
+                    }) && state.descends_from(loan, holder)
                 })
             {
                 self.report(
@@ -414,11 +480,13 @@ impl Checker<'_, '_> {
     fn mutable_access_allowed(
         &self,
         place: &Place,
-        through: Option<&str>,
+        through: Option<&Holder>,
         state: &State,
     ) -> bool {
         if let Some(holder) = through {
-            return state.for_holder(holder).any(|loan| loan.mutable);
+            return state
+                .for_holder_at(holder)
+                .any(|loan| loan.place.overlaps(place) && loan.mutable);
         }
         self.mutable_locals
             .get(&place.root)
@@ -527,12 +595,11 @@ impl Checker<'_, '_> {
             Vec::new(),
         ))
     }
-
     fn create_loan(
         &mut self,
         place: Place,
         mutable: bool,
-        through: Option<&str>,
+        through: Option<&Holder>,
         span: Range<usize>,
         state: &State,
     ) -> Loan {
@@ -567,10 +634,11 @@ impl Checker<'_, '_> {
         Loan {
             holder: None,
             holder_projection: Vec::new(),
-            parent: through.map(str::to_owned),
+            parent: through.cloned(),
             lifetimes: through.map_or_else(Vec::new, |holder| {
                 state
-                    .for_holder(holder)
+                    .for_holder_at(holder)
+                    .filter(|parent| parent.place.overlaps(&place))
                     .flat_map(|loan| loan.lifetimes.iter().cloned())
                     .collect()
             }),
@@ -591,7 +659,7 @@ impl Checker<'_, '_> {
                         self.access(
                             &loan.place,
                             false,
-                            Some(name),
+                            Some(&Holder::root(name)),
                             state,
                             expression.span.clone(),
                         );
@@ -618,7 +686,7 @@ impl Checker<'_, '_> {
                 let Some((place, through)) = self.place_for_borrow(borrowed, state) else {
                     return Vec::new();
                 };
-                if *mutable && !self.mutable_access_allowed(&place, through.as_deref(), state) {
+                if *mutable && !self.mutable_access_allowed(&place, through.as_ref(), state) {
                     self.report(
                         expression.span.clone(),
                         format!(
@@ -631,7 +699,7 @@ impl Checker<'_, '_> {
                 vec![self.create_loan(
                     place,
                     *mutable,
-                    through.as_deref(),
+                    through.as_ref(),
                     expression.span.clone(),
                     state,
                 )]
@@ -658,7 +726,7 @@ impl Checker<'_, '_> {
                     self.access(
                         &loan.place,
                         false,
-                        loan.holder.as_deref(),
+                        loan.holder_key().as_ref(),
                         state,
                         expression.span.clone(),
                     );
@@ -740,7 +808,7 @@ impl Checker<'_, '_> {
                     {
                         let mutable = is_mutable_reference_type(&parameter.type_text);
                         for loan in &mut loans {
-                            if let Some(holder) = loan.holder.clone() {
+                            if let Some(holder) = self.reference_holder(argument, state) {
                                 *loan = self.create_loan(
                                     loan.place.clone(),
                                     mutable,
@@ -817,7 +885,7 @@ impl Checker<'_, '_> {
                     return Vec::new();
                 };
                 if mode.0 == ReceiverMode::Mutable
-                    && !self.mutable_access_allowed(&place, through.as_deref(), state)
+                    && !self.mutable_access_allowed(&place, through.as_ref(), state)
                 {
                     self.report(
                         expression.span.clone(),
@@ -836,9 +904,10 @@ impl Checker<'_, '_> {
                         holder: None,
                         holder_projection: Vec::new(),
                         parent: through.clone(),
-                        lifetimes: through.as_deref().map_or_else(Vec::new, |holder| {
+                        lifetimes: through.as_ref().map_or_else(Vec::new, |holder| {
                             state
-                                .for_holder(holder)
+                                .for_holder_at(holder)
+                                .filter(|parent| parent.place.overlaps(&place))
                                 .flat_map(|loan| loan.lifetimes.iter().cloned())
                                 .collect()
                         }),
@@ -851,7 +920,7 @@ impl Checker<'_, '_> {
                     self.create_loan(
                         place.clone(),
                         false,
-                        through.as_deref(),
+                        through.as_ref(),
                         expression.span.clone(),
                         state,
                     )
@@ -873,7 +942,7 @@ impl Checker<'_, '_> {
                     {
                         let mutable = is_mutable_reference_type(parameter_type);
                         for loan in &mut loans {
-                            if let Some(holder) = loan.holder.clone() {
+                            if let Some(holder) = self.reference_holder(argument, state) {
                                 *loan = self.create_loan(
                                     loan.place.clone(),
                                     mutable,
@@ -899,7 +968,7 @@ impl Checker<'_, '_> {
                     Some(self.create_loan(
                         place.clone(),
                         true,
-                        through.as_deref(),
+                        through.as_ref(),
                         expression.span.clone(),
                         state,
                     ))
@@ -934,7 +1003,7 @@ impl Checker<'_, '_> {
                     self.access(
                         &place,
                         false,
-                        through.as_deref(),
+                        through.as_ref(),
                         state,
                         expression.span.clone(),
                     );
@@ -950,7 +1019,7 @@ impl Checker<'_, '_> {
                     self.access(
                         &place,
                         false,
-                        through.as_deref(),
+                        through.as_ref(),
                         state,
                         expression.span.clone(),
                     );
@@ -1009,7 +1078,7 @@ impl Checker<'_, '_> {
                 let mut loans = Vec::new();
                 for name in names {
                     let (place, through) = if let Some(loan) = state.for_holder(&name).next() {
-                        (loan.place.clone(), Some(name.clone()))
+                        (loan.place.clone(), Some(Holder::root(name.clone())))
                     } else {
                         (
                             Place {
@@ -1020,7 +1089,7 @@ impl Checker<'_, '_> {
                         )
                     };
                     let mutable = mutated.contains(&name);
-                    if mutable && !self.mutable_access_allowed(&place, through.as_deref(), state) {
+                    if mutable && !self.mutable_access_allowed(&place, through.as_ref(), state) {
                         self.report(
                             expression.span.clone(),
                             format!(
@@ -1033,7 +1102,7 @@ impl Checker<'_, '_> {
                     loans.push(self.create_loan(
                         place,
                         mutable,
-                        through.as_deref(),
+                        through.as_ref(),
                         expression.span.clone(),
                         state,
                     ));
@@ -1321,7 +1390,7 @@ impl Checker<'_, '_> {
                     if let Some(holder) = through {
                         self.access(
                             &Place {
-                                root: holder.clone(),
+                                root: holder.root.clone(),
                                 projection: Vec::new(),
                             },
                             true,
@@ -1330,7 +1399,7 @@ impl Checker<'_, '_> {
                             span.clone(),
                         );
                     }
-                    self.access(place, true, through.as_deref(), state, span.clone());
+                    self.access(place, true, through.as_ref(), state, span.clone());
                 }
                 if is_direct_binding(name) {
                     state.replace_holder(name, aliases);
@@ -1434,7 +1503,7 @@ impl Checker<'_, '_> {
                             let mut item_loan = iterator_loan.clone();
                             item_loan.holder = None;
                             item_loan.holder_projection.clear();
-                            item_loan.parent = Some(iterator_holder.clone());
+                            item_loan.parent = Some(Holder::root(iterator_holder.clone()));
                             item_loan.place.projection.push("[*]".to_owned());
                             if names.len() > 1 {
                                 item_loan.place.projection.push(index.to_string());
@@ -1477,13 +1546,13 @@ impl Checker<'_, '_> {
         }
     }
 
-    fn place(&self, expression: &BodyExpr, state: &State) -> Option<(Place, Option<String>)> {
+    fn place(&self, expression: &BodyExpr, state: &State) -> Option<(Place, Option<Holder>)> {
         match &expression.kind {
             BodyExprKind::Path(name) => {
                 if matches!(self.local_types.get(name), Some(Ty::Reference(_, _)))
                     && let Some(loan) = state.for_holder(name).next()
                 {
-                    Some((loan.place.clone(), Some(name.clone())))
+                    Some((loan.place.clone(), Some(Holder::root(name))))
                 } else {
                     Some((
                         Place {
@@ -1510,7 +1579,26 @@ impl Checker<'_, '_> {
                 aliases
                     .into_iter()
                     .next()
-                    .map(|loan| (loan.place, loan.holder))
+                    .and_then(|loan| Some((loan.place.clone(), loan.holder_key())))
+            }
+            _ => None,
+        }
+    }
+
+    fn reference_holder(
+        &self,
+        expression: &BodyExpr,
+        state: &State,
+    ) -> Option<Holder> {
+        match &expression.kind {
+            BodyExprKind::Path(name) => Some(Holder::root(name)),
+            BodyExprKind::Parenthesized(inner) => self.reference_holder(inner, state),
+            BodyExprKind::FieldAccess { .. } | BodyExprKind::Index { .. } => {
+                self.place(expression, state)
+                    .map(|(place, _)| Holder {
+                        root: place.root,
+                        projection: place.projection,
+                    })
             }
             _ => None,
         }
@@ -1547,7 +1635,7 @@ impl Checker<'_, '_> {
         &self,
         expression: &BodyExpr,
         state: &State,
-    ) -> Option<(Place, Option<String>)> {
+    ) -> Option<(Place, Option<Holder>)> {
         match &expression.kind {
             BodyExprKind::Path(name) => Some((
                 Place {
@@ -1567,13 +1655,15 @@ impl Checker<'_, '_> {
             BodyExprKind::Parenthesized(inner) => self.expression_place_alias(inner, state),
             BodyExprKind::FieldAccess { .. } | BodyExprKind::Index { .. } => self
                 .place(expression, state)
-                .map(|(place, _)| state.held_at(&place.root, &place.projection))
+                .map(|(place, _)| {
+                    state.held_at_with_projection(&place.root, &place.projection)
+                })
                 .unwrap_or_default(),
             _ => Vec::new(),
         }
     }
 
-    fn assignment_place(&self, text: &str, state: &State) -> Option<(Place, Option<String>)> {
+    fn assignment_place(&self, text: &str, state: &State) -> Option<(Place, Option<Holder>)> {
         let (parsed, _) = place_from_text(text)?;
         if parsed.projection.is_empty() {
             return Some((parsed, None));
@@ -1590,11 +1680,24 @@ impl Checker<'_, '_> {
                     .into_iter()
                     .filter(|projection| projection != "[*deref*]"),
             );
-            Some((place, Some(holder.clone())))
+            Some((place, Some(Holder::root(holder))))
         } else {
             Some((parsed, None))
         }
     }
+}
+
+fn place_name(root: &str, projection: &[String]) -> String {
+    let mut name = root.to_owned();
+    for part in projection {
+        if part == "[*]" {
+            name.push_str("[_]");
+        } else {
+            name.push('.');
+            name.push_str(part);
+        }
+    }
+    name
 }
 
 fn returned_borrowed_parameters(function: &FunctionItem) -> Vec<usize> {

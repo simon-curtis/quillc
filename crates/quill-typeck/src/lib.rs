@@ -385,11 +385,6 @@ fn trait_methods_for_generic<'a>(
         .filter(|function| function.name.rsplit("::").next() == Some(method))
         .copied()
         .collect();
-    if std::env::var_os("QUILL_DEBUG_TRAIT_INDEX").is_some()
-        && matches!(method, "config" | "internal_encode")
-    {
-        eprintln!("TIDX {method} traits={traits:?} available={:?}", signatures.trait_methods.keys().collect::<Vec<_>>());
-    }
     candidates
 }
 
@@ -419,6 +414,32 @@ fn trait_methods_for_concrete<'a>(
     candidates.sort_by(|left, right| left.name.cmp(&right.name));
     candidates.dedup_by(|left, right| left.name == right.name);
     candidates
+}
+
+fn trait_methods_for_context<'a>(
+    signatures: &'a SignatureIndex<'a>,
+    context: &Ty,
+    receiver: &BodyExpr,
+    receiver_type: &Ty,
+    method: &str,
+) -> Vec<&'a FunctionItem> {
+    let Ty::Named(owner) = context else {
+        return Vec::new();
+    };
+    let owner = owner.rsplit("::").next().unwrap_or(owner);
+    let receiver_is_self = move_place(receiver).as_deref() == Some("self")
+        || matches!(without_references(receiver_type), Ty::Named(name) if name.rsplit("::").next() == Some(owner));
+    if !receiver_is_self {
+        return Vec::new();
+    }
+    signatures
+        .trait_methods
+        .get(owner)
+        .into_iter()
+        .flatten()
+        .filter(|function| function.name.rsplit("::").next() == Some(method))
+        .copied()
+        .collect()
 }
 
 fn trait_is_implemented_for_type(
@@ -602,6 +623,9 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
     {
         return Ty::Option(Box::new(type_from_syntax(value_type, structs)));
     }
+    if let Some(target) = generic_single(text, "impl Into") {
+        return Ty::Into(Box::new(type_from_syntax(target, structs)));
+    }
     if let Some(trait_bounds) = text
         .strip_prefix("impl ")
         .or_else(|| text.strip_prefix("dyn "))
@@ -616,9 +640,6 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
         if !traits.is_empty() {
             return Ty::Named(format!("\0quill_generic:_opaque:traits={traits}:0:0:0"));
         }
-    }
-    if let Some(target) = generic_single(text, "impl Into") {
-        return Ty::Into(Box::new(type_from_syntax(target, structs)));
     }
     if let Some(elements) = tuple_elements(text) {
         return Ty::Tuple(
@@ -2024,7 +2045,7 @@ fn check_move_expression(
                         if consume { "use" } else { "borrow" }
                     ),
                 );
-            } else if consume && !is_copy_type(ty, struct_signatures) {
+            } else if consume && *ty != Ty::Unknown && !is_copy_type(ty, struct_signatures) {
                 moved.insert(name.clone());
             }
         }
@@ -2664,6 +2685,7 @@ fn check_move_expression(
                         &mut ignored,
                     );
                     if matches!(base_type, Ty::Reference(_, _))
+                        && ty != Ty::Unknown
                         && !is_copy_type(&ty, struct_signatures)
                     {
                         diagnostics.push(TypeDiagnostic {
@@ -2672,7 +2694,7 @@ fn check_move_expression(
                                 "error[E0507]: cannot move out of borrowed content `{place}`"
                             ),
                         });
-                    } else if !is_copy_type(&ty, struct_signatures) {
+                    } else if ty != Ty::Unknown && !is_copy_type(&ty, struct_signatures) {
                         moved.insert(place);
                     }
                 }
@@ -3808,9 +3830,12 @@ fn infer_with_structs(
             );
             let target = type_from_syntax(type_name, struct_signatures);
             if (source.is_numeric() && target.is_numeric())
+                || (source == Ty::Char && (target.is_numeric() || target == Ty::Char))
+                || (source.is_numeric() && target == Ty::Char)
                 || matches!((&source, &target), (Ty::RawPointer(_, _), Ty::RawPointer(_, _)))
                 || matches!((&source, &target), (Ty::RawPointer(_, _), Ty::Integer(_)))
                 || matches!((&source, &target), (Ty::Integer(_), Ty::RawPointer(_, _)))
+                || source == Ty::Unknown
             {
                 target
             } else {
@@ -5100,8 +5125,21 @@ fn infer_with_structs(
                 }
                 return Ty::Reference(Box::new(receiver_base.clone()), true);
             }
+            let contextual_candidates = locals
+                .get("\0quill_trait_context")
+                .map_or_else(Vec::new, |context| {
+                    trait_methods_for_context(
+                        signatures,
+                        context,
+                        receiver,
+                        &receiver_type,
+                        method,
+                    )
+                });
             let generic_candidates = trait_methods_for_generic(signatures, &receiver_type, method);
-            let candidates = if !generic_candidates.is_empty() {
+            let candidates = if !contextual_candidates.is_empty() {
+                contextual_candidates
+            } else if !generic_candidates.is_empty() {
                 generic_candidates
             } else {
                 let inherent = method_signatures(&signatures.methods, &receiver_type, method);
@@ -5669,12 +5707,14 @@ fn infer_with_structs(
                 BinaryOperator::ShiftLeft | BinaryOperator::ShiftRight => {
                     let left_value_ty = without_references(&left_ty);
                     let right_value_ty = without_references(&right_ty);
-                    if !left_value_ty.is_integer() || !right_value_ty.is_integer() {
+                    if !left_value_ty.is_integer() && !right_value_ty.is_integer() {
                         diagnostics.push(TypeDiagnostic {
                             span: expression.span.clone(),
                             message: "shift operands must be integers".to_owned(),
                         });
                         Ty::Unknown
+                    } else if left_value_ty == &Ty::Unknown {
+                        right_value_ty.clone()
                     } else {
                         left_value_ty.clone()
                     }
@@ -5682,12 +5722,16 @@ fn infer_with_structs(
                 BinaryOperator::BitAnd | BinaryOperator::BitOr => {
                     let left_value_ty = without_references(&left_ty);
                     let right_value_ty = without_references(&right_ty);
-                    if !left_value_ty.is_integer() || !right_value_ty.is_integer() {
+                    if !left_value_ty.is_integer() && !right_value_ty.is_integer() {
                         diagnostics.push(TypeDiagnostic {
                             span: expression.span.clone(),
                             message: "bitwise operands must be integers".to_owned(),
                         });
                         Ty::Unknown
+                    } else if left_value_ty == &Ty::Unknown {
+                        right_value_ty.clone()
+                    } else if right_value_ty == &Ty::Unknown {
+                        left_value_ty.clone()
                     } else if !types_compatible(left_value_ty, right_value_ty) {
                         mismatch(
                             diagnostics,
@@ -8435,6 +8479,54 @@ mod tests {
                 .message
                 .contains("error[E0505]: cannot move out of `item` because it is borrowed")
         }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn rejects_moving_a_mutable_reference_while_its_reborrow_is_live() {
+        let source = SourceFile::from_text(
+            "move-reborrowed-reference.rs",
+            "fn valid() { let mut value: i32 = 0; let reference = &mut value; let reborrow = &mut *reference; *reborrow = 1; let moved = reference; *moved = 2; } fn invalid() { let mut value: i32 = 0; let reference = &mut value; let reborrow = &mut *reference; let moved = reference; *reborrow = 1; *moved = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0505]")
+                && diagnostic.message.contains("cannot move out of `reference` because it is borrowed")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start < source.text().find("fn invalid").unwrap()
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn tracks_reborrows_of_projected_mutable_reference_holders() {
+        let source = SourceFile::from_text(
+            "projected-mutable-reborrow.rs",
+            "fn invalid() { let mut first = 0; let mut second = 0; let pair = (&mut first, &mut second); let reborrow = &mut *pair.0; let moved = pair.0; *reborrow = 1; *moved = 2; } fn valid_sibling() { let mut first = 0; let mut second = 0; let pair = (&mut first, &mut second); let reborrow = &mut *pair.0; let moved = pair.1; *reborrow = 1; *moved = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("error[E0505]")
+                && diagnostic.message.contains("cannot move out of `pair.0` because it is borrowed")
+        }), "{diagnostics:?}");
+        assert!(!diagnostics.iter().any(|diagnostic| {
+            diagnostic.span.start > source.text().find("fn valid_sibling").unwrap()
+        }), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn excludes_unreachable_loan_creation_after_loop_break() {
+        let source = SourceFile::from_text(
+            "unreachable-loop-loan.rs",
+            "fn valid() { let mut value: i32 = 0; let mut other: i32 = 0; let mut reference = &mut other; loop { break; reference = &mut value; } value = 1; *reference = 2; }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 
     #[test]
