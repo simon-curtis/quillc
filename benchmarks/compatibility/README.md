@@ -5,6 +5,10 @@ This directory holds executable comparisons against the Rust compiler named by
 website's 29 manually categorized entries remain an implementation index, not
 a conformance score.
 
+The completion target and evidence required before claiming full compatibility
+are defined in [`TARGET.md`](TARGET.md). The corpus below is an early
+regression suite, not a proxy percentage for that full target.
+
 The runner reads the pinned `channel` and passes it explicitly to every
 `rustc` and `cargo` command. Cases run in temporary directories, so relying on
 rustup's directory-based toolchain override would otherwise silently select
@@ -53,32 +57,34 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 37-case run passes 26 (70.3%) against Quill revision
-`5c1a2db` and probes 28 of 29 tracked categories. The report marks five
-compiler workspace files as dirty because the shared checkout includes an
-in-progress LSP integration. The earlier 28-case run
-passed 25 (89.3%); the expanded cases add realistic variations to advertised
-language and library paths rather than treating one success as broad coverage.
-The local workspace dependency, feature cfg, multiple binary targets, scalar
-struct clone/equality, unsigned integer Vec push/iteration, and a cfg-emitting
-native build script match rustc. A narrow two-`u64` Rust ABI call also links
-from a Quill object into a rustc host and matches output.
+The latest clean baseline run passes 30 of 42 cases (71.4%) against Quill
+revision `41a2eec` and probes 28 of 29 tracked categories. The 14 added cases
+exercise variations in integer conversion, tuples, slices, `Result`, collections,
+generic dispatch, macro repetition, and Rust editions. Five of those 14 match
+rustc: loop break/continue, Rust 2018 async syntax parsing, Rust 2021 format
+capture, Rust 2024 if-let-chain parsing, and experimental `future` edition
+async parsing.
 
 The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
-records the source revision, dirty source paths, binary hash, and build time.
-The website reports this result separately from the manually
-curated 10.3% documentation index. The full compatibility target remains
-stable Rust behavior, Rust diagnostics, Cargo workflows, and Linux and Windows
-targets as described in the project specification.
+records the exact source revision, compiler-source cleanliness, binary hash,
+and build time. The compatibility page links to [`TARGET.md`](TARGET.md), which
+defines the full destination: language, diagnostics, standard library, Cargo,
+and the project's Linux and Windows platforms. The 71.4% rate is only for
+these curated cases; it is not a general Rust compatibility score and cannot
+be compared directly to the manually curated 10.3% feature index.
 
-Windows output is the only tracked category with no probe. Eleven cases fail:
-generic trait dispatch, panic behavior, rustc's inability to consume Quill's
-object as an `--extern` library, signed integer casts, tuple field access,
-array-to-slice coercion, `Result` status checks, `Vec<String>` indexing,
-`BTreeMap::get`, generic `AsRef<str>` dispatch, and macro repetition. Of nine
-new positive cases, only loop break/continue matches rustc. Build-script support
-currently covers the tested native script that emits `rustc-cfg`; other build
-script directives and build dependencies remain incomplete. The 70.3% figure
-applies only to these curated cases; it is not a general Rust compatibility
-score and cannot be compared directly to the manual 10.3% index ratio.
+Windows output remains unprobed. Twelve cases fail: generic trait dispatch,
+panic behavior, rustc's inability to consume Quill's object as an `--extern`
+library, signed integer casts, tuple field access, array-to-slice coercion,
+`Result` status checks, `Vec<String>` indexing, `BTreeMap::get`, generic
+`AsRef<str>` dispatch, macro repetition, and Rust 2015's valid `async`
+identifier. Build-script support currently covers the tested native script
+that emits `rustc-cfg`; other directives and build dependencies remain
+incomplete.
+
+The clean baseline is revision `41a2eec`. A clean checkout of newer commit
+`456aabc` failed to build because its driver references `quill_lsp`, which is
+not present in that committed workspace. The shared working tree contains
+ongoing compiler and LSP edits; reports from it must remain marked dirty until
+those changes are committed and rebuilt from a clean checkout.

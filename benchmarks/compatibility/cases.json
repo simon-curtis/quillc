@@ -440,5 +440,61 @@
     ],
     "edition": "2024",
     "source": "macro_rules! sum { ($($value:expr),+ $(,)?) => {{ let mut total: u64 = 0; $(total = total + $value;)+ total }}; }\nfn main() { let result = sum!(7, 11, 24,); println!(\"{result}\"); }"
+  },
+  {
+    "id": "edition-2015-async-identifier",
+    "kind": "cargo-run",
+    "features": [
+      "linux-x86-64-executables",
+      "rust-source-parsing",
+      "functions-and-scalar-arithmetic",
+      "println--and-format"
+    ],
+    "manifest": "Cargo.toml",
+    "binary": "edition-2015-check",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"edition-2015-check\"\nversion = \"0.1.0\"\nedition = \"2015\"\n",
+      "src/main.rs": "fn main() { let async = 42u64; if async == 42 { println!(\"edition-2015\"); } }\n"
+    }
+  },
+  {
+    "id": "edition-2018-async-function-syntax",
+    "kind": "parse",
+    "features": [
+      "rust-source-parsing"
+    ],
+    "edition": "2018",
+    "source": "async fn answer() -> u64 { 42 }\nfn main() {}"
+  },
+  {
+    "id": "edition-2021-format-capture",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "println--and-format"
+    ],
+    "edition": "2021",
+    "source": "fn main() { let answer = 42u64; println!(\"{answer}\"); }"
+  },
+  {
+    "id": "edition-2024-if-let-chain",
+    "kind": "parse",
+    "features": [
+      "rust-source-parsing",
+      "if-let"
+    ],
+    "edition": "2024",
+    "source": "fn main() { if let Some(value) = Some(42u64) && value == 42 { let _result = value; } }"
+  },
+  {
+    "id": "edition-future-async-parse",
+    "kind": "parse",
+    "features": [
+      "rust-source-parsing",
+      "async--const-evaluation--and-unsafe-code"
+    ],
+    "edition": "future",
+    "rustc_args": ["-Zunstable-options"],
+    "source": "pub async fn answer() -> u64 { 42 }"
   }
 ]

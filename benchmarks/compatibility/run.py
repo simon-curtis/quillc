@@ -274,7 +274,8 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         rust_meta = case_dir / "rustc.rmeta"
         rustc_result = invoke(
             ["rustc", "--edition", case.get("edition", "2024"),
-             "--crate-type", "lib", "--emit=metadata", str(source), "-o", str(rust_meta)],
+             "--crate-type", "lib", "--emit=metadata", *case.get("rustc_args", []),
+             str(source), "-o", str(rust_meta)],
             case_dir)
         quill_args = [str(quill), "parse", str(source)]
     else:
