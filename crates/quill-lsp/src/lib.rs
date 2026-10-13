@@ -143,7 +143,7 @@ pub fn run_stdio() -> io::Result<()> {
                         "definitionProvider": true,
                         "hoverProvider": true,
                     },
-                    "serverInfo": { "name": "quill", "version": env!("CARGO_PKG_VERSION") },
+                    "serverInfo": { "name": "quill-check", "version": env!("CARGO_PKG_VERSION") },
                 }));
             }
             "shutdown" => response = Some(Value::Null),

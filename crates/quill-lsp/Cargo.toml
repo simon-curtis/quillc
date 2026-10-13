@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "quill-check"
+path = "src/bin/quill-check.rs"
+
 [dependencies]
 ra_ap_syntax = "=0.0.358"
 serde_json = "1"
