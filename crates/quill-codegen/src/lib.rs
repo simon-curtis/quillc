@@ -3880,6 +3880,72 @@ fn lower_statements(
                     }
                     continue;
                 }
+                if let BodyExprKind::MethodCall {
+                    receiver,
+                    method,
+                    arguments,
+                } = &initializer.kind
+                    && method == "clone"
+                    && arguments.is_empty()
+                    && let BodyExprKind::Index { base, index } = &receiver.kind
+                    && let BodyExprKind::Path(collection_name) = &base.kind
+                    && let Some(Value::CollectionLocal {
+                        pointer_slot,
+                        kind: CollectionKind::Vector,
+                        element_type: Some(element_type),
+                        ..
+                    }) = environment.get(collection_name)
+                    && element_type.rsplit("::").next() == Some("String")
+                {
+                    let index = match &index.kind {
+                        BodyExprKind::Literal(LiteralKind::Integer { text, .. }) => {
+                            text.replace('_', "").parse::<usize>().map_err(|_| {
+                                CodegenError::UnsupportedProgram(
+                                    "vector string index must be a constant target-sized integer",
+                                )
+                            })?
+                        }
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "vector string index must be a constant target-sized integer",
+                            ));
+                        }
+                    };
+                    let collection_pointer_slot = *pointer_slot;
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: Value::Word(index as u64),
+                    });
+                    let value_pointer_slot = *next_slot;
+                    let value_length_slot = value_pointer_slot + 1;
+                    *next_slot += 2;
+                    environment.insert(
+                        name.clone(),
+                        Value::SliceLocal {
+                            pointer_slot: value_pointer_slot,
+                            length_slot: value_length_slot,
+                            element_widths: vec![16],
+                        },
+                    );
+                    lowered.push(Statement::LetSlice {
+                        pointer_slot: value_pointer_slot,
+                        length_slot: value_length_slot,
+                        initializer: Value::SliceElementString {
+                            pointer_slot: collection_pointer_slot,
+                            index_slot,
+                            element_offset: 0,
+                            element_stride: 24,
+                        },
+                    });
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    continue;
+                }
                 if type_text.as_deref().is_some_and(is_i32_option_type) {
                     let option_tag = match &initializer.kind {
                         BodyExprKind::Call {
@@ -5330,6 +5396,9 @@ fn materialize_method_receivers(
         "is_ok" | "is_err" | "is_some" | "unwrap_or"
     ) && matches!(receiver.kind, BodyExprKind::Call { .. })
     {
+        return;
+    }
+    if method == "clone" && matches!(receiver.kind, BodyExprKind::Index { .. }) {
         return;
     }
     materialize_method_receivers(receiver, temporaries, slot_seed);
@@ -9034,15 +9103,19 @@ fn encode_statement_into(
             capacity_slot,
             value,
             indirect,
-        } => code.extend(encode_vec_push_string(
-            *pointer_slot,
-            *length_slot,
-            *capacity_slot,
-            value,
-            *indirect,
-            in_function,
-            relocations,
-        )),
+        } => {
+            let first_relocation = relocations.len();
+            let encoded = encode_vec_push_string(
+                *pointer_slot,
+                *length_slot,
+                *capacity_slot,
+                value,
+                *indirect,
+                in_function,
+                relocations,
+            );
+            append_encoded_chunk(code, encoded, relocations, first_relocation);
+        }
         Statement::StringAppendChar {
             pointer_slot,
             length_slot,
@@ -9050,7 +9123,8 @@ fn encode_statement_into(
             character,
             lowercase,
         } => {
-            code.extend(encode_string_append_char(
+            let first_relocation = relocations.len();
+            let encoded = encode_string_append_char(
                 *pointer_slot,
                 *length_slot,
                 *capacity_slot,
@@ -9058,7 +9132,8 @@ fn encode_statement_into(
                 *lowercase,
                 in_function,
                 relocations,
-            ));
+            );
+            append_encoded_chunk(code, encoded, relocations, first_relocation);
         }
         Statement::VecPushAggregate {
             pointer_slot,
@@ -9067,16 +9142,20 @@ fn encode_statement_into(
             fields,
             widths,
             indirect,
-        } => code.extend(encode_vec_push_aggregate(
-            *pointer_slot,
-            *length_slot,
-            *capacity_slot,
-            fields,
-            widths,
-            *indirect,
-            in_function,
-            relocations,
-        )),
+        } => {
+            let first_relocation = relocations.len();
+            let encoded = encode_vec_push_aggregate(
+                *pointer_slot,
+                *length_slot,
+                *capacity_slot,
+                fields,
+                widths,
+                *indirect,
+                in_function,
+                relocations,
+            );
+            append_encoded_chunk(code, encoded, relocations, first_relocation);
+        }
         Statement::BTreeMapInsert {
             pointer_slot,
             length_slot,
@@ -9084,16 +9163,20 @@ fn encode_statement_into(
             key,
             value,
             indirect,
-        } => code.extend(encode_btree_map_insert(
-            *pointer_slot,
-            *length_slot,
-            *capacity_slot,
-            key,
-            value,
-            *indirect,
-            in_function,
-            relocations,
-        )),
+        } => {
+            let first_relocation = relocations.len();
+            let encoded = encode_btree_map_insert(
+                *pointer_slot,
+                *length_slot,
+                *capacity_slot,
+                key,
+                value,
+                *indirect,
+                in_function,
+                relocations,
+            );
+            append_encoded_chunk(code, encoded, relocations, first_relocation);
+        }
         Statement::If {
             condition,
             then_body,
@@ -11517,6 +11600,19 @@ fn append_encoded_value(
     }
 }
 
+fn append_encoded_chunk(
+    output: &mut Vec<u8>,
+    encoded: Vec<u8>,
+    relocations: &mut [PendingRelocation],
+    first_relocation: usize,
+) {
+    let base = output.len() as u64;
+    for relocation in &mut relocations[first_relocation..] {
+        relocation.offset += base;
+    }
+    output.extend(encoded);
+}
+
 fn materialize_relocations(
     pending: Vec<PendingRelocation>,
     base: u64,
@@ -11987,6 +12083,21 @@ mod tests {
         let _ = std::fs::remove_file(&output);
         assert!(result.status.success(), "{result:?}");
         assert_eq!(result.stdout, b"42\n");
+    }
+
+    #[test]
+    fn grows_string_vectors_and_reads_the_first_cloned_value() {
+        let object = emit(
+            "fn main() { let mut values: Vec<String> = Vec::new(); values.push(String::from(\"quill\")); values.push(String::from(\"rust\")); let first = values[0].clone(); println!(\"{first}\"); }",
+        )
+        .unwrap();
+        let output =
+            std::env::temp_dir().join(format!("quill-vector-string-index-{}", std::process::id()));
+        quill_link::link_elf_executable(&object, &output, "_start").unwrap();
+        let result = std::process::Command::new(&output).output().unwrap();
+        let _ = std::fs::remove_file(&output);
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"quill\n");
     }
 
     #[test]
