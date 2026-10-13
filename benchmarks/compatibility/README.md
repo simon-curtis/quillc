@@ -53,11 +53,12 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 28-case run passes 24 (85.7%) against clean Quill revision
-`1e3be71` and probes 28 of 29 tracked categories. The local workspace dependency,
-feature cfg, multiple binary targets, scalar struct clone/equality, and narrow
-unsigned-integer Vec push/iteration cases match rustc. A narrow two-`u64` Rust
-ABI call also links from a Quill object into a rustc host and matches output.
+The current 28-case run passes 25 (89.3%) against clean Quill revision
+`41a2eec` and probes 28 of 29 tracked categories. The local workspace dependency,
+feature cfg, multiple binary targets, scalar struct clone/equality, unsigned
+integer Vec push/iteration, and a cfg-emitting native build script match rustc.
+A narrow two-`u64` Rust ABI call also links from a Quill object into a rustc
+host and matches output.
 The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
 records the exact source revision, compiler-source cleanliness, binary hash,
@@ -66,10 +67,12 @@ and build time. The website reports this result separately from the manually cur
 behavior, Rust diagnostics, Cargo workflows, and Linux and Windows targets as
 described in the project specification.
 
-Windows output is the only tracked category with no probe. Four cases fail,
-covering build scripts, generic trait dispatch, panic behavior, and rustc's
-inability to consume Quill's object as an `--extern` library. The use-after-move
-diagnostic now matches rustc for the tested `String` formatting capture. Macro
-syntax and one literal macro expansion also pass. The 85.7% figure applies only to these
-28 curated cases; it is not a general Rust compatibility score and cannot be
+Windows output is the only tracked category with no probe. Three cases fail:
+generic trait dispatch, panic behavior, and rustc's inability to consume
+Quill's object as an `--extern` library. Build-script support currently covers
+the tested native script that emits `rustc-cfg`; other build-script directives
+and build dependencies remain incomplete. The use-after-move diagnostic now
+matches rustc for the tested `String` formatting capture. Macro syntax and one
+literal macro expansion also pass. The 89.3% figure applies only to these 28
+curated cases; it is not a general Rust compatibility score and cannot be
 compared directly to the manual 10.3% index ratio.
