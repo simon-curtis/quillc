@@ -2652,21 +2652,29 @@ fn main_exit_value(
     let mut environment = HashMap::new();
     let mut mutable_names = HashSet::new();
     let mut next_slot = 0;
+    let mut main_statements = statements.clone();
+    if let Some(tail) = tail
+        && !matches!(tail.kind, BodyExprKind::Unit)
+    {
+        if matches!(tail.kind, BodyExprKind::If { .. }) {
+            main_statements.push(BodyStatement::Expression {
+                expression: (**tail).clone(),
+                has_semicolon: false,
+            });
+        } else {
+            return Err(CodegenError::UnsupportedProgram(
+                "main tail expression must be unit or `std::process::exit`",
+            ));
+        }
+    }
     let lowered = lower_statements(
-        statements,
+        &main_statements,
         &mut environment,
         &mut mutable_names,
         &mut next_slot,
         functions,
         structs,
     )?;
-    if let Some(tail) = tail
-        && !matches!(tail.kind, BodyExprKind::Unit)
-    {
-        return Err(CodegenError::UnsupportedProgram(
-            "main tail expression must be unit or `std::process::exit`",
-        ));
-    }
     Ok(if lowered.is_empty() {
         Value::Integer(0)
     } else {
@@ -3794,6 +3802,58 @@ fn lower_statements(
                 initializer: Some(initializer),
                 ..
             } => {
+                if let BodyExprKind::MethodCall {
+                    receiver,
+                    method,
+                    arguments,
+                } = &initializer.kind
+                    && method == "clone"
+                    && arguments.is_empty()
+                    && let BodyExprKind::Path(receiver_name) = &receiver.kind
+                    && let Some(Value::StructLocal { type_name, fields }) =
+                        environment.get(receiver_name)
+                    && let Some(structure) = find_struct_type(type_name, structs)
+                    && structure.derived_traits.iter().any(|name| name == "Clone")
+                    && structure.fields.iter().all(|field| {
+                        field.name.as_deref().is_some_and(|name| {
+                            matches!(fields.get(name), Some(StructLocalField::Scalar { .. }))
+                        })
+                    })
+                {
+                    let mut cloned_fields = HashMap::with_capacity(structure.fields.len());
+                    for field in &structure.fields {
+                        let field_name = field.name.as_deref().expect("validated named field");
+                        let source = fields.get(field_name).expect("field layout was validated");
+                        let slot = *next_slot;
+                        *next_slot += 1;
+                        let value = value_from_struct_local_field(source);
+                        cloned_fields.insert(
+                            field_name.to_owned(),
+                            StructLocalField::Scalar {
+                                slot,
+                                is_word: is_word_type(&field.type_text),
+                                type_name: Some(field.type_text.clone()),
+                            },
+                        );
+                        lowered.push(Statement::Let {
+                            slot,
+                            initializer: value,
+                        });
+                    }
+                    environment.insert(
+                        name.clone(),
+                        Value::StructLocal {
+                            type_name: type_name.clone(),
+                            fields: cloned_fields,
+                        },
+                    );
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    continue;
+                }
                 if type_text.as_deref().is_some_and(is_i32_option_type) {
                     let option_tag = match &initializer.kind {
                         BodyExprKind::Call {
@@ -4593,7 +4653,12 @@ fn lower_statements(
                         continue;
                     }
                 };
-                let condition = condition_from_expression(condition, environment, functions)?;
+                let condition = condition_from_expression_with_structs(
+                    condition,
+                    environment,
+                    functions,
+                    structs,
+                )?;
                 let lower_branch = |branch: &BodyExpr,
                                     next_slot: &mut usize|
                  -> Result<Vec<Statement>, CodegenError> {
@@ -4633,7 +4698,12 @@ fn lower_statements(
             BodyStatement::While {
                 condition, body, ..
             } => {
-                let condition = condition_from_expression(condition, environment, functions)?;
+                let condition = condition_from_expression_with_structs(
+                    condition,
+                    environment,
+                    functions,
+                    structs,
+                )?;
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
                     return Err(CodegenError::UnsupportedProgram(
                         "while body must be a block",
@@ -6817,6 +6887,15 @@ fn condition_from_expression(
     environment: &HashMap<String, Value>,
     functions: &[FunctionItem],
 ) -> Result<Condition, CodegenError> {
+    condition_from_expression_with_structs(expression, environment, functions, &[])
+}
+
+fn condition_from_expression_with_structs(
+    expression: &BodyExpr,
+    environment: &HashMap<String, Value>,
+    functions: &[FunctionItem],
+    structs: &[StructItem],
+) -> Result<Condition, CodegenError> {
     match &expression.kind {
         BodyExprKind::Literal(LiteralKind::Boolean(value)) => Ok(Condition::Boolean(*value)),
         BodyExprKind::Path(name)
@@ -6869,24 +6948,53 @@ fn condition_from_expression(
             right: Box::new(Value::Integer(0)),
         }),
         BodyExprKind::Parenthesized(inner) => {
-            condition_from_expression(inner, environment, functions)
+            condition_from_expression_with_structs(inner, environment, functions, structs)
         }
         BodyExprKind::Binary {
             operator: BinaryOperator::And,
             left,
             right,
         } => Ok(Condition::And(
-            Box::new(condition_from_expression(left, environment, functions)?),
-            Box::new(condition_from_expression(right, environment, functions)?),
+            Box::new(condition_from_expression_with_structs(
+                left,
+                environment,
+                functions,
+                structs,
+            )?),
+            Box::new(condition_from_expression_with_structs(
+                right,
+                environment,
+                functions,
+                structs,
+            )?),
         )),
         BodyExprKind::Binary {
             operator: BinaryOperator::Or,
             left,
             right,
         } => Ok(Condition::Or(
-            Box::new(condition_from_expression(left, environment, functions)?),
-            Box::new(condition_from_expression(right, environment, functions)?),
+            Box::new(condition_from_expression_with_structs(
+                left,
+                environment,
+                functions,
+                structs,
+            )?),
+            Box::new(condition_from_expression_with_structs(
+                right,
+                environment,
+                functions,
+                structs,
+            )?),
         )),
+        BodyExprKind::Binary {
+            operator: BinaryOperator::Equal,
+            left,
+            right,
+        } if let Some(condition) =
+            derived_struct_equality_condition(left, right, environment, structs)? =>
+        {
+            Ok(condition)
+        }
         BodyExprKind::Binary {
             operator:
                 operator @ (BinaryOperator::Equal
@@ -6907,6 +7015,74 @@ fn condition_from_expression(
             "if conditions must be boolean literals or signed integer comparisons",
         )),
     }
+}
+
+fn derived_struct_equality_condition(
+    left: &BodyExpr,
+    right: &BodyExpr,
+    environment: &HashMap<String, Value>,
+    structs: &[StructItem],
+) -> Result<Option<Condition>, CodegenError> {
+    let BodyExprKind::Path(left_name) = &left.kind else {
+        return Ok(None);
+    };
+    let BodyExprKind::Path(right_name) = &right.kind else {
+        return Ok(None);
+    };
+    let (
+        Some(Value::StructLocal {
+            type_name: left_type,
+            fields: left_fields,
+        }),
+        Some(Value::StructLocal {
+            type_name: right_type,
+            fields: right_fields,
+        }),
+    ) = (environment.get(left_name), environment.get(right_name))
+    else {
+        return Ok(None);
+    };
+    if left_type.rsplit("::").next() != right_type.rsplit("::").next() {
+        return Ok(None);
+    }
+    let Some(structure) = find_struct_type(left_type, structs) else {
+        return Ok(None);
+    };
+    if !structure
+        .derived_traits
+        .iter()
+        .any(|name| name == "PartialEq")
+    {
+        return Ok(None);
+    }
+
+    let mut comparisons = Vec::with_capacity(structure.fields.len());
+    for field in &structure.fields {
+        let Some(field_name) = field.name.as_deref() else {
+            return Ok(None);
+        };
+        let (Some(left), Some(right)) = (left_fields.get(field_name), right_fields.get(field_name))
+        else {
+            return Ok(None);
+        };
+        if !matches!(left, StructLocalField::Scalar { .. })
+            || !matches!(right, StructLocalField::Scalar { .. })
+        {
+            return Ok(None);
+        }
+        comparisons.push(Condition::Compare {
+            operator: BinaryOperator::Equal,
+            left: Box::new(value_from_struct_local_field(left)),
+            right: Box::new(value_from_struct_local_field(right)),
+        });
+    }
+    let Some(mut condition) = comparisons.pop() else {
+        return Ok(Some(Condition::Boolean(true)));
+    };
+    while let Some(next) = comparisons.pop() {
+        condition = Condition::And(Box::new(condition), Box::new(next));
+    }
+    Ok(Some(condition))
 }
 
 fn validate_value_target(

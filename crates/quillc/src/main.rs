@@ -5023,6 +5023,10 @@ mod tests {
                 "fn main() { let mut values: Vec<i32> = Vec::new(); values.push(19); values.push(23); let mut total = 0; for value in values { total = total + value; } std::process::exit(if total == 42 { 42 } else { 1 }); }",
                 42,
             ),
+            (
+                "#[derive(Clone, PartialEq)] struct Marker { value: u64 } fn main() { let first = Marker { value: 42u64 }; let second = first.clone(); if first == second { println!(\"same\"); } else { println!(\"different\"); } }",
+                0,
+            ),
         ];
         for (program, expected) in cases {
             std::fs::write(&source, format!("{program}\n")).unwrap();
