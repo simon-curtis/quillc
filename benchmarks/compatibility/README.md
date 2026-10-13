@@ -70,6 +70,10 @@ parser/LSP paths, and the binary hash. The remaining failure is rustc consuming
 a Quill object through `--extern`. This report is evidence for the named cases
 and current corpus only.
 
+The [clean post-index run](results/2026-10-13-clean-40834d9.json) passes 54/55
+cases at clean revision `40834d9`, with a clean compiler source tree and binary
+hash. Its only failure remains the `.o` artifact passed through `rustc --extern`.
+
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
 through a generic bound to a concrete named struct. It records a modified
