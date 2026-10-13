@@ -51,14 +51,16 @@
     <div class="section-impression shell" aria-hidden="true"><canvas data-print="divider" data-phase="0"></canvas></div>
 
     <section class="project-overview shell" aria-labelledby="overview-title">
-      <h2 id="overview-title">Can Quill build your project?</h2>
+      <h2 id="overview-title">Rust language coverage.</h2>
       <div class="overview-columns">
         <div class="overview-progress">
-          <p class="overview-label">Compatibility today</p>
-          <h3>Experimental. Selected Rust projects.</h3>
-          <p>Quill can build supported programs and workspace-local libraries into Linux x86-64 executables. The Catalog Flow workspace is a working example.</p>
-          <p>It is not yet a drop-in replacement for rustc. Projects using third-party crates, procedural macros, or broader standard-library APIs can encounter unsupported features.</p>
-          <a class="text-link" href="/compatibility.html">Check your project’s requirements <span aria-hidden="true">↗</span></a>
+          <p class="overview-label">Language areas with implementation</p>
+          <div class="overview-score" data-language-coverage>—</div>
+          <h3 data-language-count>Loading language coverage</h3>
+          <p data-language-breakdown></p>
+          <p>Counts language syntax, semantic checking, and macros. An area counts once it has partial or full support; remaining gaps are listed in the compatibility index.</p>
+          <a class="text-link" href="/compatibility.html#language-coverage">See coverage and remaining gaps <span aria-hidden="true">↗</span></a>
+          <p class="coverage-method">Equal weight per tracked area. This is implementation coverage, not the percentage of Rust programs that compile. Standard libraries, Cargo, and platform support are tracked separately.</p>
         </div>
         <div class="overview-progress">
           <p class="overview-label">Before you try it</p>

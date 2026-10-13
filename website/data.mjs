@@ -87,9 +87,13 @@ export async function siteData() {
   const files = await publicFiles();
   const $ = load(await read("compatibility.html"));
   const counts = { available: 0, partial: 0, planned: 0, unassessed: 0 };
+  const languageCounts = { available: 0, partial: 0, planned: 0, unassessed: 0 };
+  const languageGroups = new Set(["Language", "Checking", "Macros"]);
   $(".compatibility-row[data-status]").each((_, el) => {
     const status = $(el).attr("data-status");
     if (status in counts) counts[status]++;
+    if (status in languageCounts && languageGroups.has($(el).find(".feature-category").text().trim()))
+      languageCounts[status]++;
   });
   const docs = await Promise.all(
     files
@@ -123,6 +127,7 @@ export async function siteData() {
   return {
     revision: revision(),
     counts,
+    languageCounts,
     docs,
     catalog,
     compatibility,
@@ -153,6 +158,16 @@ export function renderStats(html, data) {
   const $ = load(html);
   const { catalog, compatibility, lsp, counts } = data;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const language = data.languageCounts;
+  const languageTotal = Object.values(language).reduce((a, b) => a + b, 0);
+  const implemented = language.available + language.partial;
+  const coverage = languageTotal ? Math.round(implemented / languageTotal * 100) : null;
+  $("[data-language-coverage]").text(coverage === null ? "—" : `${coverage}%`);
+  $("[data-language-count]").text(`${implemented} of ${languageTotal} tracked language areas have some support`);
+  $("[data-language-breakdown]").text(
+    `${language.available} fully supported · ${language.partial} partially supported · ${language.planned} not yet supported · ${language.unassessed} unassessed`,
+  );
+
   $("#compatibility-score").text("—");
   $(".overview-score .score-unit").text("");
   const summary = `${counts.available} available · ${counts.partial} partial · ${counts.planned} not yet · ${counts.unassessed} unassessed`;
