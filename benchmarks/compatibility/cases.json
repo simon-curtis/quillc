@@ -1156,5 +1156,38 @@
     ],
     "edition": "2024",
     "source": "fn main() { let mut value = 42u64; let first = &mut value; let second = &*first; println!(\"{second}\"); println!(\"{first}\"); }"
+  },
+  {
+    "id": "diagnostic-assign-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0506",
+    "rustc_message": "cannot assign to `value` because it is borrowed",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &value;\n    value = 7;\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "diagnostic-read-while-mutably-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0503",
+    "rustc_message": "cannot use `value` because it was mutably borrowed",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    let observed = value;\n    println!(\"{first} {observed}\");\n}"
+  },
+  {
+    "id": "assignment-after-mutable-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    println!(\"{first}\");\n    value = 7;\n    println!(\"{value}\");\n}"
   }
 ]

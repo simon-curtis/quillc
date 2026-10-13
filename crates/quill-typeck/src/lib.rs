@@ -1109,6 +1109,57 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Block { statements, tail } => {
             let mut borrows = Vec::<(String, String, bool, Option<String>)>::new();
             for (index, statement) in statements.iter().enumerate() {
+                match statement {
+                    BodyStatement::Assign { name, span, .. } => {
+                        for (borrow_index, (_, place, _, _)) in borrows.iter().enumerate() {
+                            if place == name
+                                && local_borrow_is_live_after(
+                                    borrow_index,
+                                    &borrows,
+                                    &statements[index + 1..],
+                                    tail.as_deref(),
+                                )
+                            {
+                                diagnostics.push(TypeDiagnostic {
+                                    span: span.clone(),
+                                    message: format!(
+                                        "error[E0506]: cannot assign to `{name}` because it is borrowed"
+                                    ),
+                                });
+                                break;
+                            }
+                        }
+                    }
+                    BodyStatement::Let {
+                        initializer:
+                            Some(BodyExpr {
+                                kind: BodyExprKind::Path(name),
+                                span,
+                            }),
+                        ..
+                    } => {
+                        for (borrow_index, (_, place, is_mutable, _)) in borrows.iter().enumerate() {
+                            if place == name
+                                && *is_mutable
+                                && local_borrow_is_live_after(
+                                    borrow_index,
+                                    &borrows,
+                                    &statements[index + 1..],
+                                    tail.as_deref(),
+                                )
+                            {
+                                diagnostics.push(TypeDiagnostic {
+                                    span: span.clone(),
+                                    message: format!(
+                                        "error[E0503]: cannot use `{name}` because it was mutably borrowed"
+                                    ),
+                                });
+                                break;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
                 if let BodyStatement::Let {
                     name: Some(name),
                     initializer: Some(initializer),
