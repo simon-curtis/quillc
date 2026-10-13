@@ -27,21 +27,22 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.688 s | 5.611 s | 561.3 MiB |
-| `quillc cargo-build-subset` | Cold | 0.332 s | 1.904 s | 138.9 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 22.1 MiB |
-| `quillc cargo-build-subset` | Warm | 0.007 s | 0.001 s | 22.1 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.409 s | 230.2 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.025 s | 0.082 s | 35.4 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.430 s | 230.1 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.086 s | 0.177 s | 52.4 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.681 s | 5.606 s | 569.2 MiB |
+| `quillc cargo-build-subset` | Cold | 0.326 s | 1.914 s | 133.5 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 21.5 MiB |
+| `quillc cargo-build-subset` | Warm | 0.006 s | 0.001 s | 21.5 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.285 s | 0.407 s | 226.9 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.086 s | 35.6 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.303 s | 0.431 s | 229.6 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.083 s | 0.177 s | 51.9 MiB |
 
-Quill's median wall-time ratios were 8.10× cold, 2.71× warm, 11.44× for the
-comment edit, and 3.51× for the semantic edit. Peak RSS was lower in three
-states and equal in the warm state. The semantic-edit CPU-time ratio was 2.43×
-(0.177 s vs. 0.430 s). Warm wall time remains below 3×, and this result
-measures only the documented fixture; it does not establish general Rust
-compiler performance.
+Quill's median wall-time ratios were 8.22× cold, 3.17× warm, 10.96× for the
+comment edit, and 3.65× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. The semantic-edit CPU-time ratio was 2.44×
+(0.177 s vs. 0.431 s). This clears the 3× wall-time bar in all four states on
+this fixture; it does not establish general Rust compiler performance. The
+latest raw run was built from revision `abd6617`; its dirty-source list records
+separate Cargo/LSP workspace edits, and its binary hash is recorded in the JSON.
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
