@@ -3794,6 +3794,41 @@ fn lower_statements(
                 initializer: Some(initializer),
                 ..
             } => {
+                if type_text.as_deref().is_some_and(is_i32_option_type) {
+                    let option_tag = match &initializer.kind {
+                        BodyExprKind::Call {
+                            callee, arguments, ..
+                        } if is_option_some_path(callee)
+                            && arguments.len() == 1
+                            && matches!(
+                                arguments[0].kind,
+                                BodyExprKind::Literal(LiteralKind::Integer { .. })
+                            ) =>
+                        {
+                            Some(1)
+                        }
+                        BodyExprKind::Path(path) if is_option_none_path(path) => Some(0),
+                        _ => None,
+                    };
+                    if let Some(option_tag) = option_tag {
+                        let slot = *next_slot;
+                        *next_slot += 1;
+                        environment.insert(
+                            name.clone(),
+                            Value::OptionIsSome(Box::new(Value::Local(slot))),
+                        );
+                        if *mutable {
+                            mutable_names.insert(name.clone());
+                        } else {
+                            mutable_names.remove(name);
+                        }
+                        lowered.push(Statement::Let {
+                            slot,
+                            initializer: Value::Integer(option_tag),
+                        });
+                        continue;
+                    }
+                }
                 if let Some(function) =
                     function_for_call_expression(initializer, environment, functions)
                     && let Some(return_type) = function.return_type.as_deref()
@@ -6160,6 +6195,11 @@ fn value_from_expression(
             method,
             arguments,
         } if method == "is_some" && arguments.is_empty() => {
+            if let BodyExprKind::Path(name) = &receiver.kind
+                && let Some(value @ Value::OptionIsSome(_)) = environment.get(name)
+            {
+                return Ok(value.clone());
+            }
             let Some(callee) = receiver_call_name(receiver, environment) else {
                 return Err(CodegenError::UnsupportedProgram(
                     "`.is_some()` currently requires a supported Option function call",
@@ -9035,6 +9075,13 @@ fn is_word_value(value: &Value) -> bool {
             payload_is_word: true,
             ..
         }
+    ) || matches!(
+        value,
+        Value::If {
+            then_value,
+            else_value,
+            ..
+        } if is_word_value(then_value) && is_word_value(else_value)
     )
 }
 
@@ -11461,6 +11508,15 @@ mod tests {
     #[test]
     fn lowers_initialized_locals_in_main() {
         assert!(emit("fn main() { let value = 1; }").is_ok());
+    }
+
+    #[test]
+    fn lowers_option_is_some_for_a_local_some_value() {
+        let object = emit(
+            "fn main() { let value: Option<i32> = Some(42); let result = if value.is_some() { 42u64 } else { 0u64 }; println!(\"{result}\"); }",
+        )
+        .unwrap();
+        assert!(object.starts_with(b"\x7fELF"));
     }
 
     #[test]
