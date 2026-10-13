@@ -268,7 +268,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                   "runtime status or output differs for: " + ", ".join(mismatches))
         return Result(case["id"], case["kind"], passed, True, True, reason,
                       rustc_result.returncode, quill_status, passed)
-    elif case["kind"] == "parse":
+    elif case["kind"] in {"parse", "syntax-reject"}:
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
         rust_meta = case_dir / "rustc.rmeta"
@@ -286,6 +286,14 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         rustc_args += [str(source), "-o", str(rust_binary)]
         rustc_result = invoke(rustc_args, case_dir)
     rustc_accepted = rustc_result.returncode == 0
+    if case["kind"] == "syntax-reject":
+        quill_result = invoke([str(quill), "parse", str(source)], case_dir)
+        quill_accepted = quill_result.returncode == 0
+        passed = not rustc_accepted and not quill_accepted
+        reason = "both reject source syntax" if passed else "syntax rejection differs"
+        return Result(case["id"], case["kind"], passed, rustc_accepted,
+                      quill_accepted, reason, rustc_result.returncode,
+                      quill_result.returncode)
     if not rustc_accepted:
         return Result(case["id"], case["kind"], False, False, False,
                       "rustc rejected a positive corpus case", rustc_result.returncode)
@@ -369,7 +377,7 @@ def main() -> int:
             raise RuntimeError("no compatibility cases selected")
         if len({case["id"] for case in cases}) != len(cases):
             raise RuntimeError("case ids must be unique")
-        if any(case.get("kind") not in {"run", "cargo-run", "parse", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
+        if any(case.get("kind") not in {"run", "cargo-run", "parse", "syntax-reject", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
             raise RuntimeError("unsupported case kind")
         tracker_html = (ROOT / "compatibility.html").read_text(encoding="utf-8")
         feature_rows = re.findall(

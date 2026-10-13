@@ -467,6 +467,15 @@
     "source": "async fn answer() -> u64 { 42 }\nfn main() {}"
   },
   {
+    "id": "edition-2018-async-identifier-rejected",
+    "kind": "syntax-reject",
+    "features": [
+      "rust-source-parsing"
+    ],
+    "edition": "2018",
+    "source": "fn main() { let async = 42u64; }"
+  },
+  {
     "id": "edition-2021-format-capture",
     "kind": "run",
     "features": [
