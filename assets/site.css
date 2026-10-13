@@ -206,3 +206,21 @@ h2{font-size:clamp(46px,4.75vw,72px);line-height:1.075;font-weight:460;letter-sp
 .pipeline-panels.is-interactive .pipeline-panel[hidden]{display:grid;visibility:hidden;pointer-events:none}
 @media(max-width:540px){.pipeline-step:not(:last-child)::after{display:none}}
 @media(max-width:360px){.pipeline-step>span{font-size:14px}}
+
+/* Clear section breaks use the same ink and paper as the typography. */
+.hero::after{background:var(--ink)}
+.project-overview{padding-block:42px 48px;border-bottom:1px solid var(--ink)}
+.approach{padding-block:54px 48px}
+.print-transition{height:112px;margin-top:0}
+.print-transition+.performance{border-top:1px solid var(--ink);padding-block:58px 66px}
+.stack{border-top:1px solid var(--ink);padding-block:54px 60px}
+.inspiration{border-top:1px solid var(--ink);padding-block:58px 64px}
+main+.footer{border-top:1px solid var(--ink)}
+@media(max-width:900px){
+  .project-overview{padding-block:32px 38px}
+  .approach{padding-block:42px 32px}
+  .print-transition{height:82px;margin-top:0}
+  .print-transition+.performance{padding-block:42px 48px}
+  .stack{padding-block:42px 48px}
+  .inspiration{padding-block:44px 50px}
+}
