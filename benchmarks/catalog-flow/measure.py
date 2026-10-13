@@ -28,6 +28,8 @@ QUILL_OUTPUT = pathlib.Path(tempfile.gettempdir()) / "catalog-flow-quill-measure
 QUILL_CACHE = pathlib.Path(tempfile.gettempdir()) / "catalog-flow-quill-query-cache"
 QUILL = ROOT / "target/release/quillc"
 TOOLCHAIN = "+nightly-2026-08-23"
+RUNTIME_WARMUPS = 5
+RUNTIME_SAMPLES = 25
 
 
 def measure(
@@ -96,6 +98,32 @@ def measure(
         "cpu_seconds": round(user + system, 6),
         "peak_process_tree_rss_mib": round(peak_rss / (1024 * 1024), 1),
         "command": " ".join(command),
+    }
+
+
+def measure_binary(
+    label: str, binary: pathlib.Path, expected_output: str
+) -> dict[str, float | int | str]:
+    before_children = resource.getrusage(resource.RUSAGE_CHILDREN)
+    started = time.perf_counter()
+    result = subprocess.run(
+        [str(binary)], capture_output=True, text=True, check=True
+    )
+    wall = time.perf_counter() - started
+    after_children = resource.getrusage(resource.RUSAGE_CHILDREN)
+    user = after_children.ru_utime - before_children.ru_utime
+    system = after_children.ru_stime - before_children.ru_stime
+    if result.stdout != expected_output:
+        raise RuntimeError(
+            f"{label} output changed during runtime measurement: {result.stdout!r}"
+        )
+    return {
+        "label": label,
+        "wall_seconds": wall,
+        "user_seconds": user,
+        "system_seconds": system,
+        "cpu_seconds": user + system,
+        "command": str(binary),
     }
 
 
@@ -209,6 +237,26 @@ def main() -> None:
     if changed_runtime_output == rustc_run.stdout:
         raise SystemExit("semantic incremental edit did not change runtime behavior")
 
+    # Warm both executables, then alternate them to reduce ordering and thermal bias.
+    binaries = [
+        ("rustc_binary_runtime", rustc_binary),
+        ("quill_binary_runtime", QUILL_OUTPUT),
+    ]
+    for _, binary in binaries:
+        for _ in range(RUNTIME_WARMUPS):
+            run = subprocess.run(
+                [str(binary)], capture_output=True, text=True, check=True
+            )
+            if run.stdout != rustc_run.stdout:
+                raise SystemExit(f"runtime output differs for {binary}")
+    runtime_results = []
+    for run_number in range(1, RUNTIME_SAMPLES + 1):
+        ordered_binaries = binaries if run_number % 2 else list(reversed(binaries))
+        for label, binary in ordered_binaries:
+            result = measure_binary(label, binary, rustc_run.stdout)
+            result["run"] = run_number
+            runtime_results.append(result)
+
     compiler_paths = [
         ROOT / "Cargo.toml",
         ROOT / "Cargo.lock",
@@ -260,7 +308,7 @@ def main() -> None:
             "peak process-tree RSS sampled every 2 ms for cold/incremental builds; "
             "warm cache hits use wait4 process RSS because they launch no compiler child"
         ),
-        "results": results,
+        "results": results + runtime_results,
         "medians": {
             label: {
                 metric: round(
@@ -288,6 +336,26 @@ def main() -> None:
                 "quill_semantic_incremental",
             ]
         },
+        "runtime_medians": {
+            label: {
+                metric: round(
+                    statistics.median(
+                        result[metric]
+                        for result in runtime_results
+                        if result["label"] == label
+                    ),
+                    6,
+                )
+                for metric in ["wall_seconds", "cpu_seconds"]
+            }
+            for label, _ in binaries
+        },
+        "runtime_measurement": {
+            "warmups_per_binary": RUNTIME_WARMUPS,
+            "samples_per_binary": RUNTIME_SAMPLES,
+            "method": "separate process wall and child CPU time; includes process startup",
+            "output_checked_each_run": True,
+        },
     }
     output = BENCH / "results.json"
     output.write_text(json.dumps(data, indent=2) + "\n")
@@ -297,6 +365,11 @@ def main() -> None:
             f"{label}: wall={result['wall_seconds']}s "
             f"cpu={result['cpu_seconds']}s "
             f"rss={result['peak_process_tree_rss_mib']} MiB"
+        )
+    for label, result in data["runtime_medians"].items():
+        print(
+            f"{label}: wall={result['wall_seconds']}s "
+            f"cpu={result['cpu_seconds']}s"
         )
     print(f"runtime output matches: {rustc_run.stdout.strip()}")
 
