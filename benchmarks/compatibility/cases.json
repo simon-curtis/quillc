@@ -520,6 +520,71 @@
     "source": "fn main() { let answer = 42u64; println!(\"{answer}\"); }"
   },
   {
+    "id": "edition-2015-await-and-dyn-identifiers",
+    "kind": "cargo-run",
+    "features": [
+      "linux-x86-64-executables",
+      "rust-source-parsing",
+      "functions-and-scalar-arithmetic"
+    ],
+    "manifest": "Cargo.toml",
+    "binary": "edition-2015-identifiers",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"edition-2015-identifiers\"\nversion = \"0.1.0\"\nedition = \"2015\"\n",
+      "src/main.rs": "fn main() { let await = 19u64; let dyn = 23u64; let _total = await + dyn; println!(\"edition-2015-identifiers\"); }\n"
+    }
+  },
+  {
+    "id": "edition-2021-gen-identifier",
+    "kind": "cargo-run",
+    "features": [
+      "linux-x86-64-executables",
+      "rust-source-parsing",
+      "functions-and-scalar-arithmetic"
+    ],
+    "manifest": "Cargo.toml",
+    "binary": "edition-2021-gen-identifier",
+    "files": {
+      "Cargo.toml": "[package]\nname = \"edition-2021-gen-identifier\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      "src/main.rs": "fn main() { let gen = 42u64; let _value = gen; println!(\"edition-2021-gen\"); }\n"
+    }
+  },
+  {
+    "id": "edition-2024-gen-identifier-rejected",
+    "kind": "syntax-reject",
+    "features": ["rust-source-parsing"],
+    "edition": "2024",
+    "source": "fn main() { let gen = 42u64; }"
+  },
+  {
+    "id": "edition-2024-gen-raw-identifier",
+    "kind": "parse",
+    "features": ["rust-source-parsing"],
+    "edition": "2024",
+    "source": "macro_rules! discard { ($item:tt) => {}; } fn main() { let r#gen = 42u64; let _value = r#gen; discard!(gen); }"
+  },
+  {
+    "id": "edition-2024-unsafe-extern-required",
+    "kind": "syntax-reject",
+    "features": ["rust-source-parsing"],
+    "edition": "2024",
+    "source": "extern \"C\" { fn abs(value: i32) -> i32; }"
+  },
+  {
+    "id": "edition-2024-unsafe-extern-accepted",
+    "kind": "parse",
+    "features": ["rust-source-parsing"],
+    "edition": "2024",
+    "source": "#[unsafe(no_mangle)] pub extern \"C\" fn exported() {} unsafe extern \"C\" { fn abs(value: i32) -> i32; }"
+  },
+  {
+    "id": "edition-2024-unsafe-attribute-required",
+    "kind": "syntax-reject",
+    "features": ["rust-source-parsing"],
+    "edition": "2024",
+    "source": "#[no_mangle] pub extern \"C\" fn exported() {}"
+  },
+  {
     "id": "edition-2024-if-let-chain",
     "kind": "parse",
     "features": [

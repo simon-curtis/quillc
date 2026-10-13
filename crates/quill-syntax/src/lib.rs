@@ -639,8 +639,8 @@ pub fn parse_ast_with_cfg(source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Parse
     parse_ast_with_cfg_and_edition(source, cfg, "2024")
 }
 
-/// Parse source using its Cargo edition. Rust 2015 treats `async` as an
-/// identifier; newer editions reserve it for async syntax.
+/// Parse source using its Cargo edition, including edition-specific keywords
+/// and foreign-item safety rules.
 pub fn parse_ast_with_cfg_and_edition(
     source: &SourceFile,
     cfg: &quill_cfg::CfgSet,
@@ -676,9 +676,6 @@ pub fn parse_ast_with_cfg_and_edition(
 }
 
 fn parse_file_for_edition(source: &str, edition: &str) -> syn::Result<syn::File> {
-    if edition != "2015" {
-        return syn::parse_file(source);
-    }
     fn rawify_async(tokens: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         use proc_macro2::{Ident, TokenTree};
         tokens
@@ -688,10 +685,8 @@ fn parse_file_for_edition(source: &str, edition: &str) -> syn::Result<syn::File>
                     TokenTree::Ident(Ident::new_raw("async", ident.span()))
                 }
                 TokenTree::Group(group) => {
-                    let mut rewritten = proc_macro2::Group::new(
-                        group.delimiter(),
-                        rawify_async(group.stream()),
-                    );
+                    let mut rewritten =
+                        proc_macro2::Group::new(group.delimiter(), rawify_async(group.stream()));
                     rewritten.set_span(group.span());
                     TokenTree::Group(rewritten)
                 }
@@ -699,8 +694,118 @@ fn parse_file_for_edition(source: &str, edition: &str) -> syn::Result<syn::File>
             })
             .collect()
     }
+
+    fn rawify_identifier_at(
+        tokens: proc_macro2::TokenStream,
+        location: proc_macro2::LineColumn,
+        identifiers: &[&str],
+    ) -> (proc_macro2::TokenStream, bool) {
+        use proc_macro2::{Group, Ident, TokenTree};
+        let mut changed = false;
+        let tokens = tokens
+            .into_iter()
+            .map(|token| match token {
+                TokenTree::Ident(ident)
+                    if !changed
+                        && identifiers.contains(&ident.to_string().as_str())
+                        && ident.span().start() == location =>
+                {
+                    changed = true;
+                    TokenTree::Ident(Ident::new_raw(&ident.to_string(), ident.span()))
+                }
+                TokenTree::Group(group) if !changed => {
+                    let (stream, nested_change) =
+                        rawify_identifier_at(group.stream(), location, identifiers);
+                    if nested_change {
+                        changed = true;
+                        let mut rewritten = Group::new(group.delimiter(), stream);
+                        rewritten.set_span(group.span());
+                        TokenTree::Group(rewritten)
+                    } else {
+                        TokenTree::Group(group)
+                    }
+                }
+                other => other,
+            })
+            .collect();
+        (tokens, changed)
+    }
+
     let tokens = source.parse::<proc_macro2::TokenStream>()?;
-    syn::parse2(rawify_async(tokens))
+    if edition == "2015" {
+        // Syn parses edition-neutral tokens. Raw identifiers let its parser
+        // accept Rust 2015's `async` identifier without treating async
+        // functions or blocks as Rust 2015 syntax.
+        let mut tokens = rawify_async(tokens);
+        loop {
+            match syn::parse2(tokens.clone()) {
+                Ok(file) => return Ok(file),
+                Err(error) => {
+                    // `await` and `dyn` are also identifiers in 2015. Only
+                    // rewrite the exact token Syn rejected: `dyn Trait`
+                    // remains valid trait-object syntax in this edition.
+                    let location = error.span().start();
+                    let (rewritten, changed) =
+                        rawify_identifier_at(tokens, location, &["await", "dyn"]);
+                    if !changed {
+                        return Err(error);
+                    }
+                    tokens = rewritten;
+                }
+            }
+        }
+    }
+
+    let file = syn::parse2(tokens)?;
+    if matches!(edition, "2024" | "future") {
+        let mut validator = Edition2024Validator::default();
+        validator.visit_file(&file);
+        if let Some(error) = validator.error {
+            return Err(error);
+        }
+    }
+    Ok(file)
+}
+
+#[derive(Default)]
+struct Edition2024Validator {
+    error: Option<syn::Error>,
+}
+
+impl<'ast> Visit<'ast> for Edition2024Validator {
+    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        if self.error.is_none() && ident.to_string() == "gen" {
+            self.error = Some(syn::Error::new(
+                ident.span(),
+                "`gen` is a reserved keyword in Rust 2024",
+            ));
+        }
+    }
+
+    fn visit_item_foreign_mod(&mut self, item: &'ast syn::ItemForeignMod) {
+        if self.error.is_none() && item.unsafety.is_none() {
+            self.error = Some(syn::Error::new(
+                item.span(),
+                "extern blocks must be unsafe in Rust 2024",
+            ));
+        }
+        syn::visit::visit_item_foreign_mod(self, item);
+    }
+
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        const UNSAFE_ATTRIBUTES: &[&str] = &["no_mangle", "export_name", "link_section", "naked"];
+        if self.error.is_none()
+            && UNSAFE_ATTRIBUTES
+                .iter()
+                .any(|name| attribute.path().is_ident(name))
+        {
+            self.error = Some(syn::Error::new(
+                attribute.span(),
+                "this attribute is unsafe and must be wrapped in `unsafe(...)` in Rust 2024",
+            ));
+        }
+        syn::visit::visit_attribute(self, attribute);
+    }
 }
 
 fn parse_cache_path(
@@ -1149,7 +1254,9 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                     .params
                     .iter()
                     .filter_map(|parameter| match parameter {
-                        syn::GenericParam::Type(parameter) => Some(parameter.ident.unraw().to_string()),
+                        syn::GenericParam::Type(parameter) => {
+                            Some(parameter.ident.unraw().to_string())
+                        }
                         syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => None,
                     }),
             );
@@ -1258,8 +1365,13 @@ fn supported_macro_rule(item: &syn::ItemMacro) -> Option<LocalMacroRule> {
     }
 
     let pattern_tokens = pattern.stream().into_iter().collect::<Vec<_>>();
-    let [capture_dollar, capture_group, separator_token, repetition, optional_tail @ ..] =
-        pattern_tokens.as_slice()
+    let [
+        capture_dollar,
+        capture_group,
+        separator_token,
+        repetition,
+        optional_tail @ ..,
+    ] = pattern_tokens.as_slice()
     else {
         return None;
     };
@@ -1289,8 +1401,7 @@ fn supported_macro_rule(item: &syn::ItemMacro) -> Option<LocalMacroRule> {
                 return None;
             };
             let optional_tokens = optional_group.stream().into_iter().collect::<Vec<_>>();
-            optional_tokens.len() == 1
-                && is_macro_punct(&optional_tokens[0], separator.as_char())
+            optional_tokens.len() == 1 && is_macro_punct(&optional_tokens[0], separator.as_char())
         }
         _ => false,
     };
@@ -1354,7 +1465,9 @@ fn expand_syn_macros(
                         .find(|definition| {
                             definition.name == name && definition.scope == self.scope
                         })
-                        .and_then(|definition| expand_local_macro(&definition.rule, &invocation.mac.tokens))
+                        .and_then(|definition| {
+                            expand_local_macro(&definition.rule, &invocation.mac.tokens)
+                        })
                 })
             } else {
                 None
@@ -1431,7 +1544,11 @@ fn expand_macro_transcriber(
             && matches!(operator.as_char(), '+' | '*')
         {
             for value in values {
-                output.extend(substitute_macro_capture(&repetition.stream(), capture, value));
+                output.extend(substitute_macro_capture(
+                    &repetition.stream(),
+                    capture,
+                    value,
+                ));
             }
             index += 3;
             continue;
@@ -1784,9 +1901,10 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                     ),
                     syn::Pat::Type(pattern) => {
                         let (name, mutable) = match &*pattern.pat {
-                            syn::Pat::Ident(ident) => {
-                                (Some(ident.ident.unraw().to_string()), ident.mutability.is_some())
-                            }
+                            syn::Pat::Ident(ident) => (
+                                Some(ident.ident.unraw().to_string()),
+                                ident.mutability.is_some(),
+                            ),
                             _ => (None, false),
                         };
                         (
@@ -2079,7 +2197,9 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 .iter()
                 .map(|pattern| match pattern {
                     syn::Pat::Ident(ident) if ident.by_ref.is_none() && ident.subpat.is_none() => {
-                        Some(ClosureParameter::Identifier(ident.ident.unraw().to_string()))
+                        Some(ClosureParameter::Identifier(
+                            ident.ident.unraw().to_string(),
+                        ))
                     }
                     syn::Pat::Tuple(tuple) => tuple
                         .elems
@@ -3283,6 +3403,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parses_rust_2015_identifiers_without_rewriting_dyn_trait_objects() {
+        let source = SourceFile::from_text(
+            "edition-2015.rs",
+            "trait Value {} fn accept(_: &dyn Value) {} fn main() { let async = 1u64; let await = 2u64; let dyn = 3u64; let _total = async + await + dyn; }",
+        );
+        let parsed = parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2015");
+        assert!(!parsed.had_error, "{:?}", parsed.diagnostics);
+
+        let async_function =
+            SourceFile::from_text("edition-2015.rs", "pub async fn answer() -> u64 { 42 }");
+        let parsed =
+            parse_ast_with_cfg_and_edition(&async_function, &quill_cfg::CfgSet::default(), "2015");
+        assert!(parsed.had_error, "Rust 2015 accepted async fn syntax");
+    }
+
+    #[test]
+    fn enforces_rust_2024_keyword_and_unsafe_item_rules() {
+        let invalid_sources = [
+            "fn main() { let gen = 1u64; }",
+            "extern \"C\" { fn abs(value: i32) -> i32; }",
+            "#[no_mangle] pub extern \"C\" fn exported() {}",
+        ];
+        for source_text in invalid_sources {
+            let source = SourceFile::from_text("edition-2024.rs", source_text);
+            let parsed =
+                parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2024");
+            assert!(parsed.had_error, "accepted invalid source: {source_text}");
+        }
+    }
+
+    #[test]
+    fn accepts_rust_2024_raw_gen_and_unsafe_forms() {
+        let source = SourceFile::from_text(
+            "edition-2024.rs",
+            "#[unsafe(no_mangle)] pub extern \"C\" fn exported() {} unsafe extern \"C\" { fn abs(value: i32) -> i32; } macro_rules! discard { ($item:tt) => {}; } fn main() { let r#gen = 1u64; let _value = r#gen; discard!(gen); }",
+        );
+        let parsed = parse_ast_with_cfg_and_edition(&source, &quill_cfg::CfgSet::default(), "2024");
+        assert!(!parsed.had_error, "{:?}", parsed.diagnostics);
+    }
+
+    #[test]
     fn skips_nested_comments_and_preserves_doc_comments() {
         let source = SourceFile::from_text(
             "test.rs",
@@ -3688,7 +3849,9 @@ mod tests {
             panic!("expected the expression block transcribed by the macro");
         };
         assert_eq!(statements.len(), 4);
-        assert!(matches!(tail.as_deref().map(|expr| &expr.kind), Some(BodyExprKind::Path(name)) if name == "total"));
+        assert!(
+            matches!(tail.as_deref().map(|expr| &expr.kind), Some(BodyExprKind::Path(name)) if name == "total")
+        );
     }
 
     #[test]
