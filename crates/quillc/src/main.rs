@@ -527,7 +527,6 @@ fn signatures_for_target(
         if function.def_path.scope.iter().any(|scope| {
             !scope.starts_with("mod:")
                 && !scope.starts_with("impl:")
-                && !scope.starts_with("trait:")
                 && !scope.starts_with("traitimpl:")
         })
         {
@@ -541,7 +540,6 @@ fn signatures_for_target(
                 scope
                     .strip_prefix("mod:")
                     .or_else(|| scope.strip_prefix("impl:"))
-                    .or_else(|| scope.strip_prefix("trait:"))
             })
             .map(str::to_owned)
             .collect();

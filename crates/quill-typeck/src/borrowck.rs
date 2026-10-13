@@ -1283,7 +1283,11 @@ impl Checker<'_, '_> {
         state.loans.retain(|loan| {
             loan.holder
                 .as_ref()
-                .is_none_or(|holder| original.all_for_holder(holder).next().is_some())
+                .is_none_or(|holder| {
+                    original.all_for_holder(holder).next().is_some()
+                        || (!declarations.contains(holder)
+                            && original_mutability.contains_key(holder))
+                })
         });
         for name in declarations {
             state
@@ -1584,9 +1588,37 @@ impl Checker<'_, '_> {
                 declarations.insert(name.clone());
                 self.mutable_locals.insert(name.clone(), false);
                 self.local_types.insert(name.clone(), binding_type);
+                let mut body_state = state.clone();
+                self.expression(body, &mut body_state);
                 *state = self.loop_fixed_point(state, label.as_deref(), true, |checker, loop_state| {
                     checker.expression(body, loop_state);
                 });
+                let escaping_loans = body_state
+                    .loans
+                    .iter()
+                    .filter(|loan| {
+                        loan.place.root == *name
+                            && loan.holder.as_deref().is_some_and(|holder| {
+                                holder != name
+                                    && self.live_after.iter().any(|live_places| {
+                                        live_places.iter().any(|place| {
+                                            holder_projection_live(
+                                                holder,
+                                                &loan.holder_projection,
+                                                place,
+                                            )
+                                        })
+                                    })
+                            })
+                    })
+                    .map(|loan| loan.origin.clone())
+                    .collect::<Vec<_>>();
+                for origin in escaping_loans {
+                    self.report(
+                        origin,
+                        format!("error[E0597]: `{name}` does not live long enough"),
+                    );
+                }
             }
             BodyStatement::ForEach {
                 label,
@@ -1656,12 +1688,32 @@ impl Checker<'_, '_> {
                     checker.expression(body, loop_state);
                 });
                 for name in names {
-                    for loan in state.loans.iter().filter(|loan| {
-                        loan.place.root == *name
-                            && loan.holder.as_deref().is_some_and(|holder| !names.contains(&holder.to_owned()))
-                    }) {
+                    let escaping_loans = state
+                        .loans
+                        .iter()
+                        .filter(|loan| {
+                            loan.place.root == *name
+                                && loan
+                                    .holder
+                                    .as_deref()
+                                    .is_some_and(|holder| !names.contains(&holder.to_owned()))
+                                && loan.holder.as_deref().is_some_and(|holder| {
+                                    self.live_after.iter().any(|live_places| {
+                                        live_places.iter().any(|place| {
+                                            holder_projection_live(
+                                                holder,
+                                                &loan.holder_projection,
+                                                place,
+                                            )
+                                        })
+                                    })
+                                })
+                        })
+                        .map(|loan| loan.origin.clone())
+                        .collect::<Vec<_>>();
+                    for origin in escaping_loans {
                         self.report(
-                            loan.origin.clone(),
+                            origin,
                             format!("error[E0597]: `{name}` does not live long enough"),
                         );
                     }

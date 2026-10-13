@@ -8356,6 +8356,44 @@ mod tests {
     }
 
     #[test]
+    fn checks_range_binding_borrows_only_when_the_reference_is_live_after_the_loop() {
+        let source = SourceFile::from_text(
+            "range-binding-scope.rs",
+            "fn valid() { let mut reference = &0i32; for value in 0..1 { reference = &value; } } fn invalid() -> i32 { let mut reference = &0i32; for value in 0..1 { reference = &value; } *reference }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.message.contains("error[E0597]"))
+                .count(),
+            1,
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn checks_iterator_binding_borrows_only_when_the_reference_is_live_after_the_loop() {
+        let source = SourceFile::from_text(
+            "iterator-binding-scope.rs",
+            "fn valid() { let values: &[i32] = &[1i32]; let mut reference = &&0i32; for value in values { reference = &value; } } fn invalid() -> i32 { let values: &[i32] = &[1i32]; let mut reference = &&0i32; for value in values { reference = &value; } **reference }",
+        );
+        let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert_eq!(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.message.contains("error[E0597]"))
+                .count(),
+            1,
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
     fn checks_user_defined_shared_and_mutable_method_receivers() {
         let source = SourceFile::from_text(
             "method-receiver-borrows.rs",
