@@ -64,6 +64,7 @@ enum Ty {
     String,
     StringSlice,
     Vector(Box<Ty>),
+    Array(Box<Ty>, usize),
     Slice(Box<Ty>),
     Map(Box<Ty>, Box<Ty>),
     Iterator(Box<Ty>),
@@ -115,6 +116,7 @@ impl Ty {
             Self::String => "string",
             Self::StringSlice => "str",
             Self::Vector(_) => "Vec",
+            Self::Array(_, _) => "array",
             Self::Slice(_) => "slice",
             Self::Map(_, _) => "map",
             Self::Iterator(_) => "iterator",
@@ -336,6 +338,11 @@ fn type_from_syntax(text: &str, structs: &[StructSignature]) -> Ty {
         .strip_prefix('[')
         .and_then(|value| value.strip_suffix(']'))
     {
+        if let Some((element, length)) = element.split_once(';')
+            && let Ok(length) = length.trim().parse::<usize>()
+        {
+            return Ty::Array(Box::new(type_from_syntax(element, structs)), length);
+        }
         return Ty::Slice(Box::new(type_from_syntax(element, structs)));
     }
     if let Some((key, value)) =
@@ -470,7 +477,7 @@ fn is_cloneable(ty: &Ty, structs: &[StructSignature]) -> bool {
         | Ty::StringSlice
         | Ty::Reference(_)
         | Ty::Unknown => true,
-        Ty::Vector(item) | Ty::Slice(item) => is_cloneable(item, structs),
+        Ty::Vector(item) | Ty::Slice(item) | Ty::Array(item, _) => is_cloneable(item, structs),
         Ty::Map(key, value) => is_cloneable(key, structs) && is_cloneable(value, structs),
         Ty::Tuple(items) => items.iter().all(|item| is_cloneable(item, structs)),
         Ty::Named(name) => find_nominal_signature(structs, name).is_some_and(|structure| {
@@ -949,10 +956,16 @@ fn check_call_targets(
             }
             check_call_targets(body, &mut scoped, signatures, diagnostics);
         }
-        BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
                 check_call_targets(element, locals, signatures, diagnostics);
             }
+        }
+        BodyExprKind::Index { base, index } => {
+            check_call_targets(base, locals, signatures, diagnostics);
+            check_call_targets(index, locals, signatures, diagnostics);
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
@@ -1159,10 +1172,16 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
             }
         }
         BodyExprKind::Closure { body, .. } => check_loop_control(body, depth, diagnostics),
-        BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
                 check_loop_control(element, depth, diagnostics);
             }
+        }
+        BodyExprKind::Index { base, index } => {
+            check_loop_control(base, depth, diagnostics);
+            check_loop_control(index, depth, diagnostics);
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
@@ -1224,10 +1243,16 @@ fn check_mutability(
             }
             check_mutability(body, &mut scoped, diagnostics);
         }
-        BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
                 check_mutability(element, locals, diagnostics);
             }
+        }
+        BodyExprKind::Index { base, index } => {
+            check_mutability(base, locals, diagnostics);
+            check_mutability(index, locals, diagnostics);
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
@@ -1539,6 +1564,48 @@ fn infer_with_structs(
                         message: format!(
                             "cannot access field `{field}` on `{}`",
                             actual.display_name()
+                        ),
+                    });
+                    Ty::Unknown
+                }
+            }
+        }
+        BodyExprKind::Index { base, index } => {
+            let base_type = infer_with_structs(
+                base,
+                locals,
+                signatures,
+                struct_signatures,
+                expected_return,
+                diagnostics,
+            );
+            let index_type = infer_with_structs(
+                index,
+                locals,
+                signatures,
+                struct_signatures,
+                &Ty::Integer("usize".to_owned()),
+                diagnostics,
+            );
+            if !index_type.is_integer() && index_type != Ty::Unknown {
+                diagnostics.push(TypeDiagnostic {
+                    span: index.span.clone(),
+                    message: format!(
+                        "array index must be an integer, found `{}`",
+                        index_type.display_name()
+                    ),
+                });
+            }
+            match without_references(&base_type) {
+                Ty::Array(element, _) | Ty::Slice(element) | Ty::Vector(element) => {
+                    element.as_ref().clone()
+                }
+                _ => {
+                    diagnostics.push(TypeDiagnostic {
+                        span: base.span.clone(),
+                        message: format!(
+                            "cannot index value of type `{}`",
+                            base_type.display_name()
                         ),
                     });
                     Ty::Unknown
@@ -2763,20 +2830,20 @@ fn infer_with_structs(
                         initializer,
                         span,
                     } => {
+                        let declared = type_text
+                            .as_deref()
+                            .map(|text| type_from_syntax(text, struct_signatures));
                         let inferred = initializer.as_ref().map(|initializer| {
                             infer_with_structs(
                                 initializer,
                                 locals,
                                 signatures,
                                 struct_signatures,
-                                expected_return,
+                                declared.as_ref().unwrap_or(expected_return),
                                 diagnostics,
                             )
                         });
                         diverges |= inferred == Some(Ty::Never);
-                        let declared = type_text
-                            .as_deref()
-                            .map(|text| type_from_syntax(text, struct_signatures));
                         let binding_type = match (declared, inferred) {
                             (Some(declared), Some(actual)) => {
                                 if actual != Ty::Never && !types_compatible(&declared, &actual) {
@@ -3489,6 +3556,36 @@ fn infer_with_structs(
             }
             Ty::Reference(Box::new(Ty::Slice(Box::new(element_type))))
         }
+        BodyExprKind::FixedArrayLiteral(elements) => {
+            let expected = match expected_return {
+                Ty::Array(element, length) if *length == elements.len() => Some(element.as_ref()),
+                Ty::Array(element, _) => Some(element.as_ref()),
+                _ => None,
+            };
+            let mut element_type = expected.cloned().unwrap_or(Ty::Unknown);
+            for element in elements {
+                let actual = infer_with_structs(
+                    element,
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    expected.unwrap_or(expected_return),
+                    diagnostics,
+                );
+                if element_type == Ty::Unknown {
+                    element_type = actual;
+                } else if actual != Ty::Unknown && !types_compatible(&element_type, &actual) {
+                    mismatch(
+                        diagnostics,
+                        element.span.clone(),
+                        &element_type,
+                        &actual,
+                        "array element",
+                    );
+                }
+            }
+            Ty::Array(Box::new(element_type), elements.len())
+        }
         BodyExprKind::EmptySliceReference | BodyExprKind::Unsupported => Ty::Unknown,
     }
 }
@@ -3554,6 +3651,8 @@ fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
         || matches!((expected, actual), (Ty::Tuple(expected), Ty::Tuple(actual))
             if expected.len() == actual.len()
                 && expected.iter().zip(actual).all(|(expected, actual)| types_compatible(expected, actual)))
+        || matches!((expected, actual), (Ty::Array(expected, expected_len), Ty::Array(actual, actual_len))
+            if expected_len == actual_len && types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Slice(expected), Ty::Vector(actual)) if types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Reference(expected), Ty::Reference(actual)) | (Ty::Slice(expected), Ty::Slice(actual)) if types_compatible(expected, actual))
         || *expected == Ty::Unknown
@@ -3568,6 +3667,7 @@ fn is_copy_type(ty: &Ty, structs: &[StructSignature]) -> bool {
     match ty {
         Ty::Bool | Ty::Char | Ty::Integer(_) | Ty::Float(_) | Ty::Reference(_) | Ty::Never => true,
         Ty::Tuple(fields) => fields.iter().all(|field| is_copy_type(field, structs)),
+        Ty::Array(element, _) => is_copy_type(element, structs),
         Ty::Named(name) if name.starts_with("\0quill_generic:") => {
             name.split(':').nth_back(2) == Some("1")
         }

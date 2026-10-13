@@ -2647,7 +2647,9 @@ fn rewrite_enum_references(
                 impl_owner,
                 struct_paths,
             ),
-            BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+            BodyExprKind::Tuple(elements)
+            | BodyExprKind::ArrayLiteral(elements)
+            | BodyExprKind::FixedArrayLiteral(elements) => {
                 for element in elements {
                     rewrite(
                         element,
@@ -2658,6 +2660,24 @@ fn rewrite_enum_references(
                         struct_paths,
                     );
                 }
+            }
+            BodyExprKind::Index { base, index } => {
+                rewrite(
+                    base,
+                    module_path,
+                    enums,
+                    enum_paths,
+                    impl_owner,
+                    struct_paths,
+                );
+                rewrite(
+                    index,
+                    module_path,
+                    enums,
+                    enum_paths,
+                    impl_owner,
+                    struct_paths,
+                );
             }
             BodyExprKind::StructLiteral { path, fields } => {
                 *path = resolve_struct_path(path, module_path, impl_owner, struct_paths);
@@ -3068,7 +3088,9 @@ fn rewrite_calls(
                     )?;
                 }
             }
-            BodyExprKind::Tuple(arguments) | BodyExprKind::ArrayLiteral(arguments) => {
+            BodyExprKind::Tuple(arguments)
+            | BodyExprKind::ArrayLiteral(arguments)
+            | BodyExprKind::FixedArrayLiteral(arguments) => {
                 for argument in arguments {
                     visit(
                         argument,
@@ -3079,6 +3101,10 @@ fn rewrite_calls(
                         context,
                     )?;
                 }
+            }
+            BodyExprKind::Index { base, index } => {
+                visit(base, prefixes, paths, aliases, resolution_cache, context)?;
+                visit(index, prefixes, paths, aliases, resolution_cache, context)?;
             }
             BodyExprKind::MethodCall {
                 receiver,
@@ -3325,7 +3351,13 @@ fn function_call_targets(functions: &[quill_syntax::FunctionItem]) -> HashSet<St
             | BodyExprKind::Not(expression)
             | BodyExprKind::Try(expression)
             | BodyExprKind::Parenthesized(expression) => walk!(expression),
-            BodyExprKind::Tuple(items) | BodyExprKind::ArrayLiteral(items) => {
+            BodyExprKind::Index { base, index } => {
+                walk!(base);
+                walk!(index);
+            }
+            BodyExprKind::Tuple(items)
+            | BodyExprKind::ArrayLiteral(items)
+            | BodyExprKind::FixedArrayLiteral(items) => {
                 for item in items {
                     walk!(item);
                 }
@@ -6561,6 +6593,47 @@ mod tests {
         assert!(
             rustc.status.success(),
             "rustc rejected the concat fixture: {}",
+            String::from_utf8_lossy(&rustc.stderr)
+        );
+        let quill_status = std::process::Command::new(&quill_output).status().unwrap();
+        let rustc_status = std::process::Command::new(&rustc_output).status().unwrap();
+        assert_eq!(quill_status.code(), rustc_status.code());
+        assert_eq!(quill_status.code(), Some(42));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn indexes_fixed_array_values_like_rustc() {
+        let root = std::env::temp_dir().join(format!(
+            "quillc-build-array-index-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let source = root.join("main.rs");
+        let quill_output = root.join("quill-program");
+        let rustc_output = root.join("rustc-program");
+        std::fs::write(
+            &source,
+            "fn answer() -> i32 { let values: [u64; 3] = [7, 42, 13]; if values[1] == 42 { 42 } else { 7 } } fn main() { std::process::exit(answer()); }\n",
+        )
+        .unwrap();
+
+        compile_subset_main(
+            &source.display().to_string(),
+            &quill_output.display().to_string(),
+        )
+        .unwrap();
+        let rustc = std::process::Command::new("rustc")
+            .arg("+nightly-2026-08-23")
+            .arg(&source)
+            .arg("-o")
+            .arg(&rustc_output)
+            .output()
+            .expect("pinned rustc must be available for differential compiler tests");
+        assert!(
+            rustc.status.success(),
+            "rustc rejected the array fixture: {}",
             String::from_utf8_lossy(&rustc.stderr)
         );
         let quill_status = std::process::Command::new(&quill_output).status().unwrap();

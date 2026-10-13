@@ -389,6 +389,7 @@ pub enum BodyExprKind {
     },
     Tuple(Vec<BodyExpr>),
     ArrayLiteral(Vec<BodyExpr>),
+    FixedArrayLiteral(Vec<BodyExpr>),
     StructLiteral {
         path: String,
         fields: Vec<(String, BodyExpr)>,
@@ -396,6 +397,10 @@ pub enum BodyExprKind {
     FieldAccess {
         base: Box<BodyExpr>,
         field: String,
+    },
+    Index {
+        base: Box<BodyExpr>,
+        index: Box<BodyExpr>,
     },
     Binary {
         operator: BinaryOperator,
@@ -1785,6 +1790,17 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 field: index.index.to_string(),
             },
         },
+        syn::Expr::Index(index) => BodyExprKind::Index {
+            base: Box::new(lower_expr(&index.expr, source)),
+            index: Box::new(lower_expr(&index.index, source)),
+        },
+        syn::Expr::Array(array) => BodyExprKind::FixedArrayLiteral(
+            array
+                .elems
+                .iter()
+                .map(|element| lower_expr(element, source))
+                .collect(),
+        ),
         syn::Expr::Binary(binary) => BodyExprKind::Binary {
             operator: lower_binary_operator(&binary.op),
             left: Box::new(lower_expr(&binary.left, source)),

@@ -1055,6 +1055,10 @@ fn validate_struct_expr(
         | BodyExprKind::Cast {
             expression: base, ..
         } => validate_struct_expr(base, structs, functions)?,
+        BodyExprKind::Index { base, index } => {
+            validate_struct_expr(base, structs, functions)?;
+            validate_struct_expr(index, structs, functions)?;
+        }
         BodyExprKind::Call { arguments, .. } => {
             for argument in arguments {
                 validate_struct_expr(argument, structs, functions)?;
@@ -1076,7 +1080,9 @@ fn validate_struct_expr(
             }
         }
         BodyExprKind::Closure { body, .. } => validate_struct_expr(body, structs, functions)?,
-        BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
                 validate_struct_expr(element, structs, functions)?;
             }
@@ -1245,7 +1251,7 @@ fn is_supported_u64_expression(expression: &BodyExpr, functions: &[FunctionItem]
     match &expression.kind {
         BodyExprKind::Path(_) => true,
         BodyExprKind::Literal(LiteralKind::Integer { text, suffix })
-            if matches!(suffix.as_str(), "u64" | "usize") =>
+            if matches!(suffix.as_str(), "" | "u64" | "usize") =>
         {
             text.parse::<u64>().is_ok()
         }
@@ -1314,7 +1320,9 @@ fn validate_call_targets(
             }
         }
         BodyExprKind::Closure { body, .. } => validate_call_targets(body, functions)?,
-        BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+        BodyExprKind::Tuple(elements)
+        | BodyExprKind::ArrayLiteral(elements)
+        | BodyExprKind::FixedArrayLiteral(elements) => {
             for element in elements {
                 validate_call_targets(element, functions)?;
             }
@@ -1325,6 +1333,10 @@ fn validate_call_targets(
             }
         }
         BodyExprKind::FieldAccess { base, .. } => validate_call_targets(base, functions)?,
+        BodyExprKind::Index { base, index } => {
+            validate_call_targets(base, functions)?;
+            validate_call_targets(index, functions)?;
+        }
         BodyExprKind::Binary { left, right, .. } => {
             validate_call_targets(left, functions)?;
             validate_call_targets(right, functions)?;
@@ -1610,7 +1622,9 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
                 }
             }
             BodyExprKind::Closure { body, .. } => visit(body, substitutions),
-            BodyExprKind::Tuple(elements) | BodyExprKind::ArrayLiteral(elements) => {
+            BodyExprKind::Tuple(elements)
+            | BodyExprKind::ArrayLiteral(elements)
+            | BodyExprKind::FixedArrayLiteral(elements) => {
                 for element in elements {
                     visit(element, substitutions);
                 }
@@ -1629,6 +1643,10 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
             | BodyExprKind::Not(base)
             | BodyExprKind::Parenthesized(base)
             | BodyExprKind::Try(base) => visit(base, substitutions),
+            BodyExprKind::Index { base, index } => {
+                visit(base, substitutions);
+                visit(index, substitutions);
+            }
             BodyExprKind::Binary { left, right, .. } => {
                 visit(left, substitutions);
                 visit(right, substitutions);
@@ -2426,6 +2444,32 @@ fn static_array_element_widths(elements: &[Value]) -> Vec<usize> {
     match first {
         Value::Tuple(fields) => fields.iter().map(static_array_field_width).collect(),
         scalar => vec![static_array_field_width(scalar)],
+    }
+}
+
+fn coerce_annotated_integer_values(value: &mut Value, type_text: &str) {
+    let type_text = type_text.trim();
+    let scalar_type = type_text
+        .strip_prefix('[')
+        .and_then(|array| array.strip_suffix(']'))
+        .and_then(|array| array.split_once(';'))
+        .map_or(type_text, |(element, _)| element.trim());
+    if !matches!(scalar_type, "u64" | "usize") {
+        return;
+    }
+    let coerce = |value: &mut Value| {
+        if let Value::Integer(integer) = value
+            && *integer >= 0
+        {
+            *value = Value::TypedWord {
+                value: *integer as u64,
+                type_name: scalar_type.to_owned(),
+            };
+        }
+    };
+    match value {
+        Value::StaticArray(elements) => elements.iter_mut().for_each(coerce),
+        value => coerce(value),
     }
 }
 
@@ -3740,6 +3784,7 @@ fn lower_statements(
         match statement {
             BodyStatement::Let {
                 name: Some(name),
+                type_text,
                 mutable,
                 initializer: Some(initializer),
                 ..
@@ -3853,7 +3898,18 @@ fn lower_statements(
                     let mut lowered_fields = Vec::with_capacity(fields.len());
                     for (field, expression) in fields {
                         let slot = *next_slot;
-                        let value = value_from_expression(expression, environment, functions)?;
+                        let mut value = value_from_expression(expression, environment, functions)?;
+                        if let Some(field_type) = find_struct_type(path, structs)
+                            .and_then(|structure| {
+                                structure
+                                    .fields
+                                    .iter()
+                                    .find(|definition| definition.name.as_deref() == Some(field))
+                            })
+                            .map(|definition| definition.type_text.as_str())
+                        {
+                            coerce_annotated_integer_values(&mut value, field_type);
+                        }
                         let field_local = if matches!(&value, Value::EmptyCollection) {
                             *next_slot += 3;
                             StructLocalField::Collection {
@@ -3918,7 +3974,7 @@ fn lower_statements(
                     });
                     continue;
                 }
-                let value = if let BodyExprKind::Try(result) = &initializer.kind {
+                let mut value = if let BodyExprKind::Try(result) = &initializer.kind {
                     if is_i32_option_call(result, functions) {
                         let result = try_option_value(result, environment, functions)?;
                         let slot = *next_slot;
@@ -3988,6 +4044,9 @@ fn lower_statements(
                 } else {
                     value_from_expression(initializer, environment, functions)?
                 };
+                if let Some(type_text) = type_text.as_deref() {
+                    coerce_annotated_integer_values(&mut value, type_text);
+                }
                 if matches!(value, Value::EmptyCollection) {
                     let pointer_slot = *next_slot;
                     let length_slot = pointer_slot + 1;
@@ -4028,14 +4087,17 @@ fn lower_statements(
                     let pointer_slot = *next_slot;
                     let length_slot = pointer_slot + 1;
                     *next_slot += 2;
-                    environment.insert(
-                        name.clone(),
-                        Value::SliceLocal {
+                    let local_value = match (&value, mutable) {
+                        (Value::StaticArray(elements), false) => {
+                            Value::StaticArray(elements.clone())
+                        }
+                        _ => Value::SliceLocal {
                             pointer_slot,
                             length_slot,
                             element_widths,
                         },
-                    );
+                    };
+                    environment.insert(name.clone(), local_value);
                     if *mutable {
                         mutable_names.insert(name.clone());
                     } else {
@@ -5674,18 +5736,49 @@ fn value_from_expression(
                 CodegenError::UnsupportedProgram("struct field does not exist"),
             )
         }
+        BodyExprKind::Index { base, index } => {
+            let array = value_from_expression(base, environment, functions)?;
+            let index = value_from_expression(index, environment, functions)?;
+            let index = match index {
+                Value::Integer(index) if index >= 0 => index as usize,
+                Value::Word(index) => usize::try_from(index).map_err(|_| {
+                    CodegenError::UnsupportedProgram("array index does not fit this target")
+                })?,
+                Value::TypedWord { value, .. } => usize::try_from(value).map_err(|_| {
+                    CodegenError::UnsupportedProgram("array index does not fit this target")
+                })?,
+                _ => {
+                    return Err(CodegenError::UnsupportedProgram(
+                        "array indexing currently requires a constant integer index",
+                    ));
+                }
+            };
+            let Value::StaticArray(elements) = array else {
+                return Err(CodegenError::UnsupportedProgram(
+                    "array indexing currently requires a statically known array",
+                ));
+            };
+            elements
+                .get(index)
+                .cloned()
+                .ok_or(CodegenError::UnsupportedProgram(
+                    "constant array index is out of bounds",
+                ))
+        }
         BodyExprKind::Tuple(elements) => Ok(Value::Tuple(
             elements
                 .iter()
                 .map(|element| value_from_expression(element, environment, functions))
                 .collect::<Result<Vec<_>, _>>()?,
         )),
-        BodyExprKind::ArrayLiteral(elements) => Ok(Value::StaticArray(
-            elements
-                .iter()
-                .map(|element| value_from_expression(element, environment, functions))
-                .collect::<Result<Vec<_>, _>>()?,
-        )),
+        BodyExprKind::ArrayLiteral(elements) | BodyExprKind::FixedArrayLiteral(elements) => {
+            Ok(Value::StaticArray(
+                elements
+                    .iter()
+                    .map(|element| value_from_expression(element, environment, functions))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        }
         BodyExprKind::Call {
             callee, arguments, ..
         } if (callee == "Ok" || callee == "Err")
@@ -6205,6 +6298,7 @@ fn value_from_expression(
             match value {
                 Value::SliceParameter { length_slot, .. }
                 | Value::SliceLocal { length_slot, .. } => Ok(Value::WordLocal(length_slot)),
+                Value::StaticArray(elements) => Ok(Value::Word(elements.len() as u64)),
                 Value::CollectionLocal { length_slot, .. } => Ok(Value::WordLocal(length_slot)),
                 value @ Value::Call {
                     returns_slice: true,
