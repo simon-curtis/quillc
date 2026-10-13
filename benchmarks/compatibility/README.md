@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [conditional-move run](results/2026-10-13-if-move-clean.json) passes
+88/88 curated cases at clean revision `95b2509`. Its new diagnostic probe
+checks a use after moving a non-`Copy` value through one arm of an `if`
+expression; Quill matches rustc's E0382 code, message, and primary location.
+This 100% corpus result does not establish overall Rust compatibility.
+
 The [if-expression short-circuit run](results/2026-10-13-ifexpr-short-circuit-clean.json)
 passes 87/87 curated cases at clean revision `fc2049f`. It adds value-producing
 `if` initializers whose skipped borrowed-slice index reads stay lazy and whose
