@@ -62,12 +62,13 @@ at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
 clean source status. It is the earlier baseline snapshot, not the current count.
 
 The [Cargo feature selection run](results/2026-10-13-cargo-feature-selection.json)
-passes 54/55 cases (98.2%). It verifies selected features through both
-`--no-default-features --features=slow` and `--all-features`, comparing the
-resulting `#[cfg]` program with rustc. It records revision `47a2bd0`, the
-unrelated dirty parser/LSP paths, and the binary hash. The remaining failure is
-rustc consuming a Quill object through `--extern`. This report is evidence for
-the named cases and current corpus only.
+passes 55/56 cases (98.2%). It verifies selected features through both
+`--no-default-features --features=slow` and `--all-features` during builds, plus
+a feature-selected type check whose inactive branch has a different type. All
+three outcomes match rustc. It records revision `08d4589`, unrelated dirty
+parser/LSP paths, and the binary hash. The remaining failure is rustc consuming
+a Quill object through `--extern`. This report is evidence for the named cases
+and current corpus only.
 
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
