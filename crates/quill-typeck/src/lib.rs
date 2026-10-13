@@ -2397,10 +2397,25 @@ fn local_borrow_is_ancestor(
 }
 
 fn local_used_after(name: &str, statements: &[BodyStatement], tail: Option<&BodyExpr>) -> bool {
-    statements
-        .iter()
-        .any(|statement| statement_uses_local(statement, name))
-        || tail.is_some_and(|tail| expression_uses_local(tail, name))
+    for statement in statements {
+        if statement_uses_local(statement, name) {
+            return true;
+        }
+        let shadows_name = match statement {
+            BodyStatement::Let {
+                name: Some(binding),
+                ..
+            } => binding == name,
+            BodyStatement::LetTuple { names, .. } => {
+                names.iter().any(|binding| binding == name)
+            }
+            _ => false,
+        };
+        if shadows_name {
+            return false;
+        }
+    }
+    tail.is_some_and(|tail| expression_uses_local(tail, name))
 }
 
 fn statement_uses_local(statement: &BodyStatement, name: &str) -> bool {
@@ -2419,14 +2434,25 @@ fn statement_uses_local(statement: &BodyStatement, name: &str) -> bool {
         } => expression_uses_local(condition, name) || expression_uses_local(body, name),
         BodyStatement::Loop { body, .. } => expression_uses_local(body, name),
         BodyStatement::ForRange {
-            start, end, body, ..
+            name: binding,
+            start,
+            end,
+            body,
+            ..
         } => {
             expression_uses_local(start, name)
                 || expression_uses_local(end, name)
-                || expression_uses_local(body, name)
+                || (binding != name && expression_uses_local(body, name))
         }
-        BodyStatement::ForEach { iterator, body, .. } => {
-            expression_uses_local(iterator, name) || expression_uses_local(body, name)
+        BodyStatement::ForEach {
+            names,
+            iterator,
+            body,
+            ..
+        } => {
+            expression_uses_local(iterator, name)
+                || (!names.iter().any(|binding| binding == name)
+                    && expression_uses_local(body, name))
         }
         BodyStatement::MacroInvocation {
             arguments,
