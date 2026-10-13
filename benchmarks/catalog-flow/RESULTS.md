@@ -28,16 +28,16 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 
 ## Paired build measurements
 
-The latest paired run collected five rounds on 2026-10-13 with Rust nightly
-`2026-08-23` on an Intel i7-8700K host (12 logical CPUs). The Quill release
-binary was built from source revision `38c42cd` with the compiler paths listed
-as dirty in [`results.json`](results.json); the JSON includes the binary hash
-and full dirty-path list. Both commands selected the same binary and eight-crate
-source dependency graph. Cold runs cleared the Rust target and Quill query
-caches while retaining the OS file cache. Warm runs repeated an unchanged
-build. Incremental runs changed one source comment; semantic incremental runs
-changed the record range from 128 to 127. The harness restored edits and
-checked both original and changed executable output after every paired run.
+The latest paired run collected five rounds on 2026-10-13 from the release
+compiler at revision `ec3bd03` with compiler source paths listed as dirty in
+[`results.json`](results.json). It uses Rust nightly `2026-08-23` on an Intel
+i7-8700K host (12 logical CPUs). Both commands selected the same binary and
+eight-crate source dependency graph. Cold runs cleared the Rust target and
+Quill query caches while retaining the OS file cache. Warm runs repeated an
+unchanged build. Incremental runs changed one source comment; semantic
+incremental runs changed the record range from 128 to 127. The harness
+restored edits and checked both original and changed executable output after
+every paired run.
 
 Wall time uses a blocking process wait. CPU totals use kernel waited-child
 accounting and include child compiler processes. Peak RSS is the sampled sum
@@ -45,24 +45,24 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.863 s | 5.896 s | 565.6 MiB |
-| `quillc cargo-build-subset` | Cold | 0.319 s | 1.895 s | 131.3 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019284 s | 0.019551 s | 21.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001447 s | 0.001269 s | 21.7 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.297 s | 0.430 s | 230.6 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.084 s | 35.0 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.320 s | 0.453 s | 231.9 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.087 s | 0.180 s | 51.2 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.708 s | 5.627 s | 564.0 MiB |
+| `quillc cargo-build-subset` | Cold | 0.379 s | 1.181 s | 125.8 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018900 s | 0.019432 s | 21.8 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001488 s | 0.001316 s | 21.8 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.302 s | 0.431 s | 225.1 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.024 s | 0.047 s | 33.8 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.310 s | 0.438 s | 231.9 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.087 s | 0.123 s | 56.6 MiB |
 
-Quill's median wall-time speedups were 8.97× cold, 13.33× warm, 11.02× for
-the comment edit, and 3.67× for the semantic edit. CPU-time speedups were
-3.11× cold, 15.41× warm, 5.15× for the comment edit, and 2.53× for the
+Quill's median wall-time speedups were 7.15× cold, 12.70× warm, 12.42× for
+the comment edit, and 3.55× for the semantic edit. CPU-time speedups were
+4.76× cold, 14.77× warm, 9.20× for the comment edit, and 3.57× for the
 semantic edit. Peak RSS was lower in cold and both incremental states, and
-equal in the warm state. Thus the current fixture clears the 3× wall-time gate
-in all four states, but not the 3× CPU-time gate for semantic edits. This
-subset result does not establish general Rust compiler performance or
-compatibility. The previous paired run is retained in Git history and its
-measurements are summarized in the earlier report revisions.
+equal in the warm state. This run clears the 3× wall-time and CPU-time gates
+for all four states on this fixture. It does not establish general Rust
+compiler performance or compatibility. The earlier paired run without a
+worker cap is preserved in Git history; the worker-cap sweep is documented in
+[its experiment report](../results/worker-cap-sweep-20261013.md).
 
 ## Phase CPU attribution
 
