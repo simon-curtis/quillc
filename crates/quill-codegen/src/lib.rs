@@ -3895,7 +3895,7 @@ fn lower_statements(
                 *next_slot,
             );
             if !name.starts_with("__quill_vec_index_") {
-                materialize_vector_indices(
+                materialize_index_reads(
                     &mut rewritten_initializer,
                     environment,
                     &mut receiver_temporaries,
@@ -4232,8 +4232,91 @@ fn lower_statements(
                     base,
                     index,
                     source_path,
+                    base_line,
+                    base_column,
+                    ..
+                } = &initializer.kind
+                    && let BodyExprKind::Path(array_name) = &base.kind
+                    && let Some(Value::StaticArray(elements)) = environment.get(array_name)
+                    && !elements.is_empty()
+                    && elements.iter().all(is_word_value)
+                {
+                    let index = match value_from_expression(index, environment, functions)? {
+                        Value::Integer(index) if index >= 0 => Value::Word(index as u64),
+                        value if is_word_value(&value) => value,
+                        _ => {
+                            return Err(CodegenError::UnsupportedProgram(
+                                "native array indexing requires a target-sized unsigned index",
+                            ));
+                        }
+                    };
+                    let index_slot = *next_slot;
+                    *next_slot += 1;
+                    lowered.push(Statement::Let {
+                        slot: index_slot,
+                        initializer: index,
+                    });
+                    let length = elements.len();
+                    let panic = format!(
+                        "\nthread 'main' (0) panicked at {source_path}:{base_line}:{base_column}:\nindex out of bounds: the len is "
+                    );
+                    lowered.push(Statement::If {
+                        condition: Condition::Compare {
+                            operator: BinaryOperator::GreaterEqual,
+                            left: Box::new(Value::WordLocal(index_slot)),
+                            right: Box::new(Value::Word(length as u64)),
+                        },
+                        then_body: vec![Statement::Println(vec![
+                            PrintPart::PanicText(panic),
+                            PrintPart::PanicDecimal(Value::Word(length as u64)),
+                            PrintPart::PanicText(" but the index is ".to_owned()),
+                            PrintPart::PanicDecimal(Value::WordLocal(index_slot)),
+                            PrintPart::Panic(
+                                "\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                                    .to_owned(),
+                            ),
+                        ])],
+                        else_body: Vec::new(),
+                    });
+                    let mut selected = elements.last().cloned().ok_or(
+                        CodegenError::UnsupportedProgram("cannot index an empty static array"),
+                    )?;
+                    for (element_index, element) in elements.iter().enumerate().rev().skip(1) {
+                        selected = Value::If {
+                            condition: Condition::Compare {
+                                operator: BinaryOperator::Equal,
+                                left: Box::new(Value::WordLocal(index_slot)),
+                                right: Box::new(Value::Word(element_index as u64)),
+                            },
+                            then_value: Box::new(element.clone()),
+                            else_value: Box::new(selected),
+                        };
+                    }
+                    let slot = *next_slot;
+                    *next_slot += 1;
+                    let local_value = generic_argument_type(&selected).map_or(
+                        Value::WordLocal(slot),
+                        |type_name| Value::TypedWordLocal { slot, type_name },
+                    );
+                    environment.insert(name.clone(), local_value);
+                    if *mutable {
+                        mutable_names.insert(name.clone());
+                    } else {
+                        mutable_names.remove(name);
+                    }
+                    lowered.push(Statement::Let {
+                        slot,
+                        initializer: selected,
+                    });
+                    continue;
+                }
+                if let BodyExprKind::Index {
+                    base,
+                    index,
+                    source_path,
                     line,
                     column,
+                    ..
                 } = &initializer.kind
                     && let BodyExprKind::Path(collection_name) = &base.kind
                     && let Some(Value::CollectionLocal {
@@ -4745,7 +4828,7 @@ fn lower_statements(
             BodyStatement::Assign { name, value, .. } => {
                 let mut rewritten_value = value.clone();
                 let mut index_temporaries = Vec::new();
-                materialize_vector_indices(
+                materialize_index_reads(
                     &mut rewritten_value,
                     environment,
                     &mut index_temporaries,
@@ -4833,7 +4916,7 @@ fn lower_statements(
                 if let BodyExprKind::Return(Some(value)) = &expression.kind {
                     let mut rewritten_value = (**value).clone();
                     let mut index_temporaries = Vec::new();
-                    materialize_vector_indices(
+                    materialize_index_reads(
                         &mut rewritten_value,
                         environment,
                         &mut index_temporaries,
@@ -5768,7 +5851,7 @@ fn materialize_method_receivers(
     };
 }
 
-fn materialize_vector_indices(
+fn materialize_index_reads(
     expression: &mut BodyExpr,
     environment: &HashMap<String, Value>,
     temporaries: &mut Vec<BodyStatement>,
@@ -5777,20 +5860,23 @@ fn materialize_vector_indices(
 ) {
     match &mut expression.kind {
         BodyExprKind::Index { base, index, .. } => {
-            materialize_vector_indices(base, environment, temporaries, slot_seed, reserved_name);
-            materialize_vector_indices(index, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(base, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(index, environment, temporaries, slot_seed, reserved_name);
             let BodyExprKind::Path(collection_name) = &base.kind else {
                 return;
             };
-            let Some(Value::CollectionLocal {
-                kind: CollectionKind::Vector,
-                element_type: Some(element_type),
-                ..
-            }) = environment.get(collection_name)
-            else {
-                return;
+            let supported = match environment.get(collection_name) {
+                Some(Value::CollectionLocal {
+                    kind: CollectionKind::Vector,
+                    element_type: Some(element_type),
+                    ..
+                }) => is_word_type(element_type) || element_type == "i32",
+                Some(Value::StaticArray(elements)) => {
+                    !elements.is_empty() && elements.iter().all(is_word_value)
+                }
+                _ => false,
             };
-            if !is_word_type(element_type) && element_type != "i32" {
+            if !supported {
                 return;
             }
             let mut suffix = temporaries.len();
@@ -5827,9 +5913,9 @@ fn materialize_vector_indices(
             left,
             right,
         } => {
-            materialize_vector_indices(left, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(left, environment, temporaries, slot_seed, reserved_name);
             if !matches!(operator, BinaryOperator::And | BinaryOperator::Or) {
-                materialize_vector_indices(
+                materialize_index_reads(
                     right,
                     environment,
                     temporaries,
@@ -5843,7 +5929,7 @@ fn materialize_vector_indices(
         | BodyExprKind::ArrayLiteral(arguments)
         | BodyExprKind::FixedArrayLiteral(arguments) => {
             for argument in arguments {
-                materialize_vector_indices(
+                materialize_index_reads(
                     argument,
                     environment,
                     temporaries,
@@ -5857,9 +5943,9 @@ fn materialize_vector_indices(
             arguments,
             ..
         } => {
-            materialize_vector_indices(receiver, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(receiver, environment, temporaries, slot_seed, reserved_name);
             for argument in arguments {
-                materialize_vector_indices(
+                materialize_index_reads(
                     argument,
                     environment,
                     temporaries,
@@ -5875,7 +5961,7 @@ fn materialize_vector_indices(
         | BodyExprKind::Parenthesized(expression)
         | BodyExprKind::FieldAccess {
             base: expression, ..
-        } => materialize_vector_indices(
+        } => materialize_index_reads(
             expression,
             environment,
             temporaries,
@@ -5887,21 +5973,21 @@ fn materialize_vector_indices(
             then_branch,
             else_branch,
         } => {
-            materialize_vector_indices(
+            materialize_index_reads(
                 condition,
                 environment,
                 temporaries,
                 slot_seed,
                 reserved_name,
             );
-            materialize_vector_indices_in_branch(
+            materialize_index_reads_in_branch(
                 then_branch,
                 environment,
                 slot_seed,
                 reserved_name,
             );
             if let Some(else_branch) = else_branch {
-                materialize_vector_indices_in_branch(
+                materialize_index_reads_in_branch(
                     else_branch,
                     environment,
                     slot_seed,
@@ -5911,11 +5997,11 @@ fn materialize_vector_indices(
         }
         BodyExprKind::StructLiteral { fields, .. } => {
             for (_, value) in fields {
-                materialize_vector_indices(value, environment, temporaries, slot_seed, reserved_name);
+                materialize_index_reads(value, environment, temporaries, slot_seed, reserved_name);
             }
         }
         BodyExprKind::Match { scrutinee, .. } => {
-            materialize_vector_indices(
+            materialize_index_reads(
                 scrutinee,
                 environment,
                 temporaries,
@@ -5924,7 +6010,7 @@ fn materialize_vector_indices(
             );
         }
         BodyExprKind::Return(Some(value)) => {
-            materialize_vector_indices(value, environment, temporaries, slot_seed, reserved_name);
+            materialize_index_reads(value, environment, temporaries, slot_seed, reserved_name);
         }
         BodyExprKind::Unit
         | BodyExprKind::Literal(_)
@@ -5940,7 +6026,7 @@ fn materialize_vector_indices(
     }
 }
 
-fn materialize_vector_indices_in_branch(
+fn materialize_index_reads_in_branch(
     branch: &mut BodyExpr,
     environment: &HashMap<String, Value>,
     slot_seed: usize,
@@ -5952,12 +6038,12 @@ fn materialize_vector_indices_in_branch(
     } = &mut branch.kind
     {
         let mut temporaries = Vec::new();
-        materialize_vector_indices(tail, environment, &mut temporaries, slot_seed, reserved_name);
+        materialize_index_reads(tail, environment, &mut temporaries, slot_seed, reserved_name);
         statements.extend(temporaries);
         return;
     }
     let mut temporaries = Vec::new();
-    materialize_vector_indices(
+    materialize_index_reads(
         branch,
         environment,
         &mut temporaries,
