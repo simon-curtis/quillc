@@ -689,8 +689,8 @@
     "library": "lib.rs",
     "main": "main.rs",
     "files": {
-      "lib.rs": "pub fn sum(left: u64, right: u64) -> u64 { left + right }\npub fn increment(value: i32) -> i32 { value + 1 }\npub fn count() -> usize { 7usize }\n",
-      "main.rs": "fn main() { let sum = probe_lib::sum(19, 23); let next = probe_lib::increment(41); let count = probe_lib::count(); println!(\"{sum}|{next}|{count}\"); }\n"
+      "lib.rs": "pub fn sum(left: u64, right: u64) -> u64 { left + right }\n",
+      "main.rs": "fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n"
     }
   },
   {

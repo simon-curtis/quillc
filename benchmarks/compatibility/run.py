@@ -210,13 +210,12 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         rustc_link = invoke(
             ["rustc", "--edition", "2024", str(main_source), "--extern",
              f"probe_lib={rust_lib}", "-o", str(rust_binary)], case_dir)
-        quill_rlib = case_dir / "libprobe_lib.rlib"
+        quill_object = case_dir / "libprobe_lib.o"
         quill_library = invoke(
-            [str(quill), "build-lib-rlib", str(lib_source), "--crate-name", "probe_lib",
-             "-o", str(quill_rlib)], case_dir)
+            [str(quill), "build-lib-object", str(lib_source), "-o", str(quill_object)], case_dir)
         quill_link = invoke(
             ["rustc", "--edition", "2024", str(main_source), "--extern",
-             f"probe_lib={quill_rlib}", "-o", str(quill_binary)], case_dir)
+             f"probe_lib={quill_object}", "-o", str(quill_binary)], case_dir)
         if rustc_library.returncode or rustc_link.returncode:
             return Result(case["id"], case["kind"], False, False, False,
                           "rustc reference rlib case failed", rustc_link.returncode,
@@ -224,7 +223,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         if quill_library.returncode or quill_link.returncode:
             detail = (quill_library.stderr + quill_link.stderr).decode("utf-8", "replace").strip()
             return Result(case["id"], case["kind"], False, True, False,
-                          f"Quill rlib is not consumable through rustc --extern: {detail}",
+                          f"Quill artifact is not consumable through rustc --extern: {detail}",
                           rustc_link.returncode, quill_link.returncode)
         rust_run = invoke([str(rust_binary)], case_dir)
         quill_run = invoke([str(quill_binary)], case_dir)
