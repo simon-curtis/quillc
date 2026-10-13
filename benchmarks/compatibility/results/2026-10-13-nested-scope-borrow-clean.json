@@ -2,13 +2,13 @@
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
   "quillc": "/home/simon/.cache/quillc-proj-compat-target/debug/quillc",
-  "quillc_source_revision": "64afcc4b1a262c3db31915821f27f4ed81606b84",
+  "quillc_source_revision": "d0b111c9be08afba928326df23ea097a9e01dd87",
   "quillc_source_dirty": false,
   "quillc_source_dirty_paths": [],
-  "quillc_artifact_mtime": "2026-10-13T20:16:28.294326+00:00",
-  "quillc_sha256": "eab4d8b92bac44fd890104784f8fc7291cbf1c78e290969e126ea723218fdd3d",
-  "passed": 118,
-  "total": 118,
+  "quillc_artifact_mtime": "2026-10-13T20:19:35.225543+00:00",
+  "quillc_sha256": "0c617329e7b2fb99a9048c80f789d9396920e8140b2e8fb39728b0d08535b393",
+  "passed": 120,
+  "total": 120,
   "percent": 100.0,
   "results": [
     {
@@ -275,7 +275,7 @@
           "line": 1,
           "column": 30
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -360,7 +360,7 @@
           "line": 1,
           "column": 78
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
       }
     },
     {
@@ -393,7 +393,7 @@
           "line": 1,
           "column": 122
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-use-after-move-from-if-expression/main.rs:1:122: error[E0382]: use of moved value: `value`"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-use-after-move-from-if-expression/main.rs:1:122: error[E0382]: use of moved value: `value`"
       }
     },
     {
@@ -426,7 +426,7 @@
           "line": 1,
           "column": 101
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-use-after-move-from-loop/main.rs:1:101: error[E0382]: use of moved value: `value`"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-use-after-move-from-loop/main.rs:1:101: error[E0382]: use of moved value: `value`"
       }
     },
     {
@@ -459,7 +459,7 @@
           "line": 1,
           "column": 106
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-use-after-move-from-match-binding/main.rs:1:106: error[E0382]: use of moved value: `value`"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-use-after-move-from-match-binding/main.rs:1:106: error[E0382]: use of moved value: `value`"
       }
     },
     {
@@ -505,7 +505,7 @@
           "line": 1,
           "column": 178
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-use-after-move-from-match-arm-merge/main.rs:1:178: error[E0382]: use of moved value: `value`"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-use-after-move-from-match-arm-merge/main.rs:1:178: error[E0382]: use of moved value: `value`"
       }
     },
     {
@@ -551,7 +551,7 @@
           "line": 1,
           "column": 89
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-overlapping-mutable-borrows/main.rs:1:89: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-overlapping-mutable-borrows/main.rs:1:89: error[E0499]: cannot borrow `value` as mutable more than once at a time"
       }
     },
     {
@@ -597,7 +597,7 @@
           "line": 1,
           "column": 85
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-shared-then-mutable-borrow/main.rs:1:85: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-shared-then-mutable-borrow/main.rs:1:85: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
       }
     },
     {
@@ -630,7 +630,7 @@
           "line": 1,
           "column": 89
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-mutable-then-shared-borrow/main.rs:1:89: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-mutable-then-shared-borrow/main.rs:1:89: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
       }
     },
     {
@@ -1495,7 +1495,7 @@
           "line": 1,
           "column": 94
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-reborrow-conflicts-with-origin/main.rs:1:94: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-reborrow-conflicts-with-origin/main.rs:1:94: error[E0499]: cannot borrow `value` as mutable more than once at a time"
       }
     },
     {
@@ -1541,7 +1541,7 @@
           "line": 4,
           "column": 5
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-assign-while-shared-borrowed/main.rs:4:5: error[E0506]: cannot assign to `value` because it is borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-assign-while-shared-borrowed/main.rs:4:5: error[E0506]: cannot assign to `value` because it is borrowed"
       }
     },
     {
@@ -1574,7 +1574,7 @@
           "line": 4,
           "column": 20
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-read-while-mutably-borrowed/main.rs:4:20: error[E0503]: cannot use `value` because it was mutably borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-read-while-mutably-borrowed/main.rs:4:20: error[E0503]: cannot use `value` because it was mutably borrowed"
       }
     },
     {
@@ -1620,7 +1620,7 @@
           "line": 4,
           "column": 17
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-move-while-shared-borrowed/main.rs:4:17: error[E0505]: cannot move out of `value` because it is borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-move-while-shared-borrowed/main.rs:4:17: error[E0505]: cannot move out of `value` because it is borrowed"
       }
     },
     {
@@ -1666,7 +1666,7 @@
           "line": 5,
           "column": 13
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-move-into-call-while-borrowed/main.rs:5:13: error[E0505]: cannot move out of `value` because it is borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-move-into-call-while-borrowed/main.rs:5:13: error[E0505]: cannot move out of `value` because it is borrowed"
       }
     },
     {
@@ -1712,7 +1712,7 @@
           "line": 4,
           "column": 5
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-mutate-vec-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `values` as mutable because it is also borrowed as immutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-mutate-vec-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `values` as mutable because it is also borrowed as immutable"
       }
     },
     {
@@ -1745,7 +1745,7 @@
           "line": 4,
           "column": 18
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-read-method-while-mutably-borrowed/main.rs:4:18: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-read-method-while-mutably-borrowed/main.rs:4:18: error[E0502]: cannot borrow `value` as immutable because it is also borrowed as mutable"
       }
     },
     {
@@ -1778,7 +1778,7 @@
           "line": 4,
           "column": 5
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-mut-method-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-mut-method-while-shared-borrowed/main.rs:4:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
       }
     },
     {
@@ -1824,7 +1824,7 @@
           "line": 4,
           "column": 13
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-move-parameter-into-call-while-borrowed/main.rs:4:13: error[E0505]: cannot move out of `value` because it is borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-move-parameter-into-call-while-borrowed/main.rs:4:13: error[E0505]: cannot move out of `value` because it is borrowed"
       }
     },
     {
@@ -1857,7 +1857,7 @@
           "line": 3,
           "column": 5
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-mut-method-on-parameter-while-borrowed/main.rs:3:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-mut-method-on-parameter-while-borrowed/main.rs:3:5: error[E0502]: cannot borrow `value` as mutable because it is also borrowed as immutable"
       }
     },
     {
@@ -1903,7 +1903,7 @@
           "line": 5,
           "column": 17
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-move-in-nested-block-while-borrowed/main.rs:5:17: error[E0505]: cannot move out of `value` because it is borrowed"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-move-in-nested-block-while-borrowed/main.rs:5:17: error[E0505]: cannot move out of `value` because it is borrowed"
       }
     },
     {
@@ -1949,7 +1949,7 @@
           "line": 5,
           "column": 22
         },
-        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-crv3_r0t/diagnostic-mut-borrow-in-nested-block-while-outer-borrow-live/main.rs:5:22: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-mut-borrow-in-nested-block-while-outer-borrow-live/main.rs:5:22: error[E0499]: cannot borrow `value` as mutable more than once at a time"
       }
     },
     {
@@ -1964,6 +1964,52 @@
       "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
+    },
+    {
+      "case": "shadowed-inner-local-does-not-keep-outer-borrow-live",
+      "kind": "check",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "both accept semantic check",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "diagnostic-outer-borrow-survives-inner-shadow",
+      "kind": "diagnostic",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "all diagnostic fields match",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": {
+        "both_reject": true,
+        "rustc_error_code_matches": true,
+        "quill_error_code_matches": true,
+        "rustc_primary_message_matches": true,
+        "quill_primary_message_matches": true,
+        "primary_span_matches": true
+      },
+      "diagnostic_observed": {
+        "rustc_code": "E0499",
+        "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+        "rustc_primary_span": {
+          "line": 5,
+          "column": 22
+        },
+        "quill_code": "E0499",
+        "quill_primary_location": {
+          "line": 5,
+          "column": 22
+        },
+        "quill_diagnostic": "/home/simon/.cache/quillc-proj-compat-tmp/quill-rustc-compat-5rcxp7_o/diagnostic-outer-borrow-survives-inner-shadow/main.rs:5:22: error[E0499]: cannot borrow `value` as mutable more than once at a time"
+      }
     }
   ],
   "feature_coverage": [
@@ -2003,8 +2049,8 @@
       "id": "borrow-checking-and-lifetimes",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 32,
-      "passed": 32,
+      "cases": 34,
+      "passed": 34,
       "failed": []
     },
     {
@@ -2147,8 +2193,8 @@
       "id": "diagnostics-parity",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 21,
-      "passed": 21,
+      "cases": 22,
+      "passed": 22,
       "failed": []
     },
     {
