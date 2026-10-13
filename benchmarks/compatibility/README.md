@@ -16,12 +16,6 @@ is a curated Linux regression score, not an overall Rust compatibility
 percentage; the completion target above requires broader upstream suites and
 Windows evidence as well.
 
-The [clean borrow-checker snapshot](results/2026-10-13-main-borrowck-liveness-clean.json)
-passes 87/120 cases (72.5%) at revision `317d4ad`. It records nested-block
-borrow liveness and shadowing behavior against the pinned nightly on Linux
-x86-64. This is a historical snapshot from an earlier corpus revision, not the
-current compatibility score or evidence of overall Rust compatibility.
-
 ## Run the corpus
 
 1. Build the Quill executable you intend to measure. Set `QUILLC` to select it
@@ -75,6 +69,12 @@ version but ran outside the repository without explicitly pinning the toolchain.
 Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
+
+The [earlier clean borrow-checker snapshot](results/2026-10-13-main-borrowck-liveness-clean.json)
+passes 87/120 cases (72.5%) at revision `317d4ad`. It records nested-block
+borrow liveness and shadowing behavior against the pinned nightly on Linux
+x86-64. The later expanded report above supersedes it as the newest 120-case
+snapshot; neither pass rate establishes overall Rust compatibility.
 
 The [nested-scope borrow run](results/2026-10-13-nested-scope-borrow-clean.json)
 passes 120/120 curated cases at clean revision `d0b111c`. It catches E0499
@@ -273,7 +273,9 @@ builds a Quill object, packages it with rustc-generated metadata, and verifies
 that pinned rustc accepts the `.rlib` through `--extern` and produces matching
 runtime output for `i32`, `u64`, and `usize` public functions. The rlib path is
 limited to safe, synchronous, non-generic, top-level scalar signatures on Linux
-x86-64. This 100% corpus result does not establish overall Rust compatibility.
+x86-64. This was an experimental implementation and was later reverted at
+`67cef16`; current Quill does not emit these rlibs. The result is historical and
+does not establish current support or overall Rust compatibility.
 
 The [C string literal stringify run](results/2026-10-13-stringify-c-literals-clean.json)
 passes 57/58 cases (98.3%) at clean revision `10d029e`. The runtime
