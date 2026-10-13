@@ -413,6 +413,10 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
         ("2021", "fn bounds<T: (Copy) + (Send)>() {}"),
         ("2021", "fn multiline<T: (Copy)\n    + (Send)>() {}"),
         ("2021", "fn where_bounds<T>() where T: (Copy) + (Send) {}"),
+        (
+            "2021",
+            "fn bounds<T: (Copy) + (Send)>() {}\n/// The range is 10^lo <= V < 10^hi.\n#[doc = \"where x < y\"]\nfn tuple(dec_bounds: (i16, i16)) {}",
+        ),
         ("2021", "type LegacyObject = Box<(Send) + (Sync)>;"),
         ("2021", "fn object() { let _: Box<(Send)>; }"),
         (

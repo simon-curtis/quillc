@@ -436,26 +436,91 @@ fn has_close_then_plus(bytes: &[u8]) -> bool {
 
 fn is_type_bound_context(bytes: &[u8], open: usize) -> bool {
     let mut context_start = 0;
-    for index in 0..open {
+    let mut index = 0;
+    while index < open {
+        if bytes[index..].starts_with(b"//") {
+            index = bytes[index..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(open, |offset| index + offset + 1);
+            continue;
+        }
+        if bytes[index..].starts_with(b"/*") {
+            index = skip_block_comment(bytes, index).min(open);
+            continue;
+        }
+        if let Some(end) = raw_string_end(bytes, index) {
+            index = end.min(open);
+            continue;
+        }
+        if bytes[index] == b'"' {
+            index = skip_quoted(bytes, index, b'"').min(open);
+            continue;
+        }
+        if bytes[index] == b'\''
+            && let Some(end) = char_literal_end(bytes, index)
+        {
+            index = end.min(open);
+            continue;
+        }
         if matches!(bytes[index], b';' | b'{' | b'}') {
             context_start = index + 1;
         } else if bytes.get(index..index + 2) == Some(b"=>") {
             context_start = index + 2;
+            index += 1;
         }
+        index += 1;
     }
     let context = &bytes[context_start..open];
     let mut angle_depth = 0usize;
-    for byte in context {
-        match byte {
+    let mut has_where_clause = false;
+    let mut index = 0;
+    while index < context.len() {
+        if context[index..].starts_with(b"//") {
+            index = context[index..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(context.len(), |offset| index + offset + 1);
+            continue;
+        }
+        if context[index..].starts_with(b"/*") {
+            index = skip_block_comment(context, index);
+            continue;
+        }
+        if let Some(end) = raw_string_end(context, index) {
+            index = end;
+            continue;
+        }
+        if context[index] == b'"' {
+            index = skip_quoted(context, index, b'"');
+            continue;
+        }
+        if context[index] == b'\''
+            && let Some(end) = char_literal_end(context, index)
+        {
+            index = end;
+            continue;
+        }
+        if context[index].is_ascii_alphabetic() || context[index] == b'_' {
+            let start = index;
+            index += 1;
+            while context
+                .get(index)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            {
+                index += 1;
+            }
+            has_where_clause |= &context[start..index] == b"where";
+            continue;
+        }
+        match context[index] {
             b'<' => angle_depth += 1,
             b'>' => angle_depth = angle_depth.saturating_sub(1),
             _ => {}
         }
+        index += 1;
     }
-    angle_depth > 0
-        || context
-            .split(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
-            .any(|word| word == b"where")
+    angle_depth > 0 || has_where_clause
 }
 
 fn skip_quoted(bytes: &[u8], start: usize, quote: u8) -> usize {
