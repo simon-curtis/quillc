@@ -2,13 +2,13 @@
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
   "quillc": "/home/simon/git/quillc/target/release/quillc",
-  "quillc_source_revision": "9ccd5ddc85f4227c97876e95f03fb458615f1cda",
+  "quillc_source_revision": "bcbfa455e693f0ca95b0f958276c0cf02f55b7a7",
   "quillc_source_dirty": false,
-  "quillc_artifact_mtime": "2026-10-13T15:12:41.454880+00:00",
-  "quillc_sha256": "733d11d01f3e287fd8f82b3df16cc5b89871114145dbe7529f90e527e1aae3ce",
-  "passed": 21,
+  "quillc_artifact_mtime": "2026-10-13T15:19:17.865005+00:00",
+  "quillc_sha256": "7c767e5e8a5d4adfae797465a756a5ab7aaf98c8fdd69fa1f9ccda8ca0e9490c",
+  "passed": 23,
   "total": 28,
-  "percent": 75.0,
+  "percent": 82.1,
   "results": [
     {
       "case": "hello-world",
@@ -159,7 +159,7 @@
       "passed": true,
       "rustc_accepted": true,
       "quill_accepted": true,
-      "reason": "runtime outputs match",
+      "reason": "all Cargo binary outputs match",
       "rustc_status": 0,
       "quill_status": 0,
       "runtime_match": true,
@@ -172,7 +172,7 @@
       "passed": true,
       "rustc_accepted": true,
       "quill_accepted": true,
-      "reason": "runtime outputs match",
+      "reason": "all Cargo binary outputs match",
       "rustc_status": 0,
       "quill_status": 0,
       "runtime_match": true,
@@ -182,13 +182,13 @@
     {
       "case": "cargo-multiple-binary-targets",
       "kind": "cargo-run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: cargo-build-subset requires exactly one default-member binary target (found 2)",
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -222,7 +222,7 @@
           "line": 1,
           "column": 30
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-0t0os2qp/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-prmjkn5j/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -323,13 +323,13 @@
     {
       "case": "derive-clone-debug-equality",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: method is not a supported inherent method",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -339,7 +339,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-0t0os2qp/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-prmjkn5j/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -378,7 +378,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: cargo-build-subset accepts one binary and at most one library target per package",
+      "reason": "Quill rejected binary `build-script-check`: quillc: cargo-build-subset accepts selected binary targets and at most one library target per package",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -404,7 +404,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-0t0os2qp/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-0t0os2qp/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-0t0os2qp/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-0t0os2qp/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-prmjkn5j/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-prmjkn5j/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-prmjkn5j/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-prmjkn5j/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -454,10 +454,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 1,
-      "passed": 0,
-      "failed": [
-        "derive-clone-debug-equality"
-      ]
+      "passed": 1,
+      "failed": []
     },
     {
       "id": "diagnostics-parity",
@@ -534,10 +532,8 @@
       "tracker_status": "available",
       "probed": true,
       "cases": 24,
-      "passed": 19,
+      "passed": 21,
       "failed": [
-        "cargo-multiple-binary-targets",
-        "derive-clone-debug-equality",
         "generic-trait-dispatch",
         "panic-runtime",
         "cargo-build-script-cfg"
@@ -553,13 +549,11 @@
     },
     {
       "id": "multiple-binary-targets",
-      "tracker_status": "planned",
+      "tracker_status": "partial",
       "probed": true,
       "cases": 1,
-      "passed": 0,
-      "failed": [
-        "cargo-multiple-binary-targets"
-      ]
+      "passed": 1,
+      "failed": []
     },
     {
       "id": "option--result--and",
@@ -616,10 +610,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 2,
-      "passed": 1,
-      "failed": [
-        "derive-clone-debug-equality"
-      ]
+      "passed": 2,
+      "failed": []
     },
     {
       "id": "trait-solving",

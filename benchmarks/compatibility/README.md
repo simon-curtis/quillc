@@ -17,7 +17,9 @@ python3 benchmarks/compatibility/run.py
 ```
 
 The runner builds each positive case with both compilers, runs both binaries,
-and compares exit status, stdout, and stderr. Diagnostic compatibility needs
+and compares exit status, stdout, and stderr. A Cargo case can list multiple
+`binaries`; the runner compares the output of every generated target.
+Diagnostic compatibility needs
 a separate, versioned expectation set and is not claimed by this first
 executable tier.
 
@@ -51,11 +53,12 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 28-case run passes 21 (75.0%) against clean Quill revision
-`9ccd5dd` and probes 28 of 29 tracked categories. The local workspace dependency,
-feature cfg, and narrow unsigned-integer Vec push/iteration cases match rustc.
-A narrow two-`u64` Rust ABI call also links from a Quill object into a rustc
-host and matches output. The report at
+The current 28-case run passes 23 (82.1%) against clean Quill revision
+`bcbfa45` and probes 28 of 29 tracked categories. The local workspace dependency,
+feature cfg, multiple binary targets, scalar struct clone/equality, and narrow
+unsigned-integer Vec push/iteration cases match rustc. A narrow two-`u64` Rust
+ABI call also links from a Quill object into a rustc host and matches output.
+The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
 records the exact source revision, compiler-source cleanliness, binary hash,
 and build time. The website reports this result separately from the manually curated
@@ -63,10 +66,10 @@ and build time. The website reports this result separately from the manually cur
 behavior, Rust diagnostics, Cargo workflows, and Linux and Windows targets as
 described in the project specification.
 
-Windows output is the only tracked category with no probe. Seven cases fail,
-covering multiple binary targets, build scripts, use-after-move diagnostics,
-derive implementations, trait dispatch, panic behavior, and rustc's
+Windows output is the only tracked category with no probe. Five cases fail,
+covering build scripts, use-after-move diagnostics, generic trait dispatch,
+panic behavior, and rustc's
 inability to consume Quill's object as an `--extern` library. Macro syntax and
-one literal macro expansion now pass. The 75.0% figure applies only to these
+one literal macro expansion now pass. The 82.1% figure applies only to these
 28 curated cases; it is not a general Rust compatibility score and cannot be
 compared directly to the manual 10.3% index ratio.
