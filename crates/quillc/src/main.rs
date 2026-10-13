@@ -3110,7 +3110,7 @@ fn rewrite_enum_references(
                 impl_owner,
                 struct_paths,
             ),
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 rewrite(
                     base,
                     module_path,
@@ -3562,7 +3562,7 @@ fn rewrite_calls(
                     context,
                 )?;
             }
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 visit(base, prefixes, paths, aliases, resolution_cache, context)?;
                 visit(index, prefixes, paths, aliases, resolution_cache, context)?;
             }

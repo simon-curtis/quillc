@@ -6097,6 +6097,9 @@ fn materialize_index_reads(
                 );
             }
         }
+        BodyExprKind::ArrayRepeat { element, .. } => {
+            materialize_index_reads(element, environment, temporaries, slot_seed, reserved_name);
+        }
         BodyExprKind::MethodCall {
             receiver,
             arguments,

@@ -1987,10 +1987,21 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 field: index.index.to_string(),
             },
         },
-        syn::Expr::Index(index) => BodyExprKind::Index {
-            base: Box::new(lower_expr(&index.expr, source)),
-            index: Box::new(lower_expr(&index.index, source)),
-        },
+        syn::Expr::Index(index) => {
+            let span = span_range(source, index.span());
+            let base_span = span_range(source, index.expr.span());
+            let (line, column) = source.line_column(span.start);
+            let (base_line, base_column) = source.line_column(base_span.start);
+            BodyExprKind::Index {
+                base: Box::new(lower_expr(&index.expr, source)),
+                index: Box::new(lower_expr(&index.index, source)),
+                source_path: source.path().to_string_lossy().into_owned(),
+                line,
+                column,
+                base_line,
+                base_column,
+            }
+        }
         syn::Expr::Array(array) => BodyExprKind::FixedArrayLiteral(
             array
                 .elems

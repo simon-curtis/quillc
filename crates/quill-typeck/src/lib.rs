@@ -1551,7 +1551,7 @@ fn contains_labeled_control(
         BodyExprKind::FieldAccess { base, .. } => {
             contains_labeled_control(base, label, control)
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             contains_labeled_control(base, label, control)
                 || contains_labeled_control(index, label, control)
         }
@@ -2813,7 +2813,7 @@ fn check_move_expression(
                 );
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             // Indexing borrows its base place; the index expression itself is
             // evaluated by value.
             if let Some(place) = move_place(expression) {
@@ -3233,7 +3233,7 @@ fn move_place(expression: &BodyExpr) -> Option<String> {
         BodyExprKind::FieldAccess { base, field } => {
             Some(format!("{}.{field}", move_place(base)?))
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             let index = match &index.kind {
                 BodyExprKind::Literal(LiteralKind::Integer { text, .. }) => {
                     parse_move_index(text).map_or_else(|| "*".to_owned(), |index| index.to_string())
@@ -3385,7 +3385,7 @@ fn check_call_targets(
         BodyExprKind::ArrayRepeat { element, .. } => {
             check_call_targets(element, locals, signatures, diagnostics);
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_call_targets(base, locals, signatures, diagnostics);
             check_call_targets(index, locals, signatures, diagnostics);
         }
@@ -3633,7 +3633,7 @@ fn check_loop_control(
                 check_loop_control(element, loop_labels, diagnostics);
             }
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_loop_control(base, loop_labels, diagnostics);
             check_loop_control(index, loop_labels, diagnostics);
         }
@@ -3710,7 +3710,7 @@ fn check_mutability(
         BodyExprKind::ArrayRepeat { element, .. } => {
             check_mutability(element, locals, diagnostics);
         }
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             check_mutability(base, locals, diagnostics);
             check_mutability(index, locals, diagnostics);
         }

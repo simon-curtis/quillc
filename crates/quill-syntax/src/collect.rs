@@ -2823,10 +2823,24 @@ impl<'a> Lowerer<'a> {
                 base: Box::new(self.lower_opt_expr(field.expr(), field.syntax())),
                 field: field.name_ref()?.syntax().text().to_string(),
             },
-            ast::Expr::IndexExpr(index) => BodyExprKind::Index {
-                base: Box::new(self.lower_opt_expr(index.base(), index.syntax())),
-                index: Box::new(self.lower_opt_expr(index.index(), index.syntax())),
-            },
+            ast::Expr::IndexExpr(index) => {
+                let span = self.span(index.syntax());
+                let base_span = index
+                    .base()
+                    .map(|base| self.span(base.syntax()))
+                    .unwrap_or_else(|| span.clone());
+                let (line, column) = self.source.line_column(span.start);
+                let (base_line, base_column) = self.source.line_column(base_span.start);
+                BodyExprKind::Index {
+                    base: Box::new(self.lower_opt_expr(index.base(), index.syntax())),
+                    index: Box::new(self.lower_opt_expr(index.index(), index.syntax())),
+                    source_path: self.source.path().to_string_lossy().into_owned(),
+                    line,
+                    column,
+                    base_line,
+                    base_column,
+                }
+            }
             ast::Expr::ArrayExpr(array) => match array.kind() {
                 ast::ArrayExprKind::ElementList(elements) => {
                     BodyExprKind::FixedArrayLiteral(self.lower_exprs(elements))

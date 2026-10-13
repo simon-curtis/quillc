@@ -1077,7 +1077,7 @@ impl Checker<'_, '_> {
                     Vec::new()
                 }
             }
-            BodyExprKind::Index { base, index } => {
+            BodyExprKind::Index { base, index, .. } => {
                 let mut result = Vec::new();
                 if let Some((mut place, through)) = self.place(base, state) {
                     place.projection.push("[*]".to_owned());
@@ -2152,7 +2152,7 @@ fn expression_names(expression: &BodyExpr, names: &mut HashSet<String>) {
             }
         }
         BodyExprKind::FieldAccess { base, .. } => expression_names(base, names),
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             expression_names(base, names);
             expression_names(index, names);
         }
@@ -2351,7 +2351,7 @@ fn collect_live_expression(expression: &BodyExpr, places: &mut HashSet<Place>) {
             }
         }
         BodyExprKind::FieldAccess { base, .. } => collect_live_expression(base, places),
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             collect_live_expression(base, places);
             collect_live_expression(index, places);
         }
@@ -2632,7 +2632,7 @@ fn collect_bindings(expression: &BodyExpr, bindings: &mut HashSet<String>) {
             }
         }
         BodyExprKind::FieldAccess { base, .. } => collect_bindings(base, bindings),
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             collect_bindings(base, bindings);
             collect_bindings(index, bindings);
         }
@@ -2795,7 +2795,7 @@ fn collect_mutated_names(expression: &BodyExpr, mutated: &mut HashSet<String>) {
             }
         }
         BodyExprKind::FieldAccess { base, .. } => collect_mutated_names(base, mutated),
-        BodyExprKind::Index { base, index } => {
+        BodyExprKind::Index { base, index, .. } => {
             collect_mutated_names(base, mutated);
             collect_mutated_names(index, mutated);
         }
