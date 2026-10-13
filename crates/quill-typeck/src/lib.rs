@@ -1118,6 +1118,51 @@ fn check_local_borrow_conflicts_in_expression(
             let mut local_types = HashMap::<String, Ty>::new();
             for (index, statement) in statements.iter().enumerate() {
                 match statement {
+                    BodyStatement::Let {
+                        initializer: Some(initializer),
+                        ..
+                    } if !matches!(initializer.kind, BodyExprKind::Path(_)) => {
+                        check_consumed_local_against_borrows(
+                            initializer,
+                            true,
+                            &local_types,
+                            struct_signatures,
+                            &borrows,
+                            &statements[index + 1..],
+                            tail.as_deref(),
+                            diagnostics,
+                        );
+                    }
+                    BodyStatement::LetTuple { initializer, .. }
+                    | BodyStatement::Assign { value: initializer, .. }
+                    | BodyStatement::Expression {
+                        expression: initializer,
+                        ..
+                    } => check_consumed_local_against_borrows(
+                        initializer,
+                        true,
+                        &local_types,
+                        struct_signatures,
+                        &borrows,
+                        &statements[index + 1..],
+                        tail.as_deref(),
+                        diagnostics,
+                    ),
+                    BodyStatement::While { condition, .. } => {
+                        check_consumed_local_against_borrows(
+                            condition,
+                            false,
+                            &local_types,
+                            struct_signatures,
+                            &borrows,
+                            &statements[index + 1..],
+                            tail.as_deref(),
+                            diagnostics,
+                        );
+                    }
+                    _ => {}
+                }
+                match statement {
                     BodyStatement::Assign { name, span, .. } => {
                         for (borrow_index, (_, place, _, _)) in borrows.iter().enumerate() {
                             if place == name
@@ -1430,6 +1475,200 @@ fn borrowed_local_path(expression: &BodyExpr) -> Option<(&str, bool, Option<&str
         },
         BodyExprKind::Parenthesized(inner) => borrowed_local_path(inner),
         _ => None,
+    }
+}
+
+fn check_consumed_local_against_borrows(
+    expression: &BodyExpr,
+    consume: bool,
+    local_types: &HashMap<String, Ty>,
+    struct_signatures: &[StructSignature],
+    borrows: &[(String, String, bool, Option<String>)],
+    statements_after: &[BodyStatement],
+    tail: Option<&BodyExpr>,
+    diagnostics: &mut Vec<TypeDiagnostic>,
+) {
+    match &expression.kind {
+        BodyExprKind::Path(name)
+            if consume
+                && local_types.get(name).is_some_and(|ty| {
+                    !matches!(ty, Ty::Unknown) && !is_copy_type(ty, struct_signatures)
+                }) =>
+        {
+            for (borrow_index, (_, place, _, _)) in borrows.iter().enumerate() {
+                if place == name
+                    && local_borrow_is_live_after(
+                        borrow_index,
+                        borrows,
+                        statements_after,
+                        tail,
+                    )
+                {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "error[E0505]: cannot move out of `{name}` because it is borrowed"
+                        ),
+                    });
+                    break;
+                }
+            }
+        }
+        BodyExprKind::Reference { expression, .. } =>
+            check_consumed_local_against_borrows(
+                expression,
+                false,
+                local_types,
+                struct_signatures,
+                borrows,
+                statements_after,
+                tail,
+                diagnostics,
+            ),
+        BodyExprKind::Parenthesized(inner) => check_consumed_local_against_borrows(
+            inner,
+            consume,
+            local_types,
+            struct_signatures,
+            borrows,
+            statements_after,
+            tail,
+            diagnostics,
+        ),
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => {
+            for argument in arguments {
+                check_consumed_local_against_borrows(
+                    argument,
+                    true,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            method,
+            arguments,
+        } => {
+            check_consumed_local_against_borrows(
+                receiver,
+                matches!(method.as_str(), "into_iter" | "into_bytes" | "unwrap" | "expect"),
+                local_types,
+                struct_signatures,
+                borrows,
+                statements_after,
+                tail,
+                diagnostics,
+            );
+            for argument in arguments {
+                check_consumed_local_against_borrows(
+                    argument,
+                    true,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Binary { left, right, .. } => {
+            for operand in [left, right] {
+                check_consumed_local_against_borrows(
+                    operand,
+                    true,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_consumed_local_against_borrows(
+                condition,
+                false,
+                local_types,
+                struct_signatures,
+                borrows,
+                statements_after,
+                tail,
+                diagnostics,
+            );
+            check_consumed_local_against_borrows(
+                then_branch,
+                consume,
+                local_types,
+                struct_signatures,
+                borrows,
+                statements_after,
+                tail,
+                diagnostics,
+            );
+            if let Some(else_branch) = else_branch {
+                check_consumed_local_against_borrows(
+                    else_branch,
+                    consume,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Match { scrutinee, arms } => {
+            if arms.iter().any(|arm| match_pattern_binds_by_value(&arm.pattern)) {
+                check_consumed_local_against_borrows(
+                    scrutinee,
+                    true,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+            for arm in arms {
+                check_consumed_local_against_borrows(
+                    &arm.body,
+                    consume,
+                    local_types,
+                    struct_signatures,
+                    borrows,
+                    statements_after,
+                    tail,
+                    diagnostics,
+                );
+            }
+        }
+        BodyExprKind::Return(Some(value)) => check_consumed_local_against_borrows(
+            value,
+            true,
+            local_types,
+            struct_signatures,
+            borrows,
+            statements_after,
+            tail,
+            diagnostics,
+        ),
+        _ => {}
     }
 }
 

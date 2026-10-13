@@ -1210,5 +1210,26 @@
     ],
     "edition": "2024",
     "source": "fn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    let moved = value;\n    println!(\"{moved}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-into-call-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    consume(value);\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "move-into-call-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn consume(value: String) { let _ = value; }\nfn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    consume(value);\n}"
   }
 ]
