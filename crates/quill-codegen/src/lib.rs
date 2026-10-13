@@ -2531,6 +2531,22 @@ fn static_array_element_widths(elements: &[Value]) -> Vec<usize> {
     }
 }
 
+fn scalar_static_array_width(elements: &[Value]) -> Option<usize> {
+    if elements.is_empty() {
+        return None;
+    }
+    if elements.iter().all(is_word_value) {
+        Some(8)
+    } else if elements
+        .iter()
+        .all(|element| matches!(element, Value::Integer(_)))
+    {
+        Some(4)
+    } else {
+        None
+    }
+}
+
 fn coerce_annotated_integer_values(value: &mut Value, type_text: &str) {
     let type_text = type_text.trim();
     let scalar_type = type_text
@@ -4334,8 +4350,7 @@ fn lower_statements(
                 } = &initializer.kind
                     && let BodyExprKind::Path(array_name) = &base.kind
                     && let Some(Value::StaticArray(elements)) = environment.get(array_name)
-                    && !elements.is_empty()
-                    && elements.iter().all(is_word_value)
+                    && let Some(element_width) = scalar_static_array_width(elements)
                 {
                     let index = match value_from_expression(index, environment, functions)? {
                         Value::Integer(index) if index >= 0 => Value::Word(index as u64),
@@ -4390,10 +4405,13 @@ fn lower_statements(
                     }
                     let slot = *next_slot;
                     *next_slot += 1;
-                    let local_value = generic_argument_type(&selected).map_or(
-                        Value::WordLocal(slot),
-                        |type_name| Value::TypedWordLocal { slot, type_name },
-                    );
+                    let local_value = if element_width == 8 {
+                        generic_argument_type(&selected).map_or(Value::WordLocal(slot), |type_name| {
+                            Value::TypedWordLocal { slot, type_name }
+                        })
+                    } else {
+                        Value::Local(slot)
+                    };
                     environment.insert(name.clone(), local_value);
                     if *mutable {
                         mutable_names.insert(name.clone());
@@ -5968,7 +5986,7 @@ fn materialize_index_reads(
                     ..
                 }) => is_word_type(element_type) || element_type == "i32",
                 Some(Value::StaticArray(elements)) => {
-                    !elements.is_empty() && elements.iter().all(is_word_value)
+                    scalar_static_array_width(elements).is_some()
                 }
                 Some(value) => scalar_slice_layout(value).is_some(),
                 None => false,

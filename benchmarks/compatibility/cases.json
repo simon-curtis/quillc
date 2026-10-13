@@ -112,6 +112,29 @@
     "source": "fn at(index: usize) -> u64 { let values: [u64; 3] = [7, 11, 13]; let result = values[index]; result }\nfn main() { let result = at(3); println!(\"{result}\"); }"
   },
   {
+    "id": "fixed-i32-array-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let values: [i32; 3] = [7, 11, 13]; let index = 0usize; let result = values[index] as u64; println!(\"{result}\"); }"
+  },
+  {
+    "id": "fixed-i32-array-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(index: usize) -> u64 { let values: [i32; 3] = [7, 11, 13]; let result = values[index] as u64; result }\nfn main() { let result = at(3); println!(\"{result}\"); }"
+  },
+  {
     "id": "inline-module-import",
     "kind": "run",
     "features": [
