@@ -1660,11 +1660,13 @@ fn check_move_loop_transfer(
             }
             return MoveLoopExit::Break(current_label.map(str::to_owned));
         }
-        // The transfer model carries one continuing state. If an outer
-        // labeled exit shares this split with a path that stays in the current
-        // loop, conservatively join its moved places into that state so they
-        // reach the enclosing loop's next fixed-point iteration.
-        continuing.extend(propagated_exits.into_iter().map(|(_, state)| state));
+        // A labeled continue reaches the enclosing loop's next iteration,
+        // while a labeled break exits it. Only continues belong in this
+        // loop's back-edge state; joining a break here leaks moves past the
+        // enclosing loop exit.
+        continuing.extend(propagated_exits.into_iter().filter_map(|(exit, state)| {
+            matches!(exit, MoveLoopExit::Continue(_)).then_some(state)
+        }));
         moved.clear();
         for state in continuing {
             moved.extend(state);
