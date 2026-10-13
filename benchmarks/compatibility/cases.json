@@ -234,7 +234,7 @@
     ],
     "edition": "2024",
     "rustc_error_code": "E0382",
-    "rustc_message": "borrow of moved value",
+    "rustc_message": "borrow of moved value: `value`",
     "source": "fn main() { let value = String::from(\"owned\"); let moved = value; println!(\"{value}\"); }"
   },
   {
