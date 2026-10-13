@@ -264,6 +264,7 @@
     "kind": "run",
     "features": [
       "linux-x86-64-executables",
+      "trait-implementations-and-method-resolution",
       "trait-solving",
       "generics"
     ],

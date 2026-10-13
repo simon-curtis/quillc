@@ -59,7 +59,14 @@ Use explicitly pinned reports for comparisons.
 
 The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
 at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
-clean source status. This is a named snapshot, not a permanent current count.
+clean source status. It is the earlier baseline snapshot, not the current count.
+
+The [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
+passes 52/53 cases (98.1%). It verifies one simple local trait method dispatched
+through a generic bound to a concrete named struct, and records a modified
+checkout at source revision `adda254`; the report lists the dirty paths and
+binary hash. The remaining failure is rustc consuming a Quill object through
+`--extern`. This report is evidence for the named case and current corpus only.
 
 It includes 13 edition-scoped cases across 2015, 2018, 2021, 2024, and
 experimental `future`: Rust 2015 uses of `async`, `await`, and `dyn`; later
@@ -71,8 +78,8 @@ Static-string panic behavior also matches in the maintained runtime case.
 The native build-script case emits `rustc-cfg`; other directives and build
 dependencies remain incomplete.
 
-Two cases fail in that snapshot: generic trait dispatch and
-rustc consuming Quill's object as an `--extern` library. Windows remains unprobed.
+The earlier snapshot failed both generic trait dispatch and rustc consuming
+Quill's object as an `--extern` library. Windows remains unprobed.
 New reports retain their own results and provenance under `results/`; the website
 selects reports through [its data loader](../../website/data.mjs).
 
