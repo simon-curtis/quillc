@@ -1,16 +1,16 @@
-# Quill language server
+# Quill Check language server
 
 ## Connect an editor
 
 Configure the editor's language-server command as:
 
 ```sh
-quillc lsp
+quill-check
 ```
 
 The server speaks LSP over stdin/stdout. Logs and fatal errors use stderr.
-Setup is complete when the editor can open a Rust document and receive
-versioned syntax diagnostics.
+`quillc lsp` remains an equivalent entry point. Setup is complete when the
+editor can open a Rust document and receive versioned syntax diagnostics.
 
 ## Supported behavior
 
