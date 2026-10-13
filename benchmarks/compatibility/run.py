@@ -229,10 +229,11 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         manifest = (case_dir / case["manifest"]).resolve()
         if case_dir.resolve() not in manifest.parents:
             raise RuntimeError(f"case {case['id']} manifest is outside its directory")
+        cargo_args = case.get("cargo_args", [])
         rust_target = case_dir / "rust-target"
         rustc_result = invoke(
             ["cargo", "build", "--quiet", "--manifest-path", str(manifest),
-             "--target-dir", str(rust_target)], case_dir)
+             "--target-dir", str(rust_target), *cargo_args], case_dir)
         if rustc_result.returncode:
             return Result(case["id"], case["kind"], False, False, False,
                           "rustc Cargo build failed", rustc_result.returncode)
@@ -241,7 +242,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         if "binaries" in case:
             quill_result = invoke(
                 [str(quill), "cargo-build-subset", str(manifest), "-o",
-                 str(quill_output_root)], case_dir)
+                 str(quill_output_root), *cargo_args], case_dir)
             if quill_result.returncode:
                 detail = quill_result.stderr.decode("utf-8", "replace").strip()
                 return Result(case["id"], case["kind"], False, True, False,
@@ -257,7 +258,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                 quill_binary = case_dir / f"quill-{binary_name}"
                 quill_result = invoke(
                     [str(quill), "cargo-build-subset", str(manifest), "-o",
-                     str(quill_binary)], case_dir)
+                     str(quill_binary), *cargo_args], case_dir)
                 quill_status = quill_result.returncode
                 if quill_status:
                     detail = quill_result.stderr.decode("utf-8", "replace").strip()

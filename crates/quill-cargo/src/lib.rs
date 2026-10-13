@@ -15,6 +15,13 @@ pub struct CargoWorkspace {
     pub external_dependency_count: usize,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CargoFeatureSelection {
+    pub features: Vec<String>,
+    pub no_default_features: bool,
+    pub all_features: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CargoPackage {
     pub id: String,
@@ -104,11 +111,20 @@ impl std::error::Error for CargoError {}
 /// closure. Cargo remains authoritative for manifest syntax, target discovery,
 /// feature resolution, and dependency IDs.
 pub fn load_workspace(manifest_path: impl AsRef<Path>) -> Result<CargoWorkspace, CargoError> {
+    load_workspace_with_features(manifest_path, &CargoFeatureSelection::default())
+}
+
+/// Resolve the workspace using Cargo's feature selection for metadata.
+pub fn load_workspace_with_features(
+    manifest_path: impl AsRef<Path>,
+    selection: &CargoFeatureSelection,
+) -> Result<CargoWorkspace, CargoError> {
     let output = Command::new("cargo")
         .arg("metadata")
         .arg("--format-version=1")
         .arg("--manifest-path")
         .arg(manifest_path.as_ref())
+        .args(selection.metadata_args())
         .output()
         .map_err(|error| {
             CargoError::MetadataCommand(format!("could not run cargo metadata: {error}"))
@@ -124,6 +140,23 @@ pub fn load_workspace(manifest_path: impl AsRef<Path>) -> Result<CargoWorkspace,
     })?;
     let cfg = host_cfg()?;
     parse_metadata_with_cfg(&json, &cfg)
+}
+
+impl CargoFeatureSelection {
+    fn metadata_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        if self.no_default_features {
+            args.push("--no-default-features".to_owned());
+        }
+        if self.all_features {
+            args.push("--all-features".to_owned());
+        }
+        for features in &self.features {
+            args.push("--features".to_owned());
+            args.push(features.clone());
+        }
+        args
+    }
 }
 
 /// Load Cargo's resolved workspace graph from a validated local cache when the

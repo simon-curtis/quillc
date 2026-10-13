@@ -294,6 +294,41 @@
     "source": "fn main() { panic!(\"expected panic\"); }"
   },
   {
+    "id": "cargo-feature-selection-no-default",
+    "kind": "cargo-run",
+    "features": [
+      "linux-x86-64-executables",
+      "features-and-cfg"
+    ],
+    "manifest": "Cargo.toml",
+    "binary": "feature-selection",
+    "cargo_args": [
+      "--no-default-features",
+      "--features=slow"
+    ],
+    "files": {
+      "Cargo.toml": "[package]\nname = \"feature-selection\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\ndefault = [\"fast\"]\nfast = []\nslow = []\n",
+      "src/main.rs": "#[cfg(feature = \"fast\")] fn answer() -> u64 { 42 }\n#[cfg(feature = \"slow\")] fn answer() -> u64 { 77 }\nfn main() { let result = answer(); println!(\"{result}\"); }\n"
+    }
+  },
+  {
+    "id": "cargo-feature-selection-all",
+    "kind": "cargo-run",
+    "features": [
+      "linux-x86-64-executables",
+      "features-and-cfg"
+    ],
+    "manifest": "Cargo.toml",
+    "binary": "all-features",
+    "cargo_args": [
+      "--all-features"
+    ],
+    "files": {
+      "Cargo.toml": "[package]\nname = \"all-features\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\ndefault = [\"base\"]\nbase = []\nselected = []\n",
+      "src/main.rs": "#[cfg(feature = \"selected\")] fn answer() -> u64 { 77 }\n#[cfg(not(feature = \"selected\"))] fn answer() -> u64 { 0 }\nfn main() { let result = answer(); println!(\"{result}\"); }\n"
+    }
+  },
+  {
     "id": "cargo-build-script-cfg",
     "kind": "cargo-run",
     "features": [

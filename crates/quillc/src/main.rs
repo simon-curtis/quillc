@@ -691,24 +691,82 @@ fn compile_library_object(source_path: &str, output_path: &str) -> Result<(), St
 }
 
 fn cargo_build_subset_command(arguments: Vec<String>) -> ExitCode {
-    let (manifest, bin_target, output) = match arguments.as_slice() {
-        [manifest, output_flag, output] if output_flag == "-o" => (manifest, None, output),
-        [manifest, bin_flag, target, output_flag, output]
-            if bin_flag == "--bin" && output_flag == "-o" =>
-        {
-            (manifest, Some(target.as_str()), output)
+    let mut manifest = None;
+    let mut bin_target = None;
+    let mut output = None;
+    let mut feature_selection = quill_cargo::CargoFeatureSelection::default();
+    let mut index = 0;
+    let mut invalid = false;
+    while index < arguments.len() {
+        if let Some(features) = arguments[index].strip_prefix("--features=") {
+            if features.is_empty() {
+                invalid = true;
+                break;
+            }
+            feature_selection.features.push(features.to_owned());
+            index += 1;
+            continue;
         }
-        _ => {
-            eprintln!(
-                "usage: quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program>"
-            );
-            return ExitCode::from(2);
+        match arguments[index].as_str() {
+            "--bin" | "-o" | "--features" => {
+                let option = arguments[index].as_str();
+                index += 1;
+                let Some(value) = arguments.get(index) else {
+                    invalid = true;
+                    break;
+                };
+                match option {
+                    "--bin" if bin_target.is_none() => bin_target = Some(value.clone()),
+                    "-o" if output.is_none() => output = Some(value.clone()),
+                    "--features" => feature_selection.features.push(value.clone()),
+                    _ => invalid = true,
+                }
+            }
+            "--no-default-features" if !feature_selection.no_default_features => {
+                feature_selection.no_default_features = true;
+            }
+            "--all-features" if !feature_selection.all_features => {
+                feature_selection.all_features = true;
+            }
+            option if option.starts_with('-') => invalid = true,
+            value if manifest.is_none() => manifest = Some(value.to_owned()),
+            _ => invalid = true,
         }
+        if invalid {
+            break;
+        }
+        index += 1;
+    }
+    let (Some(manifest), Some(output)) = (manifest, output) else {
+        eprintln!(
+            "usage: quillc cargo-build-subset <Cargo.toml> [--bin <target>] [--features <features>] [--no-default-features] [--all-features] -o <program>"
+        );
+        return ExitCode::from(2);
     };
-    let result = bin_target.map_or_else(
-        || compile_cargo_subset(manifest, output),
-        |bin| compile_cargo_subset_for_target(manifest, output, Some(bin)),
-    );
+    if invalid {
+        eprintln!(
+            "usage: quillc cargo-build-subset <Cargo.toml> [--bin <target>] [--features <features>] [--no-default-features] [--all-features] -o <program>"
+        );
+        return ExitCode::from(2);
+    }
+    let result = if feature_selection == quill_cargo::CargoFeatureSelection::default() {
+        bin_target.map_or_else(
+            || compile_cargo_subset(&manifest, &output),
+            |bin| compile_cargo_subset_for_target(&manifest, &output, Some(&bin)),
+        )
+    } else {
+        load_workspace_with_feature_selection(&manifest, &feature_selection).and_then(|workspace| {
+            match bin_target.as_deref() {
+                Some(bin) => compile_cargo_subset_for_target_with_workspace(
+                    &manifest,
+                    &output,
+                    Some(bin),
+                    &workspace,
+                ),
+                None => compile_cargo_subset_with_workspace(&manifest, &output, &workspace),
+            }
+        })
+    };
     match result {
         Ok(()) => {
             println!("built {output}");
@@ -730,6 +788,15 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
     profile_checkpoint("warm Cargo build cache miss", &mut profile_timer);
     let workspace = load_cargo_workspace(manifest)?;
     profile_checkpoint("load Cargo workspace", &mut profile_timer);
+    compile_cargo_subset_with_workspace(manifest, output, &workspace)
+}
+
+fn compile_cargo_subset_with_workspace(
+    manifest: &str,
+    output: &str,
+    workspace: &quill_cargo::CargoWorkspace,
+) -> Result<(), String> {
+    let mut profile_timer = profile_timer();
     let binary_names: Vec<_> = workspace
         .packages
         .iter()
@@ -744,7 +811,7 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
         .collect();
     profile_checkpoint("discover Cargo binary targets", &mut profile_timer);
     match binary_names.as_slice() {
-        [_] => compile_cargo_subset_for_target_with_workspace(manifest, output, None, &workspace),
+        [_] => compile_cargo_subset_for_target_with_workspace(manifest, output, None, workspace),
         [] => Err("cargo-build-subset found no default-member binary targets".into()),
         names => {
             std::fs::create_dir_all(output).map_err(|error| {
@@ -756,12 +823,20 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
                     manifest,
                     &binary_output.display().to_string(),
                     Some(name),
-                    &workspace,
+                    workspace,
                 )?;
             }
             Ok(())
         }
     }
+}
+
+fn load_workspace_with_feature_selection(
+    manifest: &str,
+    selection: &quill_cargo::CargoFeatureSelection,
+) -> Result<quill_cargo::CargoWorkspace, String> {
+    quill_cargo::load_workspace_with_features(manifest, selection)
+        .map_err(|error| error.to_string())
 }
 
 fn run_cargo_build_script(
