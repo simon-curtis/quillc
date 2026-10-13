@@ -1243,5 +1243,38 @@
     "rustc_error_code": "E0502",
     "rustc_message": "cannot borrow `values` as mutable because it is also borrowed as immutable",
     "source": "fn main() {\n    let mut values: Vec<u64> = Vec::new();\n    let first = &values;\n    values.push(42);\n    println!(\"{first:?}\");\n}"
+  },
+  {
+    "id": "diagnostic-read-method-while-mutably-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &mut value;\n    let length = value.len();\n    println!(\"{first} {length}\");\n}"
+  },
+  {
+    "id": "diagnostic-mut-method-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &value;\n    value.push('!');\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-method-after-shared-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
   }
 ]
