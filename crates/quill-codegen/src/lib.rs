@@ -4743,6 +4743,25 @@ fn lower_statements(
                 }
             }
             BodyStatement::Assign { name, value, .. } => {
+                let mut rewritten_value = value.clone();
+                let mut index_temporaries = Vec::new();
+                materialize_vector_indices(
+                    &mut rewritten_value,
+                    environment,
+                    &mut index_temporaries,
+                    *next_slot,
+                    name,
+                );
+                if !index_temporaries.is_empty() {
+                    lowered.extend(lower_statements(
+                        &index_temporaries,
+                        environment,
+                        mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?);
+                }
                 if let Some((base, field_name)) = name.split_once('.') {
                     let field = match environment.get(base) {
                         Some(Value::StructLocal { fields, .. }) => fields.get(field_name),
@@ -4751,7 +4770,8 @@ fn lower_statements(
                     .ok_or(CodegenError::UnsupportedProgram(
                         "field assignment target must be a supported local struct field",
                     ))?;
-                    let lowered_value = value_from_expression(value, environment, functions)?;
+                    let lowered_value =
+                        value_from_expression(&rewritten_value, environment, functions)?;
                     match field {
                         StructLocalField::IndirectScalar {
                             pointer_slot,
@@ -4788,7 +4808,7 @@ fn lower_statements(
                 }
                 lowered.push(Statement::Assign {
                     slot,
-                    value: value_from_expression(value, environment, functions)?,
+                    value: value_from_expression(&rewritten_value, environment, functions)?,
                 });
             }
             BodyStatement::Expression {
