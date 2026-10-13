@@ -90,17 +90,19 @@ and [raw comparison](../results/struct-table-ownership-20261013.json) are retain
 
 A compact parse-summary cache keeps module declarations, item signatures, and
 generic bodies while omitting non-generic function bodies for targets whose
-package object is reusable. The five-round paired run at `79e11e0` measured
-comment-only incremental medians of 13.3 ms wall and 30.0 ms CPU, versus 25.0
-ms and 83 ms in the baseline. Semantic incremental CPU fell from 175 ms to
-142 ms, while wall time rose from 82.0 ms to 87.2 ms. Cold time was effectively
-unchanged at 333 ms / 1.847 s CPU versus 331 ms / 1.823 s. Peak RSS remained
-below the rustc baseline in all states. Semantic-edit program output matched.
-An earlier candidate at `3f0c376` measured 12.9 ms comment-only wall and 77.9
-ms semantic wall; the later run shows that the semantic wall result is not a
-reliable improvement. The clear gain is comment-only incremental work; the
-semantic edit trades a small wall-time regression for lower aggregate CPU.
-Raw runs: [`results-20261013-79e11e0-parse-summaries.json`](results-20261013-79e11e0-parse-summaries.json)
+package object is reusable. The clean five-round run at `db5f270`, after
+rebasing onto parser recovery commit `d8465f4`, measured comment-only
+incremental medians of 13.8 ms wall and 30.1 ms CPU, versus 25.0 ms and 83 ms
+in the baseline. Semantic incremental CPU fell from 175 ms to 146 ms, while
+wall time rose from 82.0 ms to 85.0 ms. Cold time was effectively unchanged
+at 331 ms / 1.819 s CPU versus 331 ms / 1.823 s. Peak RSS remained below the
+rustc baseline in all states, and semantic-edit output matched. An earlier
+candidate at `3f0c376` measured 12.9 ms comment-only wall and 77.9 ms semantic
+wall; the later runs show the semantic wall result is not a reliable
+improvement. The measured benefit is comment-only incremental work; semantic
+edits use less aggregate CPU with a small wall-time regression. Raw runs:
+[`results-20261013-db5f270-parse-summaries.json`](results-20261013-db5f270-parse-summaries.json),
+[`results-20261013-79e11e0-parse-summaries.json`](results-20261013-79e11e0-parse-summaries.json),
 and [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
 
 A separate clean semantic-incremental profile compared revisions `1301f37` and
