@@ -1095,6 +1095,11 @@ fn check_one_function(
             })
         })
         .collect();
+    for parameter in &function.parameters {
+        if parameter.name.as_deref() == Some("self") && parameter.type_text.starts_with("&mut ") {
+            mutable_locals.insert("\0mutable_ref:self".to_owned(), true);
+        }
+    }
     let expected = function.return_type.as_deref().map_or(Ty::Unit, |text| {
         type_from_function_syntax(text, function, function_structs)
     });
@@ -1910,7 +1915,15 @@ fn check_move_expression(
             let Some(ty) = locals.get(name) else {
                 return;
             };
-            if move_state_contains(name, moved) {
+            if is_uninitialized(name, moved) {
+                push_move_diagnostic(
+                    diagnostics,
+                    expression.span.clone(),
+                    format!(
+                        "error[E0381]: use of possibly-uninitialized variable: `{name}`"
+                    ),
+                );
+            } else if move_state_contains(name, moved) {
                 push_move_diagnostic(
                     diagnostics,
                     expression.span.clone(),
@@ -1992,7 +2005,10 @@ fn check_move_expression(
                                 .or(binding_type)
                                 .unwrap_or(Ty::Unknown);
                             locals.insert(name.clone(), ty);
-                            moved.remove(name);
+                            clear_move_state(name, moved);
+                            if initializer.is_none() {
+                                moved.insert(uninitialized_marker(name));
+                            }
                         }
                     }
                     BodyStatement::LetTuple {
@@ -2504,7 +2520,15 @@ fn check_move_expression(
                 if !locals.contains_key(root) {
                     return;
                 }
-                if move_state_contains(&place, moved) {
+                if is_uninitialized(move_place_root(&place), moved) {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!(
+                            "error[E0381]: use of possibly-uninitialized variable: `{}`",
+                            move_place_root(&place)
+                        ),
+                    });
+                } else if move_state_contains(&place, moved) {
                     diagnostics.push(TypeDiagnostic {
                         span: expression.span.clone(),
                         message: format!(
@@ -2651,14 +2675,27 @@ fn check_move_expression(
 
 fn move_state_contains(place: &str, moved: &HashSet<String>) -> bool {
     moved.iter().any(|moved_place| {
-        place == moved_place
+        !is_uninitialized_marker(moved_place)
+            && (place == moved_place
             || place
                 .strip_prefix(moved_place)
                 .is_some_and(|suffix| suffix.starts_with('.'))
             || moved_place
                 .strip_prefix(place)
-                .is_some_and(|suffix| suffix.starts_with('.'))
+                .is_some_and(|suffix| suffix.starts_with('.')))
     })
+}
+
+fn uninitialized_marker(place: &str) -> String {
+    format!("{place}.\0uninitialized")
+}
+
+fn is_uninitialized(place: &str, state: &HashSet<String>) -> bool {
+    state.contains(&uninitialized_marker(place))
+}
+
+fn is_uninitialized_marker(place: &str) -> bool {
+    place.ends_with(".\0uninitialized")
 }
 
 fn move_place_root(place: &str) -> &str {
@@ -2666,8 +2703,10 @@ fn move_place_root(place: &str) -> &str {
 }
 
 fn clear_move_state(place: &str, moved: &mut HashSet<String>) {
+    let uninitialized = uninitialized_marker(place);
     moved.retain(|moved_place| {
-        moved_place != place
+        moved_place != &uninitialized
+            && moved_place != place
             && !moved_place
                 .strip_prefix(place)
                 .is_some_and(|suffix| suffix.starts_with('.'))
@@ -3194,7 +3233,10 @@ fn check_mutability(
                     BodyStatement::Assign { name, value, span } => {
                         check_mutability(value, &mut scoped, diagnostics);
                         let binding = name.split_once('.').map_or(name.as_str(), |(base, _)| base);
-                        if scoped.get(binding) == Some(&false) {
+                        let mutable_reference_field = name != binding
+                            && binding == "self"
+                            && scoped.get("\0mutable_ref:self") == Some(&true);
+                        if scoped.get(binding) == Some(&false) && !mutable_reference_field {
                             diagnostics.push(TypeDiagnostic {
                                 span: span.clone(),
                                 message: format!(
