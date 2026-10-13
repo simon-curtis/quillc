@@ -1434,6 +1434,59 @@ fn check_move_expression(
             moved.extend(then_moved);
             moved.extend(else_moved);
         }
+        BodyExprKind::Match { scrutinee, arms } => {
+            let binds_scrutinee = arms
+                .iter()
+                .any(|arm| match_pattern_binds_by_value(&arm.pattern));
+            let scrutinee_type = if binds_scrutinee {
+                let mut ignored = Vec::new();
+                Some(infer_with_structs(
+                    scrutinee,
+                    locals,
+                    signatures,
+                    struct_signatures,
+                    &Ty::Unknown,
+                    &mut ignored,
+                ))
+            } else {
+                None
+            };
+            if binds_scrutinee || !matches!(&scrutinee.kind, BodyExprKind::Path(_)) {
+                check_move_expression(
+                    scrutinee,
+                    binds_scrutinee,
+                    signatures,
+                    struct_signatures,
+                    locals,
+                    moved,
+                    diagnostics,
+                );
+            }
+            let mut merged = moved.clone();
+            for arm in arms {
+                let mut arm_locals = locals.clone();
+                let mut arm_moved = moved.clone();
+                if let Some(scrutinee_type) = &scrutinee_type {
+                    let mut bindings = Vec::new();
+                    collect_match_pattern_bindings(&arm.pattern, &mut bindings);
+                    for name in bindings {
+                        arm_locals.insert(name.clone(), scrutinee_type.clone());
+                        arm_moved.remove(&name);
+                    }
+                }
+                check_move_expression(
+                    &arm.body,
+                    consume,
+                    signatures,
+                    struct_signatures,
+                    &mut arm_locals,
+                    &mut arm_moved,
+                    diagnostics,
+                );
+                merged.extend(arm_moved);
+            }
+            *moved = merged;
+        }
         BodyExprKind::Return(Some(value)) => check_move_expression(
             value,
             true,
@@ -1443,6 +1496,26 @@ fn check_move_expression(
             moved,
             diagnostics,
         ),
+        _ => {}
+    }
+}
+
+fn match_pattern_binds_by_value(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Binding(_) => true,
+        MatchPattern::Or(patterns) => patterns.iter().any(match_pattern_binds_by_value),
+        _ => false,
+    }
+}
+
+fn collect_match_pattern_bindings(pattern: &MatchPattern, bindings: &mut Vec<String>) {
+    match pattern {
+        MatchPattern::Binding(name) => bindings.push(name.clone()),
+        MatchPattern::Or(patterns) => {
+            for pattern in patterns {
+                collect_match_pattern_bindings(pattern, bindings);
+            }
+        }
         _ => {}
     }
 }

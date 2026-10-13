@@ -306,7 +306,7 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
                   "runtime status or output differs for: " + ", ".join(mismatches))
         return Result(case["id"], case["kind"], passed, True, True, reason,
                       rustc_result.returncode, quill_status, passed)
-    elif case["kind"] in {"parse", "syntax-reject"}:
+    elif case["kind"] in {"parse", "syntax-reject", "check"}:
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
         rust_meta = case_dir / "rustc.rmeta"
@@ -315,7 +315,8 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
              "--crate-type", "lib", "--emit=metadata", *case.get("rustc_args", []),
              str(source), "-o", str(rust_meta)],
             case_dir, compile_environment)
-        quill_args = [str(quill), "parse", str(source)]
+        quill_command = "check-subset" if case["kind"] == "check" else "parse"
+        quill_args = [str(quill), quill_command, str(source)]
     else:
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")
@@ -343,6 +344,12 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
     if case["kind"] == "parse":
         passed = rustc_accepted and quill_accepted
         reason = "both accept source syntax" if passed else "parser acceptance differs"
+        return Result(case["id"], case["kind"], passed, rustc_accepted,
+                      quill_accepted, reason, rustc_result.returncode,
+                      quill_result.returncode, passed)
+    if case["kind"] == "check":
+        passed = rustc_accepted and quill_accepted
+        reason = "both accept semantic check" if passed else "semantic acceptance differs"
         return Result(case["id"], case["kind"], passed, rustc_accepted,
                       quill_accepted, reason, rustc_result.returncode,
                       quill_result.returncode, passed)
@@ -417,7 +424,18 @@ def main() -> int:
             raise RuntimeError("no compatibility cases selected")
         if len({case["id"] for case in cases}) != len(cases):
             raise RuntimeError("case ids must be unique")
-        if any(case.get("kind") not in {"run", "cargo-check", "cargo-run", "parse", "syntax-reject", "diagnostic", "abi-link", "extern-artifact"} for case in cases):
+        supported_kinds = {
+            "run",
+            "cargo-check",
+            "cargo-run",
+            "parse",
+            "syntax-reject",
+            "check",
+            "diagnostic",
+            "abi-link",
+            "extern-artifact",
+        }
+        if any(case.get("kind") not in supported_kinds for case in cases):
             raise RuntimeError("unsupported case kind")
         tracker_html = (ROOT / "compatibility.html").read_text(encoding="utf-8")
         feature_rows = re.findall(

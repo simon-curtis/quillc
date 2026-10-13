@@ -308,6 +308,27 @@
     "source": "fn main() { let value = String::from(\"owned\"); while true { let moved = value; break; } let again = value; }"
   },
   {
+    "id": "diagnostic-use-after-move-from-match-binding",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0382",
+    "rustc_message": "use of moved value: `value`",
+    "source": "fn main() { let value = String::from(\"owned\"); let selected = match value { owned => 1u64 }; let again = value; }"
+  },
+  {
+    "id": "match-wildcard-after-move-remains-accepted",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let value = String::from(\"owned\"); let moved = value; let selected = match value { _ => 1u64 }; }"
+  },
+  {
     "id": "rust-syntax-async-lifetimes-macros",
     "kind": "parse",
     "features": [
