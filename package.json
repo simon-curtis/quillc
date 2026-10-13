@@ -4,10 +4,25 @@
   "scripts": {
     "lint:css": "stylelint 'assets/*.css'",
     "format:css": "prettier --write 'assets/*.css'",
-    "check:css": "npm run lint:css && prettier --check 'assets/*.css'"
+    "check:css": "npm run lint:css && prettier --check 'assets/*.css'",
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview"
   },
   "devDependencies": {
+    "cheerio": "1.1.2",
     "prettier": "3.9.10",
-    "stylelint": "17.16.0"
+    "stylelint": "17.16.0",
+    "vite-plus": "1.1.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vitest": "5.0.3"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "dependencies": {
+    "dompurify": "3.4.17"
   }
 }

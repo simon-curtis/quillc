@@ -10,7 +10,10 @@
   try {
     const response = await fetch('benchmarks/catalog-flow/results.json');
     if (!response.ok) throw new Error('Measurements unavailable');
-    const { medians } = await response.json();
+    const { medians, results } = await response.json();
+    const runs = results.filter(result => result.label === 'quill_cold').length;
+    metrics.memory.label = `Peak process-tree RSS · median of ${runs} runs`;
+    metrics.cpu.label = `Aggregate CPU time · median of ${runs} runs`;
     const rows = [...document.querySelectorAll('[data-build]')];
     for (const row of rows) {
       for (const compiler of ['quill', 'rustc']) {

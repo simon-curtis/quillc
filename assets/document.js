@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { marked } from './vendor/marked.js';
 
 const article = document.querySelector('#document');
@@ -11,7 +12,7 @@ try {
   const response = await fetch(source, { headers: { Accept: 'text/plain' } });
   if (!response.ok) throw new Error(`Document unavailable (${response.status})`);
   const markdown = await response.text();
-  if (response.headers.get('content-type')?.includes('text/html')) throw new Error('This page needs the Quill preview server: python3 serve.py');
+  if (response.headers.get('content-type')?.includes('text/html')) throw new Error('This page needs the Quill Vite+ server: npm run dev');
   article.innerHTML = DOMPurify.sanitize(marked.parse(markdown, { gfm: true }), { USE_PROFILES: { html: true } });
   const ids = new Set();
   for (const heading of article.querySelectorAll('h1,h2,h3,h4,h5,h6')) {

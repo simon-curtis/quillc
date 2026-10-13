@@ -10,27 +10,73 @@ Read [visual direction](design.md) before design changes and
 - `assets/site.css`: shared foundation and homepage components, grouped by section.
 - `assets/compatibility.css` and `assets/document.css`: page-specific styles.
 - `assets/print-fields.js`: halftone rendering; `assets/motion.js`: shared motion.
-- `serve.py`: local preview, Markdown rendering, and live project status.
+- `vite.config.mjs`: Vite+ development and production configuration.
+- `website/content-plugin.mjs`: Markdown routes, live reload, and publication.
+- `website/data.mjs`: report selection and server-rendered statistics.
 
 ## Local preview
 
-From the repository root:
+From the repository root (Node version requirements are in `package.json`):
 
 ```sh
-python3 serve.py --bind 0.0.0.0 --port 4173
+npm ci --ignore-scripts
+npm run dev
 ```
 
-Open `http://localhost:4173` locally, or the host's LAN address on another device.
-The development server returns `Cache-Control: no-store` for every response and
-ignores conditional request validators. Restart it after editing Python code.
-If switching from an older caching server, perform one hard reload. Asset URLs
-should stay stable; do not accumulate temporary version query strings.
+Vite+ listens on `0.0.0.0:4173`. Open `http://localhost:4173` locally, or the
+host's LAN address on another device. CSS updates in place; changes to docs,
+reports, scripts, and HTML reload open pages. Git revision changes also reload.
+`serve.py` is a compatibility launcher for this same command.
+
+Every non-ignored repository `.md` file is served in the existing document reader
+at its original URL; `?raw=1` returns Markdown. Project notes lists all documents,
+including newly added files. Relative links and images keep their original base.
+Dot-directories, build output, and files resolving outside the repository are
+excluded from publication.
+
+## Statistics and publication
+
+Edit or regenerate source reports; page figures are generated automatically.
+`website/data.mjs` supplies the same data to development pages and production
+HTML, including readable figures with JavaScript disabled. `/site-data.json`
+records the selected reports, documentation index, and current revision.
+
+- Catalog Flow uses `benchmarks/catalog-flow/results.json` for times, ratios,
+  workload size, run count, machine, and source revision. The metric switch reads
+  that same report.
+- Compiler checks select the newest report in `benchmarks/compatibility/results/`.
+  Report category coverage remains distinct from the current documentation index.
+- LSP latency and syntax coverage select reports by their `benchmark` identifier
+  under `benchmarks/results/`. Adding a matching report makes it eligible automatically.
+- Selection prefers recorded run/artifact timestamps, then filename date,
+  filesystem modification time, and filename. Record timestamps in new report
+  formats for unambiguous ordering across machines.
+- Feature availability is still curated in `compatibility.html`; the homepage
+  counts those entries automatically. Passing a probe never changes a feature's
+  status automatically.
+
+Malformed reports surface an error. Missing LSP or compiler reports display an
+unavailable state instead of retaining copied numbers. Reloading displays new
+measurements; it does not run compiler benchmarks or infer new results from code.
+
+```sh
+npm run build
+npm run preview
+```
+
+The build writes `target/website`, including Markdown, report JSON, and referenced
+public media. Preview serves that built snapshot; use a different `--port` if the
+development server is already running. The existing deployment workflow now
+installs locked dependencies and builds with Vite+. `scripts/build-website.py`
+remains a compatibility entry point. Source HTML provides the layout; modify
+`renderStats` when changing a measured section's markup. Do not copy new numbers
+into HTML or create another benchmark snapshot under `assets/`.
 
 ## Review a change
 
 1. Capture the existing section before changing its structure or stylesheet.
 2. In T3, call `preview_status` first and use an owned tab. Open a preview if none
-   exists. Reload the page after edits; do not assume an old screenshot is current.
+   exists. Wait for Vite to apply the edit; do not assume an old screenshot is current.
 3. Wait for `document.fonts.ready`, then two animation frames. Scroll the section
    into view and let its finite entrance animation settle. Do not wait on infinite
    animations. For geometry comparisons, finish only finite animations.

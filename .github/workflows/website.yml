@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - '*.html'
+      - 'vite.config.mjs'
+      - 'package.json'
+      - 'package-lock.json'
       - 'assets/**'
       - 'README.md'
       - 'LICENSE'
@@ -34,7 +37,8 @@ jobs:
           node-version: '24'
       - name: Build and check the website
         run: |
-          python3 scripts/build-website.py
+          npm ci --ignore-scripts
+          npm run build
           node --test website/worker.test.mjs
           npx --yes wrangler@4.150.0 deploy --config website/wrangler.jsonc --dry-run --autoconfig false
       - name: Upload website artifact
