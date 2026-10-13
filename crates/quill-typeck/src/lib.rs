@@ -203,6 +203,54 @@ struct SignatureIndex<'a> {
     methods: HashMap<&'a str, Vec<&'a FunctionItem>>,
 }
 
+fn generic_type_marker(function: &FunctionItem, generic: &str) -> Ty {
+    let traits = function
+        .generic_trait_bounds
+        .iter()
+        .filter(|(parameter, _)| parameter == generic)
+        .map(|(_, trait_name)| trait_name.rsplit("::").next().unwrap_or(trait_name))
+        .collect::<Vec<_>>()
+        .join("+");
+    Ty::Named(format!(
+        "\0quill_generic:{generic}:traits={traits}:{}:{}:{}",
+        u8::from(function.generic_copy_parameters.iter().any(|item| item == generic)),
+        u8::from(function.generic_as_ref_str_parameters.iter().any(|item| item == generic)),
+        u8::from(function.generic_add_parameters.iter().any(|item| item == generic))
+    ))
+}
+
+fn type_from_function_syntax(
+    text: &str,
+    function: &FunctionItem,
+    structs: &[StructSignature],
+) -> Ty {
+    let text = text.trim();
+    if let Some(generic) = function
+        .generic_parameters
+        .iter()
+        .find(|generic| text == generic.as_str())
+    {
+        return generic_type_marker(function, generic);
+    }
+    if let Some(reference) = text.strip_prefix('&') {
+        let reference = reference.trim_start();
+        let referent = if reference.starts_with('\'') {
+            reference
+                .find(char::is_whitespace)
+                .map_or("", |index| reference[index..].trim_start())
+        } else {
+            reference.strip_prefix("mut ").unwrap_or(reference)
+        };
+        return Ty::Reference(Box::new(type_from_function_syntax(
+            referent, function, structs,
+        )));
+    }
+    if let Some(value) = text.strip_prefix("mut ") {
+        return type_from_function_syntax(value, function, structs);
+    }
+    type_from_syntax(text, structs)
+}
+
 fn matching_signatures<'a>(signatures: &SignatureIndex<'a>, path: &str) -> Vec<&'a FunctionItem> {
     if let Some(exact) = signatures.exact.get(path) {
         return exact.clone();
@@ -217,8 +265,82 @@ fn method_owner(function: &FunctionItem) -> Option<&str> {
         function
             .scope
             .iter()
-            .find_map(|scope| scope.strip_prefix("impl:"))
+            .find_map(|scope| {
+                scope
+                    .strip_prefix("impl:")
+                    .or_else(|| scope.strip_prefix("trait:"))
+            })
     })
+}
+
+fn generic_marker_traits(name: &str) -> impl Iterator<Item = &str> {
+    name.split(':')
+        .find_map(|part| part.strip_prefix("traits="))
+        .into_iter()
+        .flat_map(|traits| traits.split('+'))
+        .filter(|trait_name| !trait_name.is_empty())
+}
+
+fn trait_methods_for_generic<'a>(
+    signatures: &'a SignatureIndex<'a>,
+    receiver_type: &Ty,
+    method: &str,
+) -> Vec<&'a FunctionItem> {
+    let Ty::Named(name) = without_references(receiver_type) else {
+        return Vec::new();
+    };
+    if !name.starts_with("\0quill_generic:") {
+        return Vec::new();
+    }
+    let traits: HashSet<_> = generic_marker_traits(name).collect();
+    signatures
+        .methods
+        .get(method)
+        .into_iter()
+        .flatten()
+        .filter(|function| {
+            function.scope.iter().any(|scope| {
+                scope
+                    .strip_prefix("trait:")
+                    .is_some_and(|owner| traits.contains(owner.rsplit("::").next().unwrap_or(owner)))
+            })
+        })
+        .copied()
+        .collect()
+}
+
+fn trait_is_implemented_for_type(
+    signatures: &SignatureIndex<'_>,
+    trait_name: &str,
+    type_name: &str,
+) -> bool {
+    let trait_name = trait_name.rsplit("::").next().unwrap_or(trait_name);
+    let type_name = type_name.rsplit("::").next().unwrap_or(type_name);
+    let mut required = HashSet::new();
+    let mut provided = HashSet::new();
+    for function in signatures.methods.values().flatten() {
+        let method = function.name.rsplit("::").next().unwrap_or(&function.name);
+        for scope in &function.scope {
+            if scope
+                .strip_prefix("trait:")
+                .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
+            {
+                required.insert(method);
+            }
+            if scope
+                .strip_prefix("traitimpl:")
+                .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
+                && function.scope.iter().any(|scope| {
+                    scope.strip_prefix("impl:").is_some_and(|owner| {
+                        owner.rsplit("::").next().unwrap_or(owner) == type_name
+                    })
+                })
+            {
+                provided.insert(method);
+            }
+        }
+    }
+    !required.is_empty() && required.is_subset(&provided)
 }
 
 fn normalized_crate_path(path: &str) -> &str {
@@ -691,6 +813,7 @@ fn check_selected_functions<'a>(
             generic_copy_parameters: signature.generic_copy_parameters.clone(),
             generic_as_ref_str_parameters: signature.generic_as_ref_str_parameters.clone(),
             generic_add_parameters: signature.generic_add_parameters.clone(),
+            generic_trait_bounds: Vec::new(),
             generic_has_bounds: signature.generic_has_bounds,
             is_async: false,
             is_const: false,
@@ -810,25 +933,9 @@ fn check_one_function(
     let mut locals = HashMap::new();
     for parameter in &function.parameters {
         if let Some(name) = &parameter.name {
-            let generic_type = function
-                .generic_parameters
-                .iter()
-                .find(|generic| parameter.type_text.trim() == generic.as_str())
-                .map(|generic| {
-                    let has_copy = function.generic_copy_parameters.contains(generic);
-                    let has_as_ref = function.generic_as_ref_str_parameters.contains(generic);
-                    let has_add = function.generic_add_parameters.contains(generic);
-                    Ty::Named(format!(
-                        "\0quill_generic:{generic}:{}:{}:{}",
-                        u8::from(has_copy),
-                        u8::from(has_as_ref),
-                        u8::from(has_add)
-                    ))
-                });
             locals.insert(
                 name.clone(),
-                generic_type
-                    .unwrap_or_else(|| type_from_syntax(&parameter.type_text, function_structs)),
+                type_from_function_syntax(&parameter.type_text, function, function_structs),
             );
         }
     }
@@ -846,22 +953,7 @@ fn check_one_function(
         })
         .collect();
     let expected = function.return_type.as_deref().map_or(Ty::Unit, |text| {
-        function
-            .generic_parameters
-            .iter()
-            .find(|generic| text.trim() == generic.as_str())
-            .map(|generic| {
-                let has_copy = function.generic_copy_parameters.contains(generic);
-                let has_as_ref = function.generic_as_ref_str_parameters.contains(generic);
-                let has_add = function.generic_add_parameters.contains(generic);
-                Ty::Named(format!(
-                    "\0quill_generic:{generic}:{}:{}:{}",
-                    u8::from(has_copy),
-                    u8::from(has_as_ref),
-                    u8::from(has_add)
-                ))
-            })
-            .unwrap_or_else(|| type_from_syntax(text, function_structs))
+        type_from_function_syntax(text, function, function_structs)
     });
     let actual = infer_with_structs(
         body,
@@ -1823,6 +1915,13 @@ fn infer_with_structs(
                 find_enum_variant(struct_signatures, path)
                     .map(|(enumeration, _)| Ty::Named(enumeration.path.clone()))
             })
+            .or_else(|| {
+                find_struct_signature(struct_signatures, path)
+                    .filter(|structure| {
+                        structure.fields.is_empty() && structure.generic_parameters.is_empty()
+                    })
+                    .map(|structure| Ty::Named(structure.path.clone()))
+            })
             .unwrap_or(Ty::Unknown),
         BodyExprKind::Reference { expression, .. } => Ty::Reference(Box::new(infer_with_structs(
             expression,
@@ -2340,6 +2439,7 @@ fn infer_with_structs(
                     {
                         let ty = type_from_syntax(type_text, struct_signatures);
                         if !matches!(&ty, Ty::Integer(name) if matches!(name.as_str(), "i32" | "u64" | "usize"))
+                            && !matches!(&ty, Ty::Named(_))
                         {
                             diagnostics.push(TypeDiagnostic {
                                 span: expression.span.clone(),
@@ -2456,6 +2556,27 @@ fn infer_with_structs(
                             span: expression.span.clone(),
                             message: format!(
                                 "cannot infer a type satisfying `Add<Output = T>` for `{generic}`"
+                            ),
+                        }),
+                    }
+                }
+                for (generic, trait_name) in &function.generic_trait_bounds {
+                    match substitutions.get(generic.as_str()) {
+                        Some(Ty::Named(name)) if name.starts_with("\0quill_generic:") => {}
+                        Some(Ty::Named(name))
+                            if trait_is_implemented_for_type(signatures, trait_name, name) => {}
+                        Some(Ty::Unknown) => {}
+                        Some(ty) => diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!(
+                                "generic argument `{}` does not implement `{trait_name}` for `{generic}`",
+                                ty.display_name()
+                            ),
+                        }),
+                        None => diagnostics.push(TypeDiagnostic {
+                            span: expression.span.clone(),
+                            message: format!(
+                                "cannot infer a type satisfying `{trait_name}` for `{generic}`"
                             ),
                         }),
                     }
@@ -2738,7 +2859,12 @@ fn infer_with_structs(
                 );
                 return accumulator_type;
             }
-            let candidates = method_signatures(&signatures.methods, &receiver_type, method);
+            let generic_candidates = trait_methods_for_generic(signatures, &receiver_type, method);
+            let candidates = if generic_candidates.is_empty() {
+                method_signatures(&signatures.methods, &receiver_type, method)
+            } else {
+                generic_candidates
+            };
             if candidates.len() > 1 {
                 diagnostics.push(TypeDiagnostic {
                     span: expression.span.clone(),
@@ -5064,6 +5190,32 @@ mod tests {
         );
         let parsed = parse(&unsupported);
         assert!(parsed.functions[0].generic_has_bounds);
+    }
+
+    #[test]
+    fn rejects_a_generic_trait_bound_without_a_matching_impl() {
+        let source = SourceFile::from_text(
+            "generic-trait-missing-impl.rs",
+            "trait Value { fn value(&self) -> u64; } struct Number; fn read<T: Value>(item: &T) -> u64 { item.value() } fn main() { let _result = read(&Number); }",
+        );
+        let parsed = parse(&source);
+        let structs = [StructSignature {
+            path: "Number".to_owned(),
+            ..StructSignature::default()
+        }];
+        let diagnostics = check_functions_with_declarations_and_structs(
+            &parsed.functions,
+            &parsed.functions,
+            false,
+            &[],
+            &structs,
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("does not implement `Value`")),
+            "{diagnostics:?}"
+        );
     }
 
     #[test]

@@ -1456,7 +1456,12 @@ fn generic_instance_name(
         && (explicit_arguments.len() != function.generic_parameters.len()
             || explicit_arguments
                 .iter()
-                .any(|ty| !matches!(ty.as_str(), "i32" | "u64" | "usize" | "&str")))
+                .any(|ty| {
+                    ty.is_empty()
+                        || ty.chars().any(|character| {
+                            matches!(character, ' ' | '<' | '>' | ',' | ';')
+                        })
+                }))
     {
         return None;
     }
@@ -1495,14 +1500,31 @@ fn generic_instance_name(
     let encoded = concrete
         .iter()
         .map(|ty| match ty.as_str() {
-            "&str" => Some("strref"),
-            "i32" => Some("i32"),
-            "u64" => Some("u64"),
-            "usize" => Some("usize"),
-            _ => None,
+            "&str" => "strref".to_owned(),
+            "i32" | "u64" | "usize" => ty.clone(),
+            _ => format!("ty{}", encode_type_name(ty)),
         })
-        .collect::<Option<Vec<_>>>()?;
+        .collect::<Vec<_>>();
     Some(format!("__quill_fn_{index}_{}", encoded.join("_")))
+}
+
+fn encode_type_name(type_name: &str) -> String {
+    type_name
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn decode_type_name(encoded: &str) -> Option<String> {
+    if encoded.is_empty() || encoded.len() % 2 != 0 {
+        return None;
+    }
+    let bytes = (0..encoded.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&encoded[index..index + 2], 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 fn substitute_generic_types(type_text: &str, substitutions: &HashMap<&str, &str>) -> String {
@@ -1773,6 +1795,9 @@ fn generic_argument_type(value: &Value) -> Option<String> {
         Value::TypedWord { type_name, .. }
         | Value::TypedWordParameter { type_name, .. }
         | Value::TypedWordLocal { type_name, .. } => Some(type_name.clone()),
+        Value::StructReference { type_name, .. } | Value::StructLocal { type_name, .. } => {
+            Some(type_name.clone())
+        }
         Value::Word(_) | Value::WordLocal(_) => Some("usize".to_owned()),
         Value::WrappingBinary { .. }
         | Value::SignExtend(_)
@@ -1814,6 +1839,7 @@ fn parse_generic_instance_name(name: &str) -> Option<(usize, Vec<String>)> {
         .map(|argument| match argument {
             "strref" => Some("&str".to_owned()),
             "i32" | "u64" | "usize" => Some(argument.to_owned()),
+            _ if argument.starts_with("ty") => decode_type_name(&argument[2..]),
             _ => None,
         })
         .collect::<Option<Vec<_>>>()?;
@@ -6193,9 +6219,17 @@ fn value_from_expression(
             }
             Some(value) => Ok(value),
             None if is_option_none_path(path) => Ok(Value::Integer(0)),
-            None => Err(CodegenError::UnsupportedProgram(
-                "path does not name a supported function parameter",
-            )),
+            None if path
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase)
+                && !path.contains("::") => Ok(Value::StructLocal {
+                type_name: path.clone(),
+                fields: HashMap::new(),
+            }),
+            None => Err(CodegenError::UnsupportedExpression(format!(
+                "path `{path}` does not name a supported value, unit struct, or enum variant"
+            ))),
         },
         BodyExprKind::FieldAccess { base, field } => {
             if let BodyExprKind::Call { callee, .. } = &base.kind
@@ -6473,14 +6507,30 @@ fn value_from_expression(
                     let Some(parameter) = function.parameters.get(index) else {
                         continue;
                     };
-                    let expected_type = referenced_type_name(&parameter.type_text).or_else(|| {
+                    let expected_type = referenced_type_name(&parameter.type_text).map(str::to_owned).or_else(|| {
                         matches!(argument, Value::StructLocal { .. }).then_some(
                             parameter
                                 .type_text
                                 .trim()
                                 .strip_prefix("mut ")
-                                .unwrap_or(parameter.type_text.trim()),
+                                .unwrap_or(parameter.type_text.trim())
+                                .to_owned(),
                         )
+                    });
+                    let expected_type = expected_type.map(|expected_type| {
+                        let generic_index = function.is_generic.then(|| {
+                            function
+                                .generic_parameters
+                                .iter()
+                                .position(|generic| generic == &expected_type)
+                        }).flatten();
+                        generic_index
+                            .and_then(|index| generic_arguments.get(index).cloned())
+                            .or_else(|| {
+                                generic_index
+                                    .and_then(|_| generic_argument_type(argument))
+                            })
+                            .unwrap_or(expected_type)
                     });
                     let Some(expected_type) = expected_type else {
                         continue;
@@ -6497,9 +6547,7 @@ fn value_from_expression(
                         .rsplit("::")
                         .next()
                         .unwrap_or(type_name)
-                        .eq_ignore_ascii_case(
-                            expected_type.rsplit("::").next().unwrap_or(expected_type),
-                        )
+                        .eq_ignore_ascii_case(expected_type.rsplit("::").next().unwrap_or(&expected_type))
                     {
                         return Err(CodegenError::UnsupportedExpression(format!(
                             "borrowed struct `{type_name}` does not match parameter type `{expected_type}`"
@@ -11920,6 +11968,7 @@ mod tests {
             generic_copy_parameters: Vec::new(),
             generic_as_ref_str_parameters: Vec::new(),
             generic_add_parameters: Vec::new(),
+        generic_trait_bounds: Vec::new(),
             generic_has_bounds: false,
             is_async: false,
             is_const: false,

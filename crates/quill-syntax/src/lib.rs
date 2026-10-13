@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Range;
 use std::os::unix::fs::MetadataExt;
 use std::sync::OnceLock;
@@ -159,6 +160,8 @@ pub struct FunctionItem {
     pub generic_as_ref_str_parameters: Vec<String>,
     /// Type parameters constrained by the supported `Add<Output = T>` subset.
     pub generic_add_parameters: Vec<String>,
+    /// Type parameters constrained by local traits with method declarations.
+    pub generic_trait_bounds: Vec<(String, String)>,
     /// True when this generic definition uses constraints outside the
     /// compiler's recognized built-in bound subsets.
     pub generic_has_bounds: bool,
@@ -177,6 +180,7 @@ pub struct ParameterItem {
 
 fn generic_parameters_have_unsupported_bounds(
     parameters: &syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
+    local_traits: &HashSet<String>,
 ) -> bool {
     parameters.iter().any(|parameter| match parameter {
         syn::GenericParam::Type(parameter) => {
@@ -186,6 +190,7 @@ fn generic_parameters_have_unsupported_bounds(
                         !is_supported_copy_bound(bound)
                             && !is_supported_as_ref_str_bound(bound)
                             && !is_supported_add_bound(bound, &parameter.ident.unraw().to_string())
+                            && !is_local_trait_bound(bound, local_traits)
                     }
                     syn::TypeParamBound::Lifetime(_) => true,
                     _ => true,
@@ -193,6 +198,21 @@ fn generic_parameters_have_unsupported_bounds(
         }
         syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => true,
     })
+}
+
+fn is_local_trait_bound(bound: &syn::TraitBound, local_traits: &HashSet<String>) -> bool {
+    bound.path.segments.len() == 1
+        && bound
+            .path
+            .segments
+            .first()
+            .is_some_and(|segment| {
+                matches!(segment.arguments, syn::PathArguments::None)
+                    && local_traits.contains(&segment.ident.unraw().to_string())
+            })
+        && bound.lifetimes.is_none()
+        && bound.maybe.is_none()
+        && bound.modifiers.require_empty().is_ok()
 }
 
 fn is_supported_copy_bound(bound: &syn::TraitBound) -> bool {
@@ -258,6 +278,51 @@ fn generic_add_parameters(
             }
             _ => None,
         })
+        .collect()
+}
+
+fn simple_generic_trait_bounds(
+    parameters: &syn::punctuated::Punctuated<syn::GenericParam, syn::token::Comma>,
+) -> Vec<(String, String)> {
+    parameters
+        .iter()
+        .filter_map(|parameter| match parameter {
+            syn::GenericParam::Type(parameter) => Some(
+                parameter
+                    .bounds
+                    .iter()
+                    .filter_map(|bound| match bound {
+                        syn::TypeParamBound::Trait(bound)
+                            if !is_supported_copy_bound(bound)
+                                && !is_supported_as_ref_str_bound(bound)
+                                && !is_supported_add_bound(
+                                    bound,
+                                    &parameter.ident.unraw().to_string(),
+                                )
+                                && bound.path.segments.len() == 1
+                                && bound.path.segments.first().is_some_and(|segment| {
+                                    matches!(segment.arguments, syn::PathArguments::None)
+                                })
+                                && bound.lifetimes.is_none()
+                                && bound.maybe.is_none()
+                                && bound.modifiers.require_empty().is_ok() =>
+                        {
+                            let trait_name = bound
+                                .path
+                                .segments
+                                .iter()
+                                .map(|segment| segment.ident.unraw().to_string())
+                                .collect::<Vec<_>>()
+                                .join("::");
+                            Some((parameter.ident.unraw().to_string(), trait_name))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        })
+        .flatten()
         .collect()
 }
 
@@ -602,7 +667,13 @@ pub fn parse(source: &SourceFile) -> Parse {
             result.enums.clear();
             result.modules.clear();
             result.imports.clear();
-            let mut collector = AstCollector::new(source, &quill_cfg::CfgSet::default());
+            let cfg = quill_cfg::CfgSet::default();
+            let mut trait_names = LocalTraitNameCollector {
+                cfg: &cfg,
+                names: HashSet::new(),
+            };
+            trait_names.visit_file(&file);
+            let mut collector = AstCollector::new(source, &cfg, trait_names.names);
             collector.visit_file(&file);
             result.functions = collector.functions;
             result.structs = collector.structs;
@@ -655,7 +726,7 @@ pub fn parse_ast_with_cfg_and_edition(
     let mut result = Parse::default();
     match parse_file_for_edition(source.text(), edition) {
         Ok(file) => {
-            let mut collector = AstCollector::new(source, cfg);
+            let mut collector = AstCollector::new(source, cfg, local_trait_names(&file, cfg));
             collector.visit_file(&file);
             result.functions = collector.functions;
             result.structs = collector.structs;
@@ -874,6 +945,77 @@ fn store_parse_cache(source: &SourceFile, cfg: &quill_cfg::CfgSet, edition: &str
     }
 }
 
+struct LocalTraitNameCollector<'a> {
+    cfg: &'a quill_cfg::CfgSet,
+    names: HashSet<String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for LocalTraitNameCollector<'_> {
+    fn visit_item(&mut self, item: &'ast syn::Item) {
+        if self.cfg.attributes_enabled(item_attributes(item)) {
+            syn::visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        self.names.insert(item.ident.unraw().to_string());
+        syn::visit::visit_item_trait(self, item);
+    }
+}
+
+fn local_trait_names(file: &syn::File, cfg: &quill_cfg::CfgSet) -> HashSet<String> {
+    let mut collector = LocalTraitNameCollector {
+        cfg,
+        names: HashSet::new(),
+    };
+    collector.visit_file(file);
+    collector.names
+}
+
+fn supported_local_trait(item: &syn::ItemTrait) -> bool {
+    item.generics.params.is_empty()
+        && item.generics.where_clause.is_none()
+        && item.supertraits.is_empty()
+        && item.items.iter().all(|trait_item| match trait_item {
+            syn::TraitItem::Fn(function) => {
+                function.default.is_none()
+                    && function.sig.generics.params.is_empty()
+                    && function.sig.generics.where_clause.is_none()
+                    && function.sig.constness.is_none()
+                    && function.sig.asyncness.is_none()
+                    && !matches!(function.sig.safety, syn::Safety::Unsafe(_))
+                    && function.sig.abi.is_none()
+                    && function.sig.inputs.iter().all(|argument| match argument {
+                        syn::FnArg::Receiver(receiver) => {
+                            matches!(
+                                receiver.kind,
+                                syn::ReceiverKind::Reference(_, None, None)
+                            )
+                        }
+                        syn::FnArg::Typed(_) => true,
+                    })
+            }
+            _ => false,
+        })
+}
+
+fn supported_local_trait_impl(item: &syn::ItemImpl) -> bool {
+    if item.trait_.is_none() {
+        return true;
+    }
+    item.generics.params.is_empty()
+        && item.generics.where_clause.is_none()
+        && matches!(&*item.self_ty, syn::Type::Path(path) if path.qself.is_none() && path.path.segments.iter().all(|segment| matches!(segment.arguments, syn::PathArguments::None)))
+        && item.trait_.as_ref().is_some_and(|(path, _)| {
+            path.segments.len() == 1
+                && path
+                    .segments
+                    .first()
+                    .is_some_and(|segment| matches!(segment.arguments, syn::PathArguments::None))
+        })
+        && item.items.iter().all(|item| matches!(item, syn::ImplItem::Fn(_)))
+}
+
 struct AstCollector<'a> {
     source: &'a SourceFile,
     cfg: quill_cfg::CfgSet,
@@ -886,6 +1028,7 @@ struct AstCollector<'a> {
     macro_expansions: Vec<LocalMacroExpansion>,
     impl_generic_parameters: Vec<String>,
     impl_generic_has_bounds: bool,
+    local_trait_names: HashSet<String>,
     unsupported_item_count: usize,
 }
 
@@ -908,7 +1051,11 @@ enum LocalMacroRule {
 }
 
 impl<'a> AstCollector<'a> {
-    fn new(source: &'a SourceFile, cfg: &quill_cfg::CfgSet) -> Self {
+    fn new(
+        source: &'a SourceFile,
+        cfg: &quill_cfg::CfgSet,
+        local_trait_names: HashSet<String>,
+    ) -> Self {
         Self {
             source,
             cfg: cfg.clone(),
@@ -921,6 +1068,7 @@ impl<'a> AstCollector<'a> {
             macro_expansions: Vec::new(),
             impl_generic_parameters: Vec::new(),
             impl_generic_has_bounds: false,
+            local_trait_names,
             unsupported_item_count: 0,
         }
     }
@@ -1003,7 +1151,10 @@ impl<'a> AstCollector<'a> {
         }
         let generic_has_bounds = self.impl_generic_has_bounds
             || signature.generics.where_clause.is_some()
-            || generic_parameters_have_unsupported_bounds(&signature.generics.params);
+            || generic_parameters_have_unsupported_bounds(
+                &signature.generics.params,
+                &self.local_trait_names,
+            );
         self.functions.push(FunctionItem {
             name: signature.ident.unraw().to_string(),
             scope: self.scope.clone(),
@@ -1023,6 +1174,7 @@ impl<'a> AstCollector<'a> {
                 &signature.generics.params,
             ),
             generic_add_parameters: generic_add_parameters(&signature.generics.params),
+            generic_trait_bounds: simple_generic_trait_bounds(&signature.generics.params),
             generic_has_bounds,
             is_async: signature.asyncness.is_some(),
             is_const: signature.constness.is_some(),
@@ -1043,7 +1195,11 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                 && supported_macro_rule(macro_item).is_some());
         if !matches!(
             item,
-            syn::Item::Fn(_) | syn::Item::Struct(_) | syn::Item::Enum(_) | syn::Item::Impl(_)
+            syn::Item::Fn(_)
+                | syn::Item::Struct(_)
+                | syn::Item::Enum(_)
+                | syn::Item::Impl(_)
+                | syn::Item::Trait(_)
         ) && !supported_literal_macro
         {
             self.unsupported_item_count += 1;
@@ -1055,6 +1211,8 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
         } else if let syn::Item::Enum(item) = item {
             self.unsupported_item_count += unsupported_attribute_count(&item.attrs);
         } else if let syn::Item::Impl(item) = item {
+            self.unsupported_item_count += unsupported_attribute_count(&item.attrs);
+        } else if let syn::Item::Trait(item) = item {
             self.unsupported_item_count += unsupported_attribute_count(&item.attrs);
         }
         syn::visit::visit_item(self, item);
@@ -1240,6 +1398,9 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if !supported_local_trait_impl(item) {
+            self.unsupported_item_count += 1;
+        }
         let name = match &*item.self_ty {
             syn::Type::Path(path) => path
                 .path
@@ -1264,13 +1425,30 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                     }),
             );
         self.impl_generic_has_bounds = item.generics.where_clause.is_some()
-            || generic_parameters_have_unsupported_bounds(&item.generics.params)
+            || generic_parameters_have_unsupported_bounds(
+                &item.generics.params,
+                &HashSet::new(),
+            )
             // Trait-bound metadata is currently carried only from function
             // parameters, so bounded impl parameters stay outside the subset.
             || !generic_copy_parameters(&item.generics.params).is_empty()
             || !generic_as_ref_str_parameters(&item.generics.params).is_empty();
         self.scope.push(format!("impl:{name}"));
+        if let Some((trait_path, _)) = &item.trait_ {
+            self.scope.push(format!(
+                "traitimpl:{}",
+                trait_path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.unraw().to_string())
+                    .collect::<Vec<_>>()
+                    .join("::")
+            ));
+        }
         syn::visit::visit_item_impl(self, item);
+        if item.trait_.is_some() {
+            self.scope.pop();
+        }
         self.scope.pop();
         self.impl_generic_parameters
             .truncate(previous_parameter_count);
@@ -1278,6 +1456,9 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
     }
 
     fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        if !supported_local_trait(item) {
+            self.unsupported_item_count += 1;
+        }
         self.scope.push(format!("trait:{}", item.ident));
         syn::visit::visit_item_trait(self, item);
         self.scope.pop();
@@ -3035,6 +3216,7 @@ fn make_function_item(
         generic_copy_parameters: Vec::new(),
         generic_as_ref_str_parameters: Vec::new(),
         generic_add_parameters: Vec::new(),
+        generic_trait_bounds: Vec::new(),
         generic_has_bounds: is_generic,
         is_async: false,
         is_const: false,
@@ -3647,6 +3829,29 @@ mod tests {
         assert_eq!(parsed.functions[1].generic_as_ref_str_parameters, ["T"]);
         assert!(!parsed.functions[2].generic_has_bounds);
         assert_eq!(parsed.functions[2].generic_add_parameters, ["T"]);
+    }
+
+    #[test]
+    fn collects_simple_local_trait_bounds_and_rejects_advanced_traits() {
+        let source = SourceFile::from_text(
+            "generic-trait.rs",
+            "trait Value { fn value(&self) -> u64; } struct Number; impl Value for Number { fn value(&self) -> u64 { 42 } } fn read<T: Value>(item: &T) -> u64 { item.value() }",
+        );
+        let parsed = parse_ast(&source);
+        assert_eq!(parsed.unsupported_item_count, 0);
+        let read = parsed
+            .functions
+            .iter()
+            .find(|function| function.name == "read")
+            .unwrap();
+        assert_eq!(read.generic_trait_bounds, [("T".to_owned(), "Value".to_owned())]);
+        assert!(!read.generic_has_bounds);
+
+        let unsupported = SourceFile::from_text(
+            "advanced-trait.rs",
+            "trait Value { type Output; fn value(&self) -> Self::Output; }",
+        );
+        assert!(parse_ast(&unsupported).unsupported_item_count > 0);
     }
 
     #[test]
