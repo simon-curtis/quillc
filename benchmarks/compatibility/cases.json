@@ -161,6 +161,7 @@
     ],
     "manifest": "Cargo.toml",
     "binary": "multiple-bins",
+    "binaries": ["multiple-bins", "second"],
     "files": {
       "Cargo.toml": "[package]\nname = \"multiple-bins\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
       "src/main.rs": "fn main() { println!(\"1\"); }\n",

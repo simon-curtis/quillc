@@ -226,8 +226,48 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
         rustc_result = invoke(
             ["cargo", "build", "--quiet", "--manifest-path", str(manifest),
              "--target-dir", str(rust_target)], case_dir)
-        rust_binary = rust_target / "debug" / case["binary"]
-        quill_args = [str(quill), "cargo-build-subset", str(manifest), "-o", str(quill_binary)]
+        if rustc_result.returncode:
+            return Result(case["id"], case["kind"], False, False, False,
+                          "rustc Cargo build failed", rustc_result.returncode)
+        binary_names = case.get("binaries", [case["binary"]])
+        quill_output_root = case_dir / "quill-target"
+        if "binaries" in case:
+            quill_result = invoke(
+                [str(quill), "cargo-build-subset", str(manifest), "-o",
+                 str(quill_output_root)], case_dir)
+            if quill_result.returncode:
+                detail = quill_result.stderr.decode("utf-8", "replace").strip()
+                return Result(case["id"], case["kind"], False, True, False,
+                              f"Quill rejected Cargo binary targets: {detail}",
+                              rustc_result.returncode, quill_result.returncode)
+        mismatches = []
+        quill_status = 0 if "binaries" in case else None
+        for binary_name in binary_names:
+            rust_binary = rust_target / "debug" / binary_name
+            if "binaries" in case:
+                quill_binary = quill_output_root / binary_name
+            else:
+                quill_binary = case_dir / f"quill-{binary_name}"
+                quill_result = invoke(
+                    [str(quill), "cargo-build-subset", str(manifest), "-o",
+                     str(quill_binary)], case_dir)
+                quill_status = quill_result.returncode
+                if quill_status:
+                    detail = quill_result.stderr.decode("utf-8", "replace").strip()
+                    return Result(case["id"], case["kind"], False, True, False,
+                                  f"Quill rejected binary `{binary_name}`: {detail}",
+                                  rustc_result.returncode, quill_status)
+            rust_run = invoke([str(rust_binary)], case_dir)
+            quill_run = invoke([str(quill_binary)], case_dir)
+            if (rust_run.returncode != quill_run.returncode
+                    or rust_run.stdout != quill_run.stdout
+                    or rust_run.stderr != quill_run.stderr):
+                mismatches.append(binary_name)
+        passed = not mismatches
+        reason = ("all Cargo binary outputs match" if passed else
+                  "runtime status or output differs for: " + ", ".join(mismatches))
+        return Result(case["id"], case["kind"], passed, True, True, reason,
+                      rustc_result.returncode, quill_status, passed)
     elif case["kind"] == "parse":
         source = case_dir / "main.rs"
         source.write_text(case["source"] + "\n", encoding="utf-8")

@@ -46,10 +46,13 @@ edges. `cargo-plan` reports dependency waves; `cargo-parse` discovers module
 trees, parses target roots, builds per-target HIR, and resolves supported
 public calls through workspace dependency aliases. `cargo-check-subset` adds
 primitive checks using local and workspace signatures. `cargo-build-subset`
-can compile a supported binary target with at most one same-package library
-and workspace-local ordinary library dependencies into one ELF executable.
-It does not emit Cargo-compatible `.rlib` files. External dependencies in the
-selected closure, build scripts, and multiple binary targets are unsupported.
+can compile supported default-member binary targets with at most one
+same-package library and workspace-local ordinary library dependencies. A
+single binary is written to the requested output file; multiple binaries are
+written to matching names in the requested output directory, and `--bin`
+selects one target. Outputs are ELF executables, not Cargo-compatible `.rlib`
+files. External dependencies in the selected closure and build scripts remain
+unsupported.
 
 ## Current implementation boundary
 

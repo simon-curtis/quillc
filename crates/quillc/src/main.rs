@@ -84,7 +84,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> -o <program> | quillc --version"
+                "usage: quillc lex|parse|check-subset <file.rs> [more.rs ...] | quillc build-subset <main.rs> -o <program> | quillc build-lib-object <lib.rs> -o <lib.o> | quillc cargo-plan|cargo-parse|cargo-check-subset [Cargo.toml] | quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program> | quillc --version"
             );
             ExitCode::from(2)
         }
@@ -671,13 +671,27 @@ fn compile_library_object(source_path: &str, output_path: &str) -> Result<(), St
 }
 
 fn cargo_build_subset_command(arguments: Vec<String>) -> ExitCode {
-    if arguments.len() != 3 || arguments[1] != "-o" {
-        eprintln!("usage: quillc cargo-build-subset <Cargo.toml> -o <program>");
-        return ExitCode::from(2);
-    }
-    match compile_cargo_subset(&arguments[0], &arguments[2]) {
+    let (manifest, bin_target, output) = match arguments.as_slice() {
+        [manifest, output_flag, output] if output_flag == "-o" => (manifest, None, output),
+        [manifest, bin_flag, target, output_flag, output]
+            if bin_flag == "--bin" && output_flag == "-o" =>
+        {
+            (manifest, Some(target.as_str()), output)
+        }
+        _ => {
+            eprintln!(
+                "usage: quillc cargo-build-subset <Cargo.toml> [--bin <target>] -o <program>"
+            );
+            return ExitCode::from(2);
+        }
+    };
+    let result = bin_target.map_or_else(
+        || compile_cargo_subset(manifest, output),
+        |bin| compile_cargo_subset_for_target(manifest, output, Some(bin)),
+    );
+    match result {
         Ok(()) => {
-            println!("built {}", arguments[2]);
+            println!("built {output}");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -688,8 +702,46 @@ fn cargo_build_subset_command(arguments: Vec<String>) -> ExitCode {
 }
 
 fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
+    let workspace = quill_cargo::load_workspace(manifest).map_err(|error| error.to_string())?;
+    let binary_names: Vec<_> = workspace
+        .packages
+        .iter()
+        .filter(|package| package.is_default_member)
+        .flat_map(|package| {
+            package
+                .targets
+                .iter()
+                .filter(|target| target.kinds.iter().any(|kind| kind == "bin"))
+                .map(|target| target.name.clone())
+        })
+        .collect();
+    match binary_names.as_slice() {
+        [_] => compile_cargo_subset_for_target(manifest, output, None),
+        [] => Err("cargo-build-subset found no default-member binary targets".into()),
+        names => {
+            std::fs::create_dir_all(output).map_err(|error| {
+                format!("could not create output directory `{output}`: {error}")
+            })?;
+            for name in names {
+                let binary_output = Path::new(output).join(name);
+                compile_cargo_subset_for_target(
+                    manifest,
+                    &binary_output.display().to_string(),
+                    Some(name),
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn compile_cargo_subset_for_target(
+    manifest: &str,
+    output: &str,
+    selected_bin: Option<&str>,
+) -> Result<(), String> {
     let mut profile_timer = profile_timer();
-    if restore_cached_cargo_build(manifest, output) {
+    if selected_bin.is_none() && restore_cached_cargo_build(manifest, output) {
         profile_checkpoint("restore cached executable", &mut profile_timer);
         return Ok(());
     }
@@ -710,13 +762,14 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
                 .targets
                 .iter()
                 .filter(|target| target.kinds.iter().any(|kind| kind == "bin"))
+                .filter(|target| selected_bin.is_none_or(|name| target.name == name))
                 .map(move |target| (package, target))
         })
         .collect();
     if candidates.len() != 1 {
         return Err(format!(
-            "cargo-build-subset requires exactly one default-member binary target (found {})",
-            candidates.len()
+            "cargo-build-subset requires exactly one matching default-member binary target (found {})",
+            candidates.len(),
         ));
     }
     let (package, target) = candidates[0];
@@ -735,9 +788,15 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
         .filter(|target| target.kinds.iter().any(|kind| kind == "lib"))
         .copied()
         .collect();
-    if package_build_targets.len() != 1 + package_libraries.len() || package_libraries.len() > 1 {
+    let has_unsupported_target = package_build_targets.iter().any(|target| {
+        target
+            .kinds
+            .iter()
+            .any(|kind| matches!(kind.as_str(), "proc-macro" | "custom-build"))
+    });
+    if has_unsupported_target || package_libraries.len() > 1 {
         return Err(
-            "cargo-build-subset accepts one binary and at most one library target per package"
+            "cargo-build-subset accepts selected binary targets and at most one library target per package"
                 .into(),
         );
     }
@@ -820,7 +879,11 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
         .map(|source| source.source.path().to_path_buf())
         .filter(|path| !path.starts_with(&workspace.root))
         .collect::<Vec<_>>();
-    let build_cache = cargo_build_cache_path(&workspace, manifest, &parsed_files)?;
+    let build_cache = if selected_bin.is_none() {
+        cargo_build_cache_path(&workspace, manifest, &parsed_files)?
+    } else {
+        None
+    };
     profile_checkpoint("compute semantic cache key", &mut profile_timer);
     if let Some(cache_path) = build_cache
         .as_ref()
@@ -863,7 +926,7 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
         fast_object_cache_paths.as_ref(),
     )?;
     profile_checkpoint("type-check, codegen, and link", &mut profile_timer);
-    if let Some(cache_path) = build_cache {
+    if let Some(cache_path) = build_cache.filter(|_| selected_bin.is_none()) {
         let _ = cache_compiled_executable(output, &cache_path.path);
         let _ = write_build_artifact_index(&workspace.root, manifest, &cache_path, external_inputs);
     }
