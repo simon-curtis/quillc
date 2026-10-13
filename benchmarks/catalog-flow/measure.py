@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pathlib
@@ -200,6 +201,27 @@ def main() -> None:
     if changed_runtime_output == rustc_run.stdout:
         raise SystemExit("semantic incremental edit did not change runtime behavior")
 
+    compiler_paths = [
+        ROOT / "Cargo.toml",
+        ROOT / "Cargo.lock",
+        ROOT / "rust-toolchain.toml",
+    ]
+    compiler_paths.extend(ROOT.glob("crates/*/Cargo.toml"))
+    compiler_paths.extend(ROOT.glob("crates/*/src/**/*.rs"))
+    compiler_paths = sorted(set(compiler_paths))
+    compiler_status = subprocess.check_output(
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            *[str(path.relative_to(ROOT)) for path in compiler_paths],
+        ],
+        cwd=ROOT,
+        text=True,
+    )
+    compiler_dirty_paths = [line[3:] for line in compiler_status.splitlines()]
     data = {
         "toolchain": subprocess.check_output(
             ["cargo", TOOLCHAIN, "--version"], text=True
@@ -214,6 +236,12 @@ def main() -> None:
         ),
         "logical_cpu_count": psutil.cpu_count(logical=True),
         "quill_profile": "release",
+        "quillc_source_revision": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip(),
+        "quillc_source_dirty": bool(compiler_dirty_paths),
+        "quillc_source_dirty_paths": compiler_dirty_paths,
+        "quillc_sha256": hashlib.sha256(QUILL.read_bytes()).hexdigest(),
         "rust_lines": sum(
             len(path.read_text().splitlines())
             for path in BENCH.glob("catalog-*/src/**/*.rs")

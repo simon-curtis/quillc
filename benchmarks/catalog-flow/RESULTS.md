@@ -27,21 +27,21 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.688 s | 5.603 s | 560.2 MiB |
-| `quillc cargo-build-subset` | Cold | 0.325 s | 1.868 s | 134.9 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 18.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.007 s | 0.002 s | 18.3 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.289 s | 0.413 s | 222.0 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.027 s | 0.080 s | 35.4 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.305 s | 0.434 s | 229.7 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.081 s | 0.176 s | 52.4 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.688 s | 5.611 s | 561.3 MiB |
+| `quillc cargo-build-subset` | Cold | 0.332 s | 1.904 s | 138.9 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 22.1 MiB |
+| `quillc cargo-build-subset` | Warm | 0.007 s | 0.001 s | 22.1 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.409 s | 230.2 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.025 s | 0.082 s | 35.4 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.430 s | 230.1 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.086 s | 0.177 s | 52.4 MiB |
 
-Quill's median wall-time ratios were 8.27× cold, 2.71× warm, 10.70× for the
-comment edit, and 3.77× for the semantic edit. It used less sampled peak RSS
-in all four states. The semantic-edit CPU-time ratio was 2.47× (0.176 s vs.
-0.434 s). The warm wall-time ratio is below 3×, and this result measures only
-the documented fixture; it does not establish general Rust compiler
-performance.
+Quill's median wall-time ratios were 8.10× cold, 2.71× warm, 11.44× for the
+comment edit, and 3.51× for the semantic edit. Peak RSS was lower in three
+states and equal in the warm state. The semantic-edit CPU-time ratio was 2.43×
+(0.177 s vs. 0.430 s). Warm wall time remains below 3×, and this result
+measures only the documented fixture; it does not establish general Rust
+compiler performance.
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
@@ -50,14 +50,11 @@ preparation, and reusing source-derived package objects. On an incremental
 semantic edit, cached package objects now skip type-checking and HIR assembly;
 only exported interfaces and generic bodies are retained for dependent crates.
 A nested body-parallelism trial increased cold RSS without improving wall time
-and was reverted. The latest change moves parsed function bodies into the
-qualified-function index instead of deep-cloning them; on the semantic-edit
-fixture, wall time fell from the previous 0.103 s median to 0.081 s, and peak
-RSS fell from 73.5 MiB to 52.4 MiB. A three-run worker-count sweep found that
-`QUILL_JOBS=4` used 0.122 s median CPU time at 0.086 s wall time, while the
-12-worker setting used 0.172 s CPU at 0.081 s wall time. The current default
-uses all available workers for the fastest observed wall time. These are
-experiment notes, not separate acceptance results.
+and was reverted. Moving parsed function bodies into the qualified-function
+index instead of deep-cloning them reduced the semantic-edit median from
+0.103 s to 0.086 s. The raw JSON records the compiler revision, source-dirty
+paths, and binary hash for this run; it includes an in-progress LSP workspace
+integration in the shared checkout.
 
 ## Scope
 
