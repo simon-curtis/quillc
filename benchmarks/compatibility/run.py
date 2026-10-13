@@ -49,6 +49,13 @@ def invoke(argv: list[str], cwd: pathlib.Path) -> subprocess.CompletedProcess[by
         raise RuntimeError(f"could not run {argv[0]!r}: {error}") from error
 
 
+def normalize_runtime_stderr(case: dict, output: bytes) -> bytes:
+    if case.get("normalize_main_thread_id"):
+        # Rust's panic hook includes the process-specific main thread ID.
+        output = re.sub(rb"thread 'main' \(\d+\)", b"thread 'main' (<thread-id>)", output)
+    return output
+
+
 def resolve_quill() -> pathlib.Path:
     configured = os.environ.get("QUILLC")
     if configured:
@@ -316,9 +323,11 @@ def test_case(case: dict, quill: pathlib.Path, temp_root: pathlib.Path) -> Resul
 
     rust_run = invoke([str(rust_binary)], case_dir)
     quill_run = invoke([str(quill_binary)], case_dir)
+    rust_stderr = normalize_runtime_stderr(case, rust_run.stderr)
+    quill_stderr = normalize_runtime_stderr(case, quill_run.stderr)
     same = (rust_run.returncode == quill_run.returncode
             and rust_run.stdout == quill_run.stdout
-            and rust_run.stderr == quill_run.stderr)
+            and rust_stderr == quill_stderr)
     reason = "runtime outputs match" if same else "runtime status or output differs"
     return Result(case["id"], case["kind"], same, rustc_accepted,
                   quill_accepted, reason, rustc_result.returncode,

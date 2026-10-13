@@ -289,6 +289,7 @@
       "standard-library--drop--and-panic"
     ],
     "edition": "2024",
+    "normalize_main_thread_id": true,
     "source": "fn main() { panic!(\"expected panic\"); }"
   },
   {

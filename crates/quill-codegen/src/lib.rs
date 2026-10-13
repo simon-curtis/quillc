@@ -385,6 +385,7 @@ enum Statement {
 #[derive(Clone, Debug)]
 enum PrintPart {
     Text(String),
+    Panic(String),
     Slice(Value),
     Decimal(Value),
     Hex16(Value),
@@ -2011,7 +2012,7 @@ fn collect_generic_statement(statement: &Statement, output: &mut BTreeSet<String
                     PrintPart::Slice(value)
                     | PrintPart::Decimal(value)
                     | PrintPart::Hex16(value) => collect_generic_instances(value, output),
-                    PrintPart::Text(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
                 }
             }
         }
@@ -5421,6 +5422,31 @@ fn lower_statements(
                     environment,
                 )?));
             }
+            BodyStatement::MacroInvocation {
+                path,
+                format_string,
+                arguments,
+                source_path,
+                line,
+                column,
+                ..
+            } if path == "panic" => {
+                if !arguments.is_empty() {
+                    return Err(CodegenError::UnsupportedProgram(
+                        "`panic!` currently supports a static string literal without formatting arguments",
+                    ));
+                }
+                let message = format_string.as_deref().unwrap_or("explicit panic");
+                if message.contains('{') || message.contains('}') {
+                    return Err(CodegenError::UnsupportedProgram(
+                        "`panic!` currently supports a static string literal without formatting placeholders",
+                    ));
+                }
+                let stderr = format!(
+                    "\nthread 'main' (0) panicked at {source_path}:{line}:{column}:\n{message}\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+                );
+                lowered.push(Statement::Println(vec![PrintPart::Panic(stderr)]));
+            }
             BodyStatement::Break { .. } => lowered.push(Statement::Break),
             BodyStatement::Continue { .. } => lowered.push(Statement::Continue),
             BodyStatement::MacroInvocation { path, .. } => {
@@ -7620,7 +7646,7 @@ fn validate_statement_targets_at_depth(
                     | PrintPart::Hex16(value) => {
                         validate_value_target(value, functions, items, parameter_count)?;
                     }
-                    PrintPart::Text(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
                 }
             }
             Ok(())
@@ -9164,6 +9190,24 @@ fn encode_statement_into(
         Statement::Println(parts) => {
             for part in parts {
                 match part {
+                    PrintPart::Panic(text) => {
+                        code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + panic text]
+                        let offset = code.len() as u64;
+                        code.extend_from_slice(&[0; 4]);
+                        relocations.push(PendingRelocation {
+                            offset,
+                            target: text_symbol_name(text),
+                        });
+                        code.extend_from_slice(&[0xbf, 2, 0, 0, 0]); // mov edi, stderr
+                        code.extend_from_slice(&[0xba]); // mov edx, byte length
+                        code.extend_from_slice(&(text.len() as u32).to_le_bytes());
+                        code.extend_from_slice(&[0xb8, 1, 0, 0, 0, 0x0f, 0x05]); // write syscall
+                        code.extend_from_slice(&[
+                            0xbf, 101, 0, 0, 0, // mov edi, Rust panic exit status
+                            0xb8, 60, 0, 0, 0, // mov eax, SYS_exit
+                            0x0f, 0x05, // syscall
+                        ]);
+                    }
                     PrintPart::Text(text) if !text.is_empty() => {
                         code.extend_from_slice(&[0x48, 0x8d, 0x35]); // lea rsi, [rip + disp32]
                         let offset = code.len() as u64;
@@ -9919,7 +9963,7 @@ fn print_parts(value: &Value, visit: &mut impl FnMut(&PrintPart)) {
 
 fn collect_print_text(value: &Value, output: &mut HashSet<String>) {
     print_parts(value, &mut |part| {
-        if let PrintPart::Text(text) = part {
+        if let PrintPart::Text(text) | PrintPart::Panic(text) = part {
             output.insert(text.clone());
         }
     });
@@ -9970,8 +10014,12 @@ fn collect_value_text(value: &Value, output: &mut HashSet<String>) {
                     }
                     Statement::Println(parts) => {
                         for part in parts {
-                            if let PrintPart::Slice(value) = part {
-                                collect_value_text(value, output);
+                            match part {
+                                PrintPart::Slice(value) => collect_value_text(value, output),
+                                PrintPart::Panic(text) => {
+                                    output.insert(text.clone());
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -10307,7 +10355,7 @@ fn collect_static_array_statement(statement: &Statement, output: &mut HashMap<St
                     | PrintPart::Hex16(value) => {
                         collect_static_arrays(value, output);
                     }
-                    PrintPart::Text(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
                 }
             }
         }
@@ -11143,7 +11191,7 @@ fn visit_statement(statement: &Statement, max_slot: &mut usize) {
                     | PrintPart::Hex16(value) => {
                         visit_value(value, max_slot);
                     }
-                    PrintPart::Text(_) => {}
+                    PrintPart::Text(_) | PrintPart::Panic(_) => {}
                 }
             }
         }
@@ -12199,9 +12247,25 @@ mod tests {
     }
 
     #[test]
-    fn rejects_macros_and_other_items_instead_of_discarding_them() {
+    fn emits_static_string_panics_with_rust_message_and_exit_status() {
+        let object = emit("fn main() { panic!(\"expected panic\"); }").unwrap();
+        assert!(object.starts_with(b"\x7fELF"));
+        assert!(
+            object
+                .windows(b"expected panic".len())
+                .any(|bytes| bytes == b"expected panic")
+        );
+        assert!(
+            object
+                .windows(b"RUST_BACKTRACE=1".len())
+                .any(|bytes| bytes == b"RUST_BACKTRACE=1")
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_panic_formatting_and_other_items() {
         assert!(matches!(
-            emit("fn main() { panic!(\"no\"); }"),
+            emit("fn main() { panic!(\"value: {}\", 42); }"),
             Err(CodegenError::UnsupportedProgram(_))
         ));
         assert!(matches!(

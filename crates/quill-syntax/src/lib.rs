@@ -520,6 +520,9 @@ pub enum BodyStatement {
         format_string: Option<String>,
         arguments: Vec<BodyExpr>,
         span: Range<usize>,
+        source_path: String,
+        line: usize,
+        column: usize,
     },
     Expression {
         expression: BodyExpr,
@@ -2066,12 +2069,17 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
             },
             syn::Stmt::Macro(statement_macro) => {
                 let macro_expression = lower_macro_expression(&statement_macro.mac, source);
+                let span = span_range(source, statement_macro.span());
+                let (line, column) = source.line_column(span.start);
                 statements.push(BodyStatement::MacroInvocation {
                     path: macro_expression.path,
                     tokens: macro_expression.tokens,
                     format_string: macro_expression.format_string,
                     arguments: macro_expression.arguments,
-                    span: span_range(source, statement_macro.span()),
+                    span,
+                    source_path: source.path().to_string_lossy().into_owned(),
+                    line,
+                    column,
                 });
             }
             syn::Stmt::Item(_) => statements.push(BodyStatement::Unsupported),
@@ -3729,6 +3737,9 @@ mod tests {
             format_string,
             arguments,
             span,
+            source_path,
+            line,
+            column,
         } = &statements[0]
         else {
             panic!("expected a preserved macro invocation");
@@ -3738,6 +3749,8 @@ mod tests {
         assert_eq!(format_string.as_deref(), Some("value={value}"));
         assert!(arguments.is_empty());
         assert_eq!(source.slice(span.clone()), "println!(\"value={value}\");");
+        assert_eq!(source_path, "macro.rs");
+        assert_eq!((*line, *column), (1, 13));
     }
 
     #[test]
