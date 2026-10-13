@@ -90,15 +90,18 @@ and [raw comparison](../results/struct-table-ownership-20261013.json) are retain
 
 A compact parse-summary cache keeps module declarations, item signatures, and
 generic bodies while omitting non-generic function bodies for targets whose
-package object is reusable. On the same fixture, five paired rounds at
-`3f0c376` reduced comment-only incremental median wall time from 25.0 ms to
-12.9 ms and process CPU from 83 ms to 29.1 ms. Semantic incremental time
-changed from 82.0 ms to 77.9 ms (CPU 175 ms to 129 ms). Cold wall time rose
-from 331 ms to 349 ms and CPU from 1.823 s to 1.895 s; peak RSS stayed below
-the rustc baseline in all states. Both semantic-edit runs produced identical
-program output. This is an initial candidate measurement, so the feature stays
-under evaluation pending repeated confirmation and broader compatibility
-checks. Raw samples: [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
+package object is reusable. The five-round paired run at `79e11e0` measured
+comment-only incremental medians of 13.3 ms wall and 30.0 ms CPU, versus 25.0
+ms and 83 ms in the baseline. Semantic incremental CPU fell from 175 ms to
+142 ms, while wall time rose from 82.0 ms to 87.2 ms. Cold time was effectively
+unchanged at 333 ms / 1.847 s CPU versus 331 ms / 1.823 s. Peak RSS remained
+below the rustc baseline in all states. Semantic-edit program output matched.
+An earlier candidate at `3f0c376` measured 12.9 ms comment-only wall and 77.9
+ms semantic wall; the later run shows that the semantic wall result is not a
+reliable improvement. The clear gain is comment-only incremental work; the
+semantic edit trades a small wall-time regression for lower aggregate CPU.
+Raw runs: [`results-20261013-79e11e0-parse-summaries.json`](results-20261013-79e11e0-parse-summaries.json)
+and [`results-20261013-3f0c376-parse-summaries.json`](results-20261013-3f0c376-parse-summaries.json).
 
 A separate clean semantic-incremental profile compared revisions `1301f37` and
 `a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
