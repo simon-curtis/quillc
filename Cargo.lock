@@ -475,7 +475,6 @@ dependencies = [
 name = "quill-lsp"
 version = "0.0.1"
 dependencies = [
- "crossbeam-channel",
  "ra_ap_syntax",
  "serde_json",
  "toml",
