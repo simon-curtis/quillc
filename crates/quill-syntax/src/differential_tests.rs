@@ -342,8 +342,15 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
             "2021",
             "fn main() { let _: Box<(Copy) + (?Sized) + (for<'a> Trait<'a>)>; }",
         ),
+        ("2021", "fn bounds<T: (Copy) + (Send)>() {}"),
+        ("2021", "fn multiline<T: (Copy)\n    + (Send)>() {}"),
+        ("2021", "fn where_bounds<T>() where T: (Copy) + (Send) {}"),
+        ("2021", "type LegacyObject = Box<(Send) + (Sync)>;"),
+        ("2021", "fn object() { let _: Box<(Send)>; }"),
         ("2021", "impl impl NotType {}"),
         ("2021", "impl Trait2 for impl NotType {}"),
+        ("2021", "impl impl AnotherType {}"),
+        ("2021", "impl OtherTrait for impl AnotherType {}"),
         ("2021", "#![cfg(key = value)]"),
         ("2021", "struct S(i32, i32); fn f() { let s = S(1, 2); let a = s.1e0; }"),
     ];
@@ -368,6 +375,19 @@ fn matches_rustc_parser_acceptance_for_upstream_recovery_cases() {
         "2021",
     );
     assert!(actual.had_error, "malformed syntax was accepted: {malformed}");
+
+    let malformed_impl = "impl OtherTrait for impl AnotherType { fn broken( {} }";
+    assert!(!rustc_parser_accepts(malformed_impl, "2021"));
+    let source = SourceFile::from_text("malformed-impl-recovery-context.rs", malformed_impl);
+    let actual = parse_ast_with_cfg_and_edition(
+        &source,
+        &quill_cfg::CfgSet::default(),
+        "2021",
+    );
+    assert!(
+        actual.had_error,
+        "malformed impl body was accepted: {malformed_impl}"
+    );
 }
 
 fn rustc_parser_accepts(text: &str, edition: &str) -> bool {

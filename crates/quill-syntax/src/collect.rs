@@ -151,15 +151,23 @@ fn rustc_parser_accepts_ra_recovery(
             return true;
         }
     }
-    for construct in ["impl impl NotType", "impl Trait2 for impl NotType"] {
-        if let Some(offset) = line.find(construct) {
-            let construct_start = line_start + offset;
-            let construct_end = text[construct_start..]
-                .find('}')
-                .map_or(line_end, |end| construct_start + end + 1);
-            if (construct_start..=construct_end).contains(&start) {
-                return true;
-            }
+    let impl_header_end = line.find('{').unwrap_or(line.len());
+    let impl_tokens = line[..impl_header_end]
+        .match_indices("impl")
+        .filter_map(|(offset, _)| {
+            let before = offset.checked_sub(1).and_then(|index| line.as_bytes().get(index));
+            let after = line.as_bytes().get(offset + 4);
+            let is_word = |byte: Option<&u8>| {
+                byte.is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+            };
+            (is_word(before) && is_word(after)).then_some(offset)
+        })
+        .collect::<Vec<_>>();
+    if let Some(second_impl) = impl_tokens.get(1) {
+        let recovery_start = line_start + second_impl.saturating_sub(1);
+        let recovery_end = line_start + impl_header_end;
+        if (recovery_start..=recovery_end).contains(&start) {
+            return true;
         }
     }
     match message {
