@@ -1371,7 +1371,7 @@ fn check_call_targets(
         BodyExprKind::FieldAccess { base, .. } => {
             check_call_targets(base, locals, signatures, diagnostics);
         }
-        BodyExprKind::Reference { expression, .. } => {
+        BodyExprKind::Reference { expression, .. } | BodyExprKind::Dereference(expression) => {
             check_call_targets(expression, locals, signatures, diagnostics);
         }
         BodyExprKind::Cast { expression, .. } => {
@@ -1588,6 +1588,7 @@ fn check_loop_control(expression: &BodyExpr, depth: usize, diagnostics: &mut Vec
         | BodyExprKind::Reference {
             expression: base, ..
         }
+        | BodyExprKind::Dereference(base)
         | BodyExprKind::Cast {
             expression: base, ..
         } => check_loop_control(base, depth, diagnostics),
@@ -1659,6 +1660,7 @@ fn check_mutability(
         | BodyExprKind::Reference {
             expression: base, ..
         }
+        | BodyExprKind::Dereference(base)
         | BodyExprKind::Cast {
             expression: base, ..
         } => check_mutability(base, locals, diagnostics),
@@ -1815,6 +1817,27 @@ fn infer_with_structs(
             expected_return,
             diagnostics,
         ))),
+        BodyExprKind::Dereference(expression) => {
+            let ty = infer_with_structs(
+                expression,
+                locals,
+                signatures,
+                struct_signatures,
+                expected_return,
+                diagnostics,
+            );
+            match ty {
+                Ty::Reference(inner) => *inner,
+                Ty::Unknown => Ty::Unknown,
+                other => {
+                    diagnostics.push(TypeDiagnostic {
+                        span: expression.span.clone(),
+                        message: format!("cannot dereference `{}`", other.display_name()),
+                    });
+                    Ty::Unknown
+                }
+            }
+        }
         BodyExprKind::Cast {
             expression: inner,
             type_name,
@@ -3535,25 +3558,39 @@ fn infer_with_structs(
                             expected_return,
                             diagnostics,
                         );
-                        let element_type = match &iterator_type {
+                        let (element_type, borrowed_item) = match &iterator_type {
                             Ty::Reference(inner) => match inner.as_ref() {
-                                Ty::Slice(element) | Ty::Vector(element) => Some(element.as_ref()),
-                                _ => None,
+                                Ty::Slice(element) | Ty::Vector(element) => {
+                                    (Some(element.as_ref()), true)
+                                }
+                                _ => (None, false),
                             },
-                            Ty::Slice(element) | Ty::Vector(element) => Some(element.as_ref()),
-                            Ty::Iterator(element) => Some(element.as_ref()),
-                            _ => None,
+                            Ty::Slice(element) | Ty::Vector(element) => {
+                                (Some(element.as_ref()), false)
+                            }
+                            Ty::Iterator(element) => (Some(element.as_ref()), false),
+                            _ => (None, false),
                         };
                         let mut loop_locals = locals.clone();
                         if let Some(element_type) = element_type {
+                            let binding_type = |ty: &Ty| {
+                                if borrowed_item {
+                                    Ty::Reference(Box::new(ty.clone()))
+                                } else {
+                                    ty.clone()
+                                }
+                            };
                             match element_type {
                                 Ty::Tuple(elements) if elements.len() == names.len() => {
                                     loop_locals.extend(
-                                        names.iter().cloned().zip(elements.iter().cloned()),
+                                        names
+                                            .iter()
+                                            .cloned()
+                                            .zip(elements.iter().map(binding_type)),
                                     );
                                 }
                                 element if names.len() == 1 => {
-                                    loop_locals.insert(names[0].clone(), element.clone());
+                                    loop_locals.insert(names[0].clone(), binding_type(element));
                                 }
                                 _ => diagnostics.push(TypeDiagnostic {
                                     span: span.clone(),
@@ -4088,6 +4125,9 @@ fn types_compatible(expected: &Ty, actual: &Ty) -> bool {
         || matches!((expected, actual), (Ty::Array(expected, expected_len), Ty::Array(actual, actual_len))
             if expected_len == actual_len && types_compatible(expected, actual))
         || matches!((expected, actual), (Ty::Slice(expected), Ty::Vector(actual)) if types_compatible(expected, actual))
+        || matches!((expected, actual), (Ty::Reference(expected), Ty::Reference(actual))
+            if matches!((&**expected, &**actual), (Ty::Slice(expected), Ty::Array(actual, _) | Ty::Vector(actual))
+                if types_compatible(expected, actual)))
         || matches!((expected, actual), (Ty::Reference(expected), Ty::Reference(actual)) | (Ty::Slice(expected), Ty::Slice(actual)) if types_compatible(expected, actual))
         || *expected == Ty::Unknown
         || *actual == Ty::Unknown
@@ -4406,6 +4446,15 @@ mod tests {
             "fn total(values: &[i32]) -> i32 { let mut sum = 0; for value in values { sum = sum + value; } sum } fn main() { std::process::exit(total(&[11, 13, 18])); }",
         );
         let parsed = parse(&source);
+        assert!(!parsed.had_error);
+        let diagnostics = check_functions(&parsed.functions);
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+        let named_array = SourceFile::from_text(
+            "named-array-slice.rs",
+            "fn total(values: &[u64]) -> u64 { let mut sum = 0u64; for value in values { sum = sum + *value; } sum } fn main() { let values: [u64; 3] = [11, 13, 18]; let result = total(&values); }",
+        );
+        let parsed = parse(&named_array);
         assert!(!parsed.had_error);
         let diagnostics = check_functions(&parsed.functions);
         assert!(diagnostics.is_empty(), "{diagnostics:?}");

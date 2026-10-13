@@ -372,6 +372,7 @@ pub enum BodyExprKind {
         expression: Box<BodyExpr>,
         type_name: String,
     },
+    Dereference(Box<BodyExpr>),
     MacroInvocation(MacroExpression),
     Path(String),
     Call {
@@ -1926,6 +1927,9 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
         }
         syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Not(_)) => {
             BodyExprKind::Not(Box::new(lower_expr(&unary.expr, source)))
+        }
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Deref(_)) => {
+            BodyExprKind::Dereference(Box::new(lower_expr(&unary.expr, source)))
         }
         syn::Expr::Try(try_expression) => {
             BodyExprKind::Try(Box::new(lower_expr(&try_expression.expr, source)))

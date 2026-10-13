@@ -1155,7 +1155,7 @@ fn validate_struct_expr(
             }
         }
         BodyExprKind::Return(Some(value)) => validate_struct_expr(value, structs, functions)?,
-        BodyExprKind::Reference { expression, .. } => {
+        BodyExprKind::Reference { expression, .. } | BodyExprKind::Dereference(expression) => {
             validate_struct_expr(expression, structs, functions)?
         }
         BodyExprKind::Unit
@@ -1413,7 +1413,9 @@ fn validate_call_targets(
             }
         }
         BodyExprKind::Return(Some(value)) => validate_call_targets(value, functions)?,
-        BodyExprKind::Reference { expression, .. } => validate_call_targets(expression, functions)?,
+        BodyExprKind::Reference { expression, .. } | BodyExprKind::Dereference(expression) => {
+            validate_call_targets(expression, functions)?
+        }
         BodyExprKind::Unit
         | BodyExprKind::Literal(_)
         | BodyExprKind::EmptySliceReference
@@ -1645,6 +1647,7 @@ fn substitute_generic_body(body: &mut quill_syntax::BodyExpr, substitutions: &Ha
             | BodyExprKind::Reference {
                 expression: base, ..
             }
+            | BodyExprKind::Dereference(base)
             | BodyExprKind::Negate(base)
             | BodyExprKind::Not(base)
             | BodyExprKind::Parenthesized(base)
@@ -5901,6 +5904,21 @@ fn value_from_expression(
                 };
             }
             Ok(value)
+        }
+        BodyExprKind::Dereference(expression) => {
+            let BodyExprKind::Path(name) = &expression.kind else {
+                return Err(CodegenError::UnsupportedProgram(
+                    "native dereference currently requires a scalar local",
+                ));
+            };
+            match environment.get(name) {
+                Some(
+                    value @ (Value::Local(_) | Value::WordLocal(_) | Value::TypedWordLocal { .. }),
+                ) => Ok(value.clone()),
+                _ => Err(CodegenError::UnsupportedProgram(
+                    "native dereference currently requires a scalar local",
+                )),
+            }
         }
         BodyExprKind::Binary {
             operator,
@@ -11949,6 +11967,21 @@ mod tests {
         .unwrap();
         let output =
             std::env::temp_dir().join(format!("quill-result-local-{}", std::process::id()));
+        quill_link::link_elf_executable(&object, &output, "_start").unwrap();
+        let result = std::process::Command::new(&output).output().unwrap();
+        let _ = std::fs::remove_file(&output);
+        assert!(result.status.success(), "{result:?}");
+        assert_eq!(result.stdout, b"42\n");
+    }
+
+    #[test]
+    fn iterates_and_dereferences_a_borrowed_integer_array_as_a_slice() {
+        let object = emit(
+            "fn sum(values: &[u64]) -> u64 { let mut total: u64 = 0; for value in values { total = total + *value; } total } fn main() { let values: [u64; 3] = [7, 11, 24]; let result = sum(&values); println!(\"{result}\"); }",
+        )
+        .unwrap();
+        let output =
+            std::env::temp_dir().join(format!("quill-borrowed-slice-{}", std::process::id()));
         quill_link::link_elf_executable(&object, &output, "_start").unwrap();
         let result = std::process::Command::new(&output).output().unwrap();
         let _ = std::fs::remove_file(&output);
