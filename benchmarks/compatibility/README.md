@@ -51,16 +51,14 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 28-case run passes 21 (75.0%) against base Quill revision
-`612d6d6` and probes 28 of 29 tracked categories. The report's
-`quillc_source_dirty` flag is true: the tested binary includes in-flight codegen
-changes that were uncommitted when measured. The local workspace dependency,
+The current 28-case run passes 21 (75.0%) against clean Quill revision
+`9ccd5dd` and probes 28 of 29 tracked categories. The local workspace dependency,
 feature cfg, and narrow unsigned-integer Vec push/iteration cases match rustc.
-A narrow two-`u64` Rust ABI call also links from a
-Quill object into a rustc host and matches output. The report at
+A narrow two-`u64` Rust ABI call also links from a Quill object into a rustc
+host and matches output. The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
-records the base source revision, dirty-source state, binary hash, and build
-time. The website reports this result separately from the manually curated
+records the exact source revision, compiler-source cleanliness, binary hash,
+and build time. The website reports this result separately from the manually curated
 10.3% documentation index. The full compatibility target remains stable Rust
 behavior, Rust diagnostics, Cargo workflows, and Linux and Windows targets as
 described in the project specification.
