@@ -75,17 +75,10 @@
     </section>
 
     <section class="approach shell" id="approach" aria-labelledby="approach-title">
-      <div class="approach-title">
-        <h2 id="approach-title">Your code,<br>just as you<br>wrote it.</h2>
-      </div>
-      <div class="approach-copy">
-        <p class="lead">Compatibility means the whole experience.</p>
-        <p>The goal is 100% Rust compatibility: existing crates, familiar Cargo workflows, matching diagnostics, and programs that behave the same on Linux and Windows.</p>
-        <h3>Room to rethink the build.</h3>
-        <p>Quill has its own backend for turning Rust into machine code. Its architecture is being developed to reuse completed work and run independent work in parallel.</p>
-        <p>The aim is shorter builds, with the same correctness and no increase in peak memory.</p>
-        <a class="text-link" href="docs/architecture.md">Read the architecture <span aria-hidden="true">↗</span></a>
-      </div>
+      <h2 id="approach-title">How Quill is being built.</h2>
+      <p class="approach-intro">Quill generates machine code directly, caches work between builds, and runs independent tasks in parallel.</p>
+      <p class="approach-note">The goal is shorter builds with Rust’s language rules, diagnostics, and Cargo workflows intact. We compare the compiler with rustc, checking program output alongside build time and memory use.</p>
+      <a class="text-link" href="docs/architecture.md">Read the architecture <span aria-hidden="true">↗</span></a>
     </section>
 
     <div class="print-transition" aria-hidden="true"><canvas data-print="ribbon"></canvas></div>
