@@ -3677,7 +3677,14 @@ fn check_subset_files(paths: Vec<String>) -> ExitCode {
         for diagnostic in type_diagnostics {
             had_error = true;
             let (line, column) = file.source.line_column(diagnostic.span.start);
-            eprintln!("{path}:{line}:{column}: {}", diagnostic.message);
+            if diagnostic.message.contains(" has type `")
+                && diagnostic.message.contains(", expected `")
+            {
+                eprintln!("{path}:{line}:{column}: error[E0308]: mismatched types");
+                eprintln!("  = note: {}", diagnostic.message);
+            } else {
+                eprintln!("{path}:{line}:{column}: {}", diagnostic.message);
+            }
         }
     }
     for error in module_errors {

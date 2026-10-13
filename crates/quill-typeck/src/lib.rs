@@ -2885,7 +2885,9 @@ fn infer_with_structs(
                                 if actual != Ty::Never && !types_compatible(&declared, &actual) {
                                     mismatch(
                                         diagnostics,
-                                        span.clone(),
+                                        initializer
+                                            .as_ref()
+                                            .map_or_else(|| span.clone(), |value| value.span.clone()),
                                         &declared,
                                         &actual,
                                         "local binding",
