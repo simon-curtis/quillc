@@ -2929,6 +2929,7 @@ fn rewrite_enum_references(
             | BodyExprKind::Reference {
                 expression: base, ..
             }
+            | BodyExprKind::Dereference(base)
             | BodyExprKind::Cast {
                 expression: base, ..
             } => rewrite(
@@ -3569,6 +3570,7 @@ fn function_call_targets(functions: &[quill_syntax::FunctionItem]) -> HashSet<St
                 }
             }
             BodyExprKind::Reference { expression, .. }
+            | BodyExprKind::Dereference(expression)
             | BodyExprKind::Cast { expression, .. }
             | BodyExprKind::Closure {
                 body: expression, ..
