@@ -95,6 +95,12 @@ The [streamed-fingerprint run](results/2026-10-13-clean-44120ba.json) passes
 57/58 cases at clean revision `44120ba`, including the compile-time
 `stringify!` case. Only `.o`/`--extern` interoperability remains failing.
 
+The [post-move-flow run](results/2026-10-13-post-move-flow.json) also passes
+57/58 cases against pinned nightly `2026-08-23`. It ran release binary
+`ee1d6c34…` from revision `52e6add` with the compiler paths listed as dirty in
+the report. The only mismatch remains Rust consuming Quill's `.o` object via
+`rustc --extern`; this corpus result is not a full compatibility claim.
+
 The earlier [generic trait dispatch run](results/2026-10-13-generic-trait-dispatch.json)
 passes 52/53 cases (98.1%) and verifies one simple local trait method dispatched
 through a generic bound to a concrete named struct. It records a modified
