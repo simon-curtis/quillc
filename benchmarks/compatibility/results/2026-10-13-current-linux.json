@@ -1,15 +1,18 @@
 {
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
-  "quillc": "/tmp/quillc-clean-buildscript/target/release/quillc",
-  "quillc_source_revision": "41a2eec146d9b4501481fc0d7e03f686fdcd0175",
-  "quillc_source_dirty": false,
-  "quillc_source_dirty_paths": [],
-  "quillc_artifact_mtime": "2026-10-13T15:47:34.878840+00:00",
-  "quillc_sha256": "2fc601f4e6a1e8e59820e73efb95b37d4e5c4380f9aadbbbce931bf03a034409",
-  "passed": 30,
-  "total": 42,
-  "percent": 71.4,
+  "quillc": "/tmp/quillc-main-20261013-target/release/quillc",
+  "quillc_source_revision": "c5cc7fe9c4bb2daedae74d0ba6be698640112a32",
+  "quillc_source_dirty": true,
+  "quillc_source_dirty_paths": [
+    "crates/quill-lsp/src/lib.rs",
+    "crates/quill-typeck/src/lib.rs"
+  ],
+  "quillc_artifact_mtime": "2026-10-13T16:12:34.997007+00:00",
+  "quillc_sha256": "7f09a6f266ea968d2f917d2237d4ff6b7f9c7eff6bbf813a71309a50165a3052",
+  "passed": 34,
+  "total": 43,
+  "percent": 79.1,
   "results": [
     {
       "case": "hello-world",
@@ -223,7 +226,7 @@
           "line": 1,
           "column": 30
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-n9gjpp8u/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-yhdk1irn/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -308,7 +311,7 @@
           "line": 1,
           "column": 78
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-n9gjpp8u/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-yhdk1irn/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
       }
     },
     {
@@ -343,7 +346,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-n9gjpp8u/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-yhdk1irn/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -408,7 +411,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-n9gjpp8u/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-n9gjpp8u/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-n9gjpp8u/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-n9gjpp8u/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-yhdk1irn/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-yhdk1irn/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-yhdk1irn/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-yhdk1irn/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -418,13 +421,13 @@
     {
       "case": "signed-i32-arithmetic-and-branching",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: native casts currently support u64/usize values that already use word representation",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -444,13 +447,13 @@
     {
       "case": "two-scalar-tuple-return-and-fields",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: field read base is not a supported local struct",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -460,7 +463,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-n9gjpp8u/borrowed-integer-slice-iteration/main.rs:2:62: function argument has type `reference`, expected `reference` (Reference(Array(Integer(\"u64\"), 3)) vs Reference(Slice(Integer(\"u64\"))))",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-yhdk1irn/borrowed-integer-slice-iteration/main.rs:2:62: function argument has type `reference`, expected `reference` (Reference(Array(Integer(\"u64\"), 3)) vs Reference(Slice(Integer(\"u64\"))))",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -470,13 +473,13 @@
     {
       "case": "result-status-check",
       "kind": "run",
-      "passed": false,
+      "passed": true,
       "rustc_accepted": true,
-      "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: unsupported program: Result status checks require a supported Result call",
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
       "rustc_status": 0,
-      "quill_status": 1,
-      "runtime_match": null,
+      "quill_status": 0,
+      "runtime_match": true,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -499,7 +502,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-n9gjpp8u/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-n9gjpp8u/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-n9gjpp8u/btreemap-string-insert-and-get/main.rs:2:145: method `unwrap` is outside the supported type-checking subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-yhdk1irn/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-yhdk1irn/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-yhdk1irn/btreemap-string-insert-and-get/main.rs:2:145: method `unwrap` is outside the supported type-checking subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -525,7 +528,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-n9gjpp8u/macro-repetition-expansion/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-yhdk1irn/macro-repetition-expansion/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -538,7 +541,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected binary `edition-2015-check`: quillc: /tmp/quill-rustc-compat-n9gjpp8u/edition-2015-async-identifier/src/main.rs:1:17: invalid Rust syntax: expected one of: identifier, `::`, `<`, `_`, literal, `const`, `ref`, `mut`, `&`, parentheses, square brackets, `..`, `const`",
+      "reason": "Quill rejected binary `edition-2015-check`: quillc: /tmp/quill-rustc-compat-yhdk1irn/edition-2015-async-identifier/src/main.rs:1:17: invalid Rust syntax: expected one of: identifier, `::`, `<`, `_`, literal, `const`, `ref`, `mut`, `&`, parentheses, square brackets, `..`, `const`",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -555,6 +558,19 @@
       "rustc_status": 0,
       "quill_status": 0,
       "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-identifier-rejected",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
       "diagnostic_checks": null,
       "diagnostic_observed": null
     },
@@ -630,9 +646,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 7,
-      "passed": 5,
+      "passed": 6,
       "failed": [
-        "signed-i32-arithmetic-and-branching",
         "borrowed-integer-slice-iteration"
       ]
     },
@@ -681,10 +696,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 7,
-      "passed": 3,
+      "passed": 5,
       "failed": [
-        "signed-i32-arithmetic-and-branching",
-        "two-scalar-tuple-return-and-fields",
         "macro-repetition-expansion",
         "edition-2015-async-identifier"
       ]
@@ -723,14 +736,11 @@
       "tracker_status": "available",
       "probed": true,
       "cases": 35,
-      "passed": 24,
+      "passed": 27,
       "failed": [
         "generic-trait-dispatch",
         "panic-runtime",
-        "signed-i32-arithmetic-and-branching",
-        "two-scalar-tuple-return-and-fields",
         "borrowed-integer-slice-iteration",
-        "result-status-check",
         "vec-string-growth-and-index",
         "btreemap-string-insert-and-get",
         "generic-asref-string",
@@ -759,10 +769,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 2,
-      "passed": 1,
-      "failed": [
-        "result-status-check"
-      ]
+      "passed": 2,
+      "failed": []
     },
     {
       "id": "owned-strings",
@@ -780,12 +788,9 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 26,
-      "passed": 17,
+      "passed": 20,
       "failed": [
-        "signed-i32-arithmetic-and-branching",
-        "two-scalar-tuple-return-and-fields",
         "borrowed-integer-slice-iteration",
-        "result-status-check",
         "vec-string-growth-and-index",
         "btreemap-string-insert-and-get",
         "generic-asref-string",
@@ -797,8 +802,8 @@
       "id": "rust-source-parsing",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 5,
-      "passed": 4,
+      "cases": 6,
+      "passed": 5,
       "failed": [
         "edition-2015-async-identifier"
       ]
@@ -844,9 +849,8 @@
       "tracker_status": "partial",
       "probed": true,
       "cases": 3,
-      "passed": 1,
+      "passed": 2,
       "failed": [
-        "two-scalar-tuple-return-and-fields",
         "borrowed-integer-slice-iteration"
       ]
     },
