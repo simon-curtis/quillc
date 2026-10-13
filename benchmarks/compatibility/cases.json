@@ -316,6 +316,29 @@
     "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); let first = values[1]; println!(\"{first}\"); }"
   },
   {
+    "id": "vec-index-inside-arithmetic-and-call",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn add(left: u64, right: u64) -> u64 { left + right }\nfn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); values.push(20); values.push(30); let total = add(values[0], values[1]) + values[2]; println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-index-in-call-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn identity(value: u64) -> u64 { value }\nfn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); let value = identity(values[1]); println!(\"{value}\"); }"
+  },
+  {
     "id": "builtin-env-macro",
     "kind": "run",
     "features": [

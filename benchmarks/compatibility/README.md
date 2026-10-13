@@ -73,6 +73,13 @@ pinned corpus passes 61/61 cases (100.0%) at the report's recorded source
 revision; this remains regression coverage rather than an overall compatibility
 percentage.
 
+The [Vec expression-index run](results/2026-10-13-vec-index-expressions-clean.json)
+adds indexing inside binary arithmetic and function arguments, including an
+out-of-range index nested in a call. It checks both successful values and the
+same bounds-panic output. The combined pinned corpus passes 63/63 cases
+(100.0%) at its recorded source revision; general indexing contexts remain
+incomplete.
+
 The [self-contained rlib interoperability run](results/2026-10-13-rlib-extern-clean.json)
 passes all 58/58 curated cases at clean revision `e3f5db6`. Its artifact case
 builds a Quill object, packages it with rustc-generated metadata, and verifies

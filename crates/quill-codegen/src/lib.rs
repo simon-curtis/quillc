@@ -3894,6 +3894,15 @@ fn lower_statements(
                 &mut receiver_temporaries,
                 *next_slot,
             );
+            if !name.starts_with("__quill_vec_index_") {
+                materialize_vector_indices(
+                    &mut rewritten_initializer,
+                    environment,
+                    &mut receiver_temporaries,
+                    *next_slot,
+                    name,
+                );
+            }
             if !receiver_temporaries.is_empty() {
                 lowered.extend(lower_statements(
                     &receiver_temporaries,
@@ -5630,6 +5639,160 @@ fn materialize_method_receivers(
         kind: BodyExprKind::Path(name),
         span: receiver.span.clone(),
     };
+}
+
+fn materialize_vector_indices(
+    expression: &mut BodyExpr,
+    environment: &HashMap<String, Value>,
+    temporaries: &mut Vec<BodyStatement>,
+    slot_seed: usize,
+    reserved_name: &str,
+) {
+    match &mut expression.kind {
+        BodyExprKind::Index { base, index, .. } => {
+            materialize_vector_indices(base, environment, temporaries, slot_seed, reserved_name);
+            materialize_vector_indices(index, environment, temporaries, slot_seed, reserved_name);
+            let BodyExprKind::Path(collection_name) = &base.kind else {
+                return;
+            };
+            let Some(Value::CollectionLocal {
+                kind: CollectionKind::Vector,
+                element_type: Some(element_type),
+                ..
+            }) = environment.get(collection_name)
+            else {
+                return;
+            };
+            if !is_word_type(element_type) && element_type != "i32" {
+                return;
+            }
+            let mut suffix = temporaries.len();
+            let name = loop {
+                let candidate = format!("__quill_vec_index_{slot_seed}_{suffix}");
+                suffix += 1;
+                let used_in_source = candidate == reserved_name
+                    || environment.contains_key(&candidate)
+                    || temporaries.iter().any(|statement| {
+                        matches!(
+                            statement,
+                            BodyStatement::Let {
+                                name: Some(name),
+                                ..
+                            } if name == &candidate
+                        )
+                    });
+                if !used_in_source {
+                    break candidate;
+                }
+            };
+            let initializer = expression.clone();
+            temporaries.push(BodyStatement::Let {
+                name: Some(name.clone()),
+                type_text: None,
+                mutable: false,
+                initializer: Some(initializer),
+                span: expression.span.clone(),
+            });
+            expression.kind = BodyExprKind::Path(name);
+        }
+        BodyExprKind::Binary {
+            operator,
+            left,
+            right,
+        } => {
+            materialize_vector_indices(left, environment, temporaries, slot_seed, reserved_name);
+            if !matches!(operator, BinaryOperator::And | BinaryOperator::Or) {
+                materialize_vector_indices(
+                    right,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::Call { arguments, .. }
+        | BodyExprKind::Tuple(arguments)
+        | BodyExprKind::ArrayLiteral(arguments)
+        | BodyExprKind::FixedArrayLiteral(arguments) => {
+            for argument in arguments {
+                materialize_vector_indices(
+                    argument,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::MethodCall {
+            receiver,
+            arguments,
+            ..
+        } => {
+            materialize_vector_indices(receiver, environment, temporaries, slot_seed, reserved_name);
+            for argument in arguments {
+                materialize_vector_indices(
+                    argument,
+                    environment,
+                    temporaries,
+                    slot_seed,
+                    reserved_name,
+                );
+            }
+        }
+        BodyExprKind::Cast { expression, .. }
+        | BodyExprKind::Negate(expression)
+        | BodyExprKind::Not(expression)
+        | BodyExprKind::Try(expression)
+        | BodyExprKind::Parenthesized(expression)
+        | BodyExprKind::FieldAccess {
+            base: expression, ..
+        } => materialize_vector_indices(
+            expression,
+            environment,
+            temporaries,
+            slot_seed,
+            reserved_name,
+        ),
+        BodyExprKind::If { condition, .. } => {
+            materialize_vector_indices(
+                condition,
+                environment,
+                temporaries,
+                slot_seed,
+                reserved_name,
+            );
+        }
+        BodyExprKind::StructLiteral { fields, .. } => {
+            for (_, value) in fields {
+                materialize_vector_indices(value, environment, temporaries, slot_seed, reserved_name);
+            }
+        }
+        BodyExprKind::Match { scrutinee, .. } => {
+            materialize_vector_indices(
+                scrutinee,
+                environment,
+                temporaries,
+                slot_seed,
+                reserved_name,
+            );
+        }
+        BodyExprKind::Return(Some(value)) => {
+            materialize_vector_indices(value, environment, temporaries, slot_seed, reserved_name);
+        }
+        BodyExprKind::Unit
+        | BodyExprKind::Literal(_)
+        | BodyExprKind::EmptySliceReference
+        | BodyExprKind::MacroInvocation(_)
+        | BodyExprKind::Closure { .. }
+        | BodyExprKind::Path(_)
+        | BodyExprKind::Return(None)
+        | BodyExprKind::Reference { .. }
+        | BodyExprKind::Dereference(_)
+        | BodyExprKind::Block { .. }
+        | BodyExprKind::Unsupported => {}
+    }
 }
 
 fn lower_println_parts(
@@ -10648,7 +10811,8 @@ fn has_print_kind(value: &Value, kind: PrintKind) -> bool {
     print_parts(value, &mut |part| {
         found |= matches!(
             (kind, part),
-            (PrintKind::Decimal, PrintPart::Decimal(_)) | (PrintKind::Hex16, PrintPart::Hex16(_))
+            (PrintKind::Decimal, PrintPart::Decimal(_))
+                | (PrintKind::Hex16, PrintPart::Hex16(_))
                 | (PrintKind::PanicDecimal, PrintPart::PanicDecimal(_))
         );
     });
@@ -11594,14 +11758,16 @@ fn print_decimal_helper(file_descriptor: u8) -> Vec<u8> {
     let loop_displacement = code.len();
     code.extend_from_slice(&[0; 4]);
     patch_rel32(&mut code, loop_displacement, loop_start);
+    let file_descriptor_offset = code.len() + 6;
     code.extend_from_slice(&[
         0x48, 0xff, 0xc6, // inc rsi
         0x89, 0xca, // mov edx, ecx
-        0xbf, file_descriptor, 0, 0, 0, // mov edi, file descriptor
+        0xbf, 1, 0, 0, 0, // mov edi, file descriptor
         0xb8, 1, 0, 0, 0, // mov eax, 1
         0x0f, 0x05, // syscall
         0xc9, 0xc3, // leave; ret
     ]);
+    code[file_descriptor_offset] = file_descriptor;
     code
 }
 
