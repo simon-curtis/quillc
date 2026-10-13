@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [Vec mutable-assignment run](results/2026-10-13-vec-index-assignment-clean.json)
+passes 69/69 cases at clean revision `5ad3860`. It adds in-range and
+out-of-range scalar Vec indexing in mutable assignment expressions; the latter
+matches rustc's bounds-panic output. This curated pass rate is not an overall
+Rust compatibility percentage.
+
 The [Vec explicit-return run](results/2026-10-13-vec-index-returns-clean.json)
 passes 67/67 cases at clean revision `99b3c77`. It adds in-range and
 out-of-range scalar Vec indexing in explicit return expressions; the latter
