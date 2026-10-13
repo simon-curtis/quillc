@@ -655,6 +655,30 @@
     "source": "fn at(values: &[i32], index: usize) -> i32 { return values[index]; }\nfn main() { let values: [i32; 3] = [7, 11, 24]; let result = at(&values, 1); let output = result as u64; println!(\"{output}\"); }"
   },
   {
+    "id": "borrowed-slice-index-in-while-condition",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 3] = [2, 1, 0]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-index-while-condition-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 1] = [2]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
     "id": "result-status-check",
     "kind": "run",
     "features": [

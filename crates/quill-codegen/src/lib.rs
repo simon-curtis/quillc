@@ -5357,12 +5357,15 @@ fn lower_statements(
             BodyStatement::While {
                 condition, body, ..
             } => {
-                let condition = condition_from_expression_with_structs(
-                    condition,
+                let mut rewritten_condition = condition.clone();
+                let mut condition_temporaries = Vec::new();
+                materialize_index_reads(
+                    &mut rewritten_condition,
                     environment,
-                    functions,
-                    structs,
-                )?;
+                    &mut condition_temporaries,
+                    *next_slot,
+                    "__quill_while",
+                );
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
                     return Err(CodegenError::UnsupportedProgram(
                         "while body must be a block",
@@ -5375,15 +5378,56 @@ fn lower_statements(
                 }
                 let mut body_environment = environment.clone();
                 let mut body_mutable_names = mutable_names.clone();
-                let body = lower_statements(
-                    statements,
-                    &mut body_environment,
-                    &mut body_mutable_names,
-                    next_slot,
-                    functions,
-                    structs,
-                )?;
-                lowered.push(Statement::While { condition, body });
+                if condition_temporaries.is_empty() {
+                    let condition = condition_from_expression_with_structs(
+                        &rewritten_condition,
+                        &body_environment,
+                        functions,
+                        structs,
+                    )?;
+                    let body = lower_statements(
+                        statements,
+                        &mut body_environment,
+                        &mut body_mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?;
+                    lowered.push(Statement::While { condition, body });
+                } else {
+                    let condition_prelude = lower_statements(
+                        &condition_temporaries,
+                        &mut body_environment,
+                        &mut body_mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?;
+                    let condition = condition_from_expression_with_structs(
+                        &rewritten_condition,
+                        &body_environment,
+                        functions,
+                        structs,
+                    )?;
+                    let body = lower_statements(
+                        statements,
+                        &mut body_environment,
+                        &mut body_mutable_names,
+                        next_slot,
+                        functions,
+                        structs,
+                    )?;
+                    let mut loop_body = condition_prelude;
+                    loop_body.push(Statement::If {
+                        condition,
+                        then_body: body,
+                        else_body: vec![Statement::Break],
+                    });
+                    lowered.push(Statement::While {
+                        condition: Condition::Boolean(true),
+                        body: loop_body,
+                    });
+                }
             }
             BodyStatement::Loop { body, .. } => {
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
