@@ -726,6 +726,41 @@
     "source": "fn classify(values: &[u64], index: usize) -> u64 { let mut result = 0u64; if values[index] > 10 { result = 1; } else { result = 2; } result }\nfn main() { let values: [u64; 1] = [7]; let result = classify(&values, 1); println!(\"{result}\"); }"
   },
   {
+    "id": "borrowed-slice-if-short-circuit-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn check(values: &[u64]) -> u64 { let mut result = 0u64; if false && values[1] > 0 { result = 1; } else { result = 2; } if true || values[1] > 0 { result = result + 3; } result }\nfn main() { let values: [u64; 1] = [7]; let result = check(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-if-short-circuit-index-panics-when-reached",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn check(values: &[u64]) -> u64 { let mut result = 0u64; if true && values[1] > 0 { result = 1; } result }\nfn main() { let values: [u64; 1] = [7]; let result = check(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-while-short-circuit-index-guard",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while index < values.len() && values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 2] = [2, 1]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
     "id": "result-status-check",
     "kind": "run",
     "features": [

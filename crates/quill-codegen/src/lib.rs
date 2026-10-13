@@ -5313,31 +5313,6 @@ fn lower_statements(
                         continue;
                     }
                 };
-                let mut rewritten_condition = condition.clone();
-                let mut condition_temporaries = Vec::new();
-                materialize_index_reads(
-                    &mut rewritten_condition,
-                    environment,
-                    &mut condition_temporaries,
-                    *next_slot,
-                    "__quill_if",
-                );
-                if !condition_temporaries.is_empty() {
-                    lowered.extend(lower_statements(
-                        &condition_temporaries,
-                        environment,
-                        mutable_names,
-                        next_slot,
-                        functions,
-                        structs,
-                    )?);
-                }
-                let condition = condition_from_expression_with_structs(
-                    &rewritten_condition,
-                    environment,
-                    functions,
-                    structs,
-                )?;
                 let lower_branch = |branch: &BodyExpr,
                                     next_slot: &mut usize|
                  -> Result<Vec<Statement>, CodegenError> {
@@ -5368,24 +5343,20 @@ fn lower_statements(
                 } else {
                     Vec::new()
                 };
-                lowered.push(Statement::If {
+                lowered.extend(lower_condition_if(
                     condition,
                     then_body,
                     else_body,
-                });
+                    environment,
+                    mutable_names,
+                    next_slot,
+                    functions,
+                    structs,
+                )?);
             }
             BodyStatement::While {
                 condition, body, ..
             } => {
-                let mut rewritten_condition = condition.clone();
-                let mut condition_temporaries = Vec::new();
-                materialize_index_reads(
-                    &mut rewritten_condition,
-                    environment,
-                    &mut condition_temporaries,
-                    *next_slot,
-                    "__quill_while",
-                );
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
                     return Err(CodegenError::UnsupportedProgram(
                         "while body must be a block",
@@ -5398,56 +5369,28 @@ fn lower_statements(
                 }
                 let mut body_environment = environment.clone();
                 let mut body_mutable_names = mutable_names.clone();
-                if condition_temporaries.is_empty() {
-                    let condition = condition_from_expression_with_structs(
-                        &rewritten_condition,
-                        &body_environment,
-                        functions,
-                        structs,
-                    )?;
-                    let body = lower_statements(
-                        statements,
-                        &mut body_environment,
-                        &mut body_mutable_names,
-                        next_slot,
-                        functions,
-                        structs,
-                    )?;
-                    lowered.push(Statement::While { condition, body });
-                } else {
-                    let condition_prelude = lower_statements(
-                        &condition_temporaries,
-                        &mut body_environment,
-                        &mut body_mutable_names,
-                        next_slot,
-                        functions,
-                        structs,
-                    )?;
-                    let condition = condition_from_expression_with_structs(
-                        &rewritten_condition,
-                        &body_environment,
-                        functions,
-                        structs,
-                    )?;
-                    let body = lower_statements(
-                        statements,
-                        &mut body_environment,
-                        &mut body_mutable_names,
-                        next_slot,
-                        functions,
-                        structs,
-                    )?;
-                    let mut loop_body = condition_prelude;
-                    loop_body.push(Statement::If {
-                        condition,
-                        then_body: body,
-                        else_body: vec![Statement::Break],
-                    });
-                    lowered.push(Statement::While {
-                        condition: Condition::Boolean(true),
-                        body: loop_body,
-                    });
-                }
+                let body = lower_statements(
+                    statements,
+                    &mut body_environment,
+                    &mut body_mutable_names,
+                    next_slot,
+                    functions,
+                    structs,
+                )?;
+                let body = lower_condition_if(
+                    condition,
+                    body,
+                    vec![Statement::Break],
+                    environment,
+                    mutable_names,
+                    next_slot,
+                    functions,
+                    structs,
+                )?;
+                lowered.push(Statement::While {
+                    condition: Condition::Boolean(true),
+                    body,
+                });
             }
             BodyStatement::Loop { body, .. } => {
                 let BodyExprKind::Block { statements, tail } = &body.kind else {
@@ -8080,6 +8023,125 @@ fn condition_from_expression_with_structs(
         _ => Err(CodegenError::UnsupportedProgram(
             "if conditions must be boolean literals or signed integer comparisons",
         )),
+    }
+}
+
+fn lower_condition_if(
+    expression: &BodyExpr,
+    then_body: Vec<Statement>,
+    else_body: Vec<Statement>,
+    environment: &HashMap<String, Value>,
+    mutable_names: &HashSet<String>,
+    next_slot: &mut usize,
+    functions: &[FunctionItem],
+    structs: &[StructItem],
+) -> Result<Vec<Statement>, CodegenError> {
+    match &expression.kind {
+        BodyExprKind::Parenthesized(inner) => lower_condition_if(
+            inner,
+            then_body,
+            else_body,
+            environment,
+            mutable_names,
+            next_slot,
+            functions,
+            structs,
+        ),
+        BodyExprKind::Not(inner) => lower_condition_if(
+            inner,
+            else_body,
+            then_body,
+            environment,
+            mutable_names,
+            next_slot,
+            functions,
+            structs,
+        ),
+        BodyExprKind::Binary {
+            operator: BinaryOperator::And,
+            left,
+            right,
+        } => {
+            let right = lower_condition_if(
+                right,
+                then_body.clone(),
+                else_body.clone(),
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            lower_condition_if(
+                left,
+                right,
+                else_body,
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )
+        }
+        BodyExprKind::Binary {
+            operator: BinaryOperator::Or,
+            left,
+            right,
+        } => {
+            let right = lower_condition_if(
+                right,
+                then_body.clone(),
+                else_body.clone(),
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            lower_condition_if(
+                left,
+                then_body,
+                right,
+                environment,
+                mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )
+        }
+        _ => {
+            let mut rewritten = expression.clone();
+            let mut temporaries = Vec::new();
+            materialize_index_reads(
+                &mut rewritten,
+                environment,
+                &mut temporaries,
+                *next_slot,
+                "__quill_condition",
+            );
+            let mut branch_environment = environment.clone();
+            let mut branch_mutable_names = mutable_names.clone();
+            let mut lowered = lower_statements(
+                &temporaries,
+                &mut branch_environment,
+                &mut branch_mutable_names,
+                next_slot,
+                functions,
+                structs,
+            )?;
+            let condition = condition_from_expression_with_structs(
+                &rewritten,
+                &branch_environment,
+                functions,
+                structs,
+            )?;
+            lowered.push(Statement::If {
+                condition,
+                then_body,
+                else_body,
+            });
+            Ok(lowered)
+        }
     }
 }
 
