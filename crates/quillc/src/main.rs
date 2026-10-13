@@ -2619,8 +2619,12 @@ fn compile_parsed_sources(
             )
             .map_err(|error| format!("could not fingerprint package object: {error}"))?;
             let object_fingerprint = *object_hasher.finalize().as_bytes();
-            let (object, cache_hit) =
-                emit_target_object_cached(object_fingerprint, parse, &imports, object_cache_root)?;
+            let (object, cache_hit) = emit_target_object_cached(
+                object_fingerprint,
+                std::mem::take(parse),
+                &imports,
+                object_cache_root,
+            )?;
             if cache_hit && std::env::var_os("QUILL_PROFILE").is_some() {
                 eprintln!("quill-profile package object cache hit: {target}");
             }
@@ -2683,7 +2687,7 @@ fn compile_parsed_sources(
 
 fn emit_target_object_cached(
     fingerprint: [u8; 32],
-    parse: &quill_syntax::Parse,
+    parse: quill_syntax::Parse,
     imports: &[quill_codegen::ExternalFunctionImport],
     cache_root: Option<&Path>,
 ) -> Result<(Vec<u8>, bool), String> {
@@ -2705,9 +2709,9 @@ fn emit_target_object_cached(
         .iter()
         .any(|function| function.name == "main");
     let object = if has_main {
-        quill_codegen::emit_subset_main_object_with_imports(parse, imports)
+        quill_codegen::emit_subset_main_object_owned_with_imports(parse, imports)
     } else {
-        quill_codegen::emit_subset_library_object_with_imports(parse, imports)
+        quill_codegen::emit_subset_library_object_owned_with_imports(parse, imports)
     }
     .map_err(|error| error.to_string())?;
 

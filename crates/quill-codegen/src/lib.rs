@@ -412,6 +412,16 @@ pub fn emit_subset_main_object_with_imports(
     emit_subset_object(&combined, true, imports)
 }
 
+/// Emit an executable object while taking ownership of its parse tree. This
+/// avoids cloning every function body when the caller no longer needs it.
+pub fn emit_subset_main_object_owned_with_imports(
+    mut parse: Parse,
+    imports: &[ExternalFunctionImport],
+) -> Result<Vec<u8>, CodegenError> {
+    append_imports(&mut parse, imports)?;
+    emit_subset_object(&parse, true, imports)
+}
+
 /// Emit an ELF relocatable object for the public functions in a closed library
 /// unit. Public functions receive stable external symbols; private helpers are
 /// retained only when reached from those exports.
@@ -427,11 +437,29 @@ pub fn emit_subset_library_object_with_imports(
     emit_subset_object(&combined, false, imports)
 }
 
+/// Emit a library object while taking ownership of its parse tree. This
+/// avoids cloning every function body when the caller no longer needs it.
+pub fn emit_subset_library_object_owned_with_imports(
+    mut parse: Parse,
+    imports: &[ExternalFunctionImport],
+) -> Result<Vec<u8>, CodegenError> {
+    append_imports(&mut parse, imports)?;
+    emit_subset_object(&parse, false, imports)
+}
+
 fn parse_with_imports(
     parse: &Parse,
     imports: &[ExternalFunctionImport],
 ) -> Result<Parse, CodegenError> {
     let mut combined = parse.clone();
+    append_imports(&mut combined, imports)?;
+    Ok(combined)
+}
+
+fn append_imports(
+    combined: &mut Parse,
+    imports: &[ExternalFunctionImport],
+) -> Result<(), CodegenError> {
     for import in imports {
         let is_generic_definition =
             import.declaration.is_generic && import.declaration.body.is_some();
@@ -453,7 +481,7 @@ fn parse_with_imports(
         }
         combined.functions.push(import.declaration.clone());
     }
-    Ok(combined)
+    Ok(())
 }
 
 fn emit_subset_object(
