@@ -873,6 +873,10 @@ fn check_selected_functions<'a>(
         let mut methods = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut trait_methods = HashMap::<&str, Vec<&FunctionItem>>::new();
         let mut trait_impl_methods = HashMap::<(&str, &str), Vec<&FunctionItem>>::new();
+        let needs_trait_index = declarations
+            .iter()
+            .chain(&external_functions)
+            .any(|function| !function.generic_trait_bounds.is_empty());
         for function in declarations {
             add_signature_suffixes(&mut exact, &mut suffix, function);
             if method_owner(function).is_some()
@@ -880,11 +884,13 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
-            index_trait_method(
-                &mut trait_methods,
-                &mut trait_impl_methods,
-                function,
-            );
+            if needs_trait_index {
+                index_trait_method(
+                    &mut trait_methods,
+                    &mut trait_impl_methods,
+                    function,
+                );
+            }
             // Root-module items remain directly addressable by their source
             // name even when stored under a canonical crate-qualified path.
             if function.scope.is_empty()
@@ -901,11 +907,13 @@ fn check_selected_functions<'a>(
             {
                 methods.entry(method).or_default().push(function);
             }
-            index_trait_method(
-                &mut trait_methods,
-                &mut trait_impl_methods,
-                function,
-            );
+            if needs_trait_index {
+                index_trait_method(
+                    &mut trait_methods,
+                    &mut trait_impl_methods,
+                    function,
+                );
+            }
         }
         SignatureIndex {
             exact,
