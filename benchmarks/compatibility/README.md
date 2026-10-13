@@ -76,6 +76,12 @@ borrow liveness and shadowing behavior against the pinned nightly on Linux
 x86-64. The later expanded report above supersedes it as the newest 120-case
 snapshot; neither pass rate establishes overall Rust compatibility.
 
+The [clean build-script cfg snapshot](results/2026-10-13-build-script-cfg-clean.json)
+passes 25/28 cases at revision `75b607d`. Its `cargo-build-script-cfg` case
+confirms matching binary output for the supported native `rustc-cfg` path. This
+is a historical, narrower corpus snapshot; consult the expanded report above
+for the later 120-case result.
+
 The [nested-scope borrow run](results/2026-10-13-nested-scope-borrow-clean.json)
 passes 120/120 curated cases at clean revision `d0b111c`. It catches E0499
 when an inner mutable borrow overlaps a still-live outer mutable borrow,
