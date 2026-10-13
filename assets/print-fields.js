@@ -6,6 +6,17 @@
   const grids = new WeakMap();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let waveTime = 0;
+  let ink, landscape;
+  function palette() {
+    const style = getComputedStyle(document.documentElement);
+    ink = style.getPropertyValue('--print-ink').trim();
+    landscape = style.getPropertyValue('--print-landscape').trim();
+  }
+  palette();
+  document.addEventListener('quill:themechange', () => {
+    palette();
+    document.querySelectorAll('[data-print]').forEach(print);
+  });
   function print(canvas) {
     const box = canvas.getBoundingClientRect();
     if (!box.width || !box.height) return;
@@ -37,7 +48,7 @@
     }
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = kind === 'landscape' ? '#c4d2b3' : '#ba482f';
+    ctx.fillStyle = kind === 'landscape' ? landscape : ink;
     ctx.beginPath();
     for (const { x, y, grain } of grid.points) {
       const u = x / w, v = y / h;

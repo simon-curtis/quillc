@@ -47,7 +47,7 @@
   overflow-wrap: anywhere;
   font-size: 17px;
   line-height: 1.8;
-  color: #566057;
+  color: var(--document-copy);
 }
 .markdown h1 {
   white-space: normal;
@@ -91,7 +91,7 @@
 .markdown a {
   color: var(--ink);
   text-decoration: underline;
-  text-decoration-color: #a3aba0;
+  text-decoration-color: var(--link-line);
   text-underline-offset: 4px;
 }
 .markdown a:hover {
@@ -112,12 +112,12 @@
 .markdown code {
   font-family: "Geist Mono", monospace;
   font-size: 0.8em;
-  background: #eaece3;
+  background: var(--surface);
   border-radius: 3px;
   padding: 2px 5px;
 }
 .markdown pre {
-  background: #eaece3;
+  background: var(--surface);
   padding: 23px 25px;
   overflow: auto;
   font:

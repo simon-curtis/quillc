@@ -3,12 +3,22 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f6f3ec"><meta name="description" content="Quill's Rust compatibility index: current language, runtime, Cargo, and platform support, with explicit limits.">
 <title>Rust compatibility — Quill</title>
-<link rel="stylesheet" href="assets/site.css"><link rel="stylesheet" href="assets/compatibility.css">
+  <script>
+    (() => {
+      let preference = 'system';
+      try { preference = localStorage.getItem('quill-theme') || 'system'; } catch {}
+      const dark = preference === 'dark' || (preference !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1b201d' : '#f6f3ec');
+    })();
+  </script>
+  <script type="module" src="/assets/theme.js"></script>
+  <link rel="stylesheet" href="assets/site.css"><link rel="stylesheet" href="assets/compatibility.css">
 <script src="assets/compatibility.js" defer></script>
   <script src="/assets/logo.js" defer></script>
   <link rel="icon" href="/assets/quill-feather.svg" type="image/svg+xml">
 </head><body>
-<header class="header shell"><a class="wordmark" href="/" aria-label="Quill home"><span class="brand-feather" aria-hidden="true"><img src="/assets/quill-feather.svg" alt="" width="64" height="96"><canvas></canvas></span><span>quill</span></a><nav aria-label="Main navigation"><a href="project.html">Project notes</a><a href="/">Back to Quill ↗</a><a class="github-link" href="https://github.com/simon-curtis/quillc">GitHub <span aria-hidden="true">↗</span></a></nav></header>
+<header class="header shell"><a class="wordmark" href="/" aria-label="Quill home"><span class="brand-feather" aria-hidden="true"><img src="/assets/quill-feather.svg" alt="" width="64" height="96"><canvas></canvas></span><span>quill</span></a><nav aria-label="Main navigation"><a href="project.html">Project notes</a><a href="/">Back to Quill ↗</a><a class="github-link" href="https://github.com/simon-curtis/quillc">GitHub <span aria-hidden="true">↗</span></a><button class="theme-toggle" type="button" aria-label="Color theme: system. Change to dark theme" hidden><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor"/></svg><span data-theme-label>System</span></button></nav></header>
 <main class="compatibility shell">
 <div class="compatibility-intro">
   <h1>Rust compatibility.</h1>

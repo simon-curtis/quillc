@@ -6,6 +6,16 @@
   <meta name="theme-color" content="#f6f3ec">
   <meta name="description" content="Quill is a new Rust compiler being built for full compatibility on Linux and Windows, with faster builds as the goal.">
   <title>Quill — A new compiler for all of Rust</title>
+  <script>
+    (() => {
+      let preference = 'system';
+      try { preference = localStorage.getItem('quill-theme') || 'system'; } catch {}
+      const dark = preference === 'dark' || (preference !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1b201d' : '#f6f3ec');
+    })();
+  </script>
+  <script type="module" src="/assets/theme.js"></script>
   <link rel="preload" href="assets/fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/site.css">
   <script src="assets/benchmarks.js" defer></script>
@@ -23,7 +33,7 @@
       <a href="#performance">Performance</a>
       <a href="project.html" class="notes-link">Project notes <span aria-hidden="true">↗</span></a>
           <a class="github-link" href="https://github.com/simon-curtis/quillc">GitHub <span aria-hidden="true">↗</span></a>
-    </nav>
+    <button class="theme-toggle" type="button" aria-label="Color theme: system. Change to dark theme" hidden><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor"/></svg><span data-theme-label>System</span></button></nav>
   </header>
 
   <main>

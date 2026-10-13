@@ -197,7 +197,7 @@
     sans-serif;
   color: var(--ink);
   background: transparent;
-  border: 1px solid #9ca79b;
+  border: 1px solid var(--control-line);
   border-radius: 0;
   width: 100%;
   padding: 13px 15px;
@@ -240,7 +240,7 @@
   color: var(--forest);
 }
 .status-partial {
-  color: #a13e28;
+  color: var(--partial);
 }
 .status-planned,
 .status-unassessed {
@@ -249,7 +249,7 @@
 .feature-detail > p {
   font-size: 14px;
   line-height: 1.8;
-  color: #5c655e;
+  color: var(--body-copy);
   margin: 0 0 12px;
 }
 .feature-detail > a {
