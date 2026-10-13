@@ -57,6 +57,14 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [C string literal stringify run](results/2026-10-13-stringify-c-literals-clean.json)
+passes 57/58 cases (98.3%) at clean revision `10d029e`. The runtime
+`stringify!` comparison now includes a C string literal and matches rustc;
+source spans preserve token spelling without re-lexing literal forms. The one
+remaining failure is rustc rejecting Quill's `.o` library artifact through
+`--extern`. This corpus result is a regression measurement, not an overall
+compatibility percentage.
+
 The [panic-runtime clean run](results/2026-10-13-panic-runtime-clean.json)
 at revision `26b9230` records 51/53 passing cases (96.2%), with binary hash and
 clean source status. It is the earlier baseline snapshot, not the current count.
