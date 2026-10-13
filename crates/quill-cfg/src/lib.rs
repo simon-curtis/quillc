@@ -13,6 +13,12 @@ pub struct CfgSet {
 }
 
 impl CfgSet {
+    /// Add the facts from another configuration set.
+    pub fn extend(&mut self, other: Self) {
+        self.flags.extend(other.flags);
+        self.values.extend(other.values);
+    }
+
     pub fn insert_flag(&mut self, flag: impl Into<String>) {
         self.flags.insert(flag.into());
     }

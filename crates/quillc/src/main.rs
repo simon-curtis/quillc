@@ -4,10 +4,12 @@ use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 type ImportAliasMap = HashMap<String, HashMap<String, String>>;
 type CallResolutionCache = HashMap<(String, String), Option<String>>;
+static BUILD_SCRIPT_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 struct BuildFileStamp {
@@ -27,6 +29,7 @@ struct BuildArtifactIndex {
     manifest: PathBuf,
     compiler: BuildFileStamp,
     environment: Vec<(String, Option<String>)>,
+    uses_build_script: bool,
     cfg_digest: [u8; 32],
     inputs: Vec<BuildFileStamp>,
     external_inputs: Vec<PathBuf>,
@@ -37,6 +40,7 @@ struct BuildArtifactIndex {
 struct CargoBuildArtifact {
     path: PathBuf,
     cfg_digest: [u8; 32],
+    uses_build_script: bool,
     semantic_inputs: Vec<(PathBuf, [u8; 32])>,
 }
 
@@ -744,6 +748,80 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
     }
 }
 
+fn run_cargo_build_script(
+    target: &quill_cargo::CargoTarget,
+    package: &quill_cargo::CargoPackage,
+    cfg: &quill_cfg::CfgSet,
+) -> Result<quill_cfg::CfgSet, String> {
+    let id = BUILD_SCRIPT_ID.fetch_add(1, Ordering::Relaxed);
+    let temporary_root =
+        std::env::temp_dir().join(format!("quill-build-script-{}-{id}", std::process::id()));
+    let executable = temporary_root.join("build-script");
+    let out_dir = temporary_root.join("out");
+    std::fs::create_dir_all(&out_dir)
+        .map_err(|error| format!("could not create build-script output directory: {error}"))?;
+    let compile_result = compile_subset_main_with_cfg(
+        &target.source_path.display().to_string(),
+        &executable.display().to_string(),
+        cfg,
+    );
+    if let Err(error) = compile_result {
+        let _ = std::fs::remove_dir_all(&temporary_root);
+        return Err(format!("could not compile package build script: {error}"));
+    }
+    let manifest_dir = package
+        .manifest_path
+        .parent()
+        .ok_or_else(|| "package manifest has no parent directory".to_owned())?;
+    let output = std::process::Command::new(&executable)
+        .current_dir(manifest_dir)
+        .env("CARGO_MANIFEST_DIR", manifest_dir)
+        .env("CARGO_MANIFEST_PATH", &package.manifest_path)
+        .env("CARGO_PKG_NAME", &package.name)
+        .env("CARGO_PKG_VERSION", &package.version)
+        .env("OUT_DIR", &out_dir)
+        .env("CARGO_CFG_TARGET_ARCH", "x86_64")
+        .env("CARGO_CFG_TARGET_OS", "linux")
+        .env("CARGO_CFG_TARGET_ENV", "")
+        .env("CARGO_CFG_TARGET_ENDIAN", "little")
+        .env("CARGO_CFG_TARGET_POINTER_WIDTH", "64")
+        .env("CARGO_CFG_UNIX", "")
+        .output()
+        .map_err(|error| format!("could not run package build script: {error}"));
+    let _ = std::fs::remove_dir_all(&temporary_root);
+    let output = output?;
+    if !output.status.success() {
+        return Err(format!(
+            "package build script failed with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let mut build_cfg = quill_cfg::CfgSet::default();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Some((directive, value)) = line.split_once('=') else {
+            continue;
+        };
+        match directive.trim() {
+            "cargo:rustc-cfg" | "cargo::rustc-cfg" => {
+                build_cfg.extend(quill_cfg::CfgSet::parse_rustc_cfg(value));
+            }
+            "cargo:rustc-check-cfg"
+            | "cargo::rustc-check-cfg"
+            | "cargo:rerun-if-env-changed"
+            | "cargo::rerun-if-env-changed"
+            | "cargo:rerun-if-changed"
+            | "cargo::rerun-if-changed" => {}
+            _ => {
+                return Err(format!(
+                    "package build script directive `{directive}` is outside the native subset"
+                ));
+            }
+        }
+    }
+    Ok(build_cfg)
+}
+
 fn compile_cargo_subset_for_target(
     manifest: &str,
     output: &str,
@@ -806,23 +884,35 @@ fn compile_cargo_subset_for_target_with_workspace(
         .filter(|target| target.kinds.iter().any(|kind| kind == "lib"))
         .copied()
         .collect();
-    let has_unsupported_target = package_build_targets.iter().any(|target| {
-        target
-            .kinds
-            .iter()
-            .any(|kind| matches!(kind.as_str(), "proc-macro" | "custom-build"))
-    });
-    if has_unsupported_target || package_libraries.len() > 1 {
+    let package_build_scripts: Vec<_> = package_build_targets
+        .iter()
+        .filter(|target| target.kinds.iter().any(|kind| kind == "custom-build"))
+        .copied()
+        .collect();
+    let has_unsupported_target = package_build_targets
+        .iter()
+        .any(|target| target.kinds.iter().any(|kind| kind == "proc-macro"));
+    if has_unsupported_target || package_libraries.len() > 1 || package_build_scripts.len() > 1 {
         return Err(
-            "cargo-build-subset accepts selected binary targets and at most one library target per package"
+            "cargo-build-subset accepts selected binary targets, at most one library target, and at most one build script per package"
                 .into(),
         );
+    }
+    let mut package_cfg = package.cfg.clone();
+    let mut cfg_digest = workspace_cfg_digest(workspace);
+    if let Some(build_script) = package_build_scripts.first() {
+        let build_cfg = run_cargo_build_script(build_script, package, &package_cfg)?;
+        package_cfg.extend(build_cfg);
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&cfg_digest);
+        hasher.update(&package_cfg.fingerprint());
+        cfg_digest = *hasher.finalize().as_bytes();
     }
     let mut roots = vec![(
         CrateTargetId {
             package: package.id.clone(),
             target: target.name.clone(),
-            cfg: package.cfg.clone(),
+            cfg: package_cfg.clone(),
         },
         target.source_path.display().to_string(),
     )];
@@ -831,7 +921,7 @@ fn compile_cargo_subset_for_target_with_workspace(
         let owner = CrateTargetId {
             package: package.id.clone(),
             target: library.name.clone(),
-            cfg: package.cfg.clone(),
+            cfg: package_cfg,
         };
         crate_prefixes.insert(owner.key(), package.name.replace('-', "_"));
         roots.push((owner, library.source_path.display().to_string()));
@@ -898,7 +988,13 @@ fn compile_cargo_subset_for_target_with_workspace(
         .filter(|path| !path.starts_with(&workspace.root))
         .collect::<Vec<_>>();
     let build_cache = if selected_bin.is_none() {
-        cargo_build_cache_path(&workspace, manifest, &parsed_files)?
+        cargo_build_cache_path(
+            &workspace,
+            manifest,
+            &parsed_files,
+            cfg_digest,
+            !package_build_scripts.is_empty(),
+        )?
     } else {
         None
     };
@@ -967,6 +1063,9 @@ fn restore_cached_cargo_build(manifest: &str, output: &str) -> bool {
     };
     profile_checkpoint("warm read and decode index", &mut profile_timer);
     if index.workspace_root != workspace_root || index.manifest != manifest_path {
+        return false;
+    }
+    if index.uses_build_script {
         return false;
     }
     let Ok(executable) = std::env::current_exe() else {
@@ -1277,6 +1376,7 @@ fn write_build_artifact_index(
         manifest: manifest_path.clone(),
         compiler,
         environment: build_environment(),
+        uses_build_script: artifact.uses_build_script,
         cfg_digest: artifact.cfg_digest,
         inputs,
         external_inputs,
@@ -1301,6 +1401,8 @@ fn cargo_build_cache_path(
     workspace: &quill_cargo::CargoWorkspace,
     manifest: &str,
     parsed_sources: &[ParsedSource],
+    cfg_digest: [u8; 32],
+    uses_build_script: bool,
 ) -> Result<Option<CargoBuildArtifact>, String> {
     let workspace_root = &workspace.root;
     let cache_root = std::env::var_os("QUILL_CACHE_DIR")
@@ -1321,7 +1423,6 @@ fn cargo_build_cache_path(
         return Ok(None);
     };
     let environment = build_environment();
-    let cfg_digest = workspace_cfg_digest(workspace);
     let Ok(manifest_path) = std::fs::canonicalize(manifest) else {
         return Ok(None);
     };
@@ -1460,6 +1561,7 @@ fn cargo_build_cache_path(
             .join("build-artifacts")
             .join(format!("{}.elf", hasher.finalize().to_hex())),
         cfg_digest,
+        uses_build_script,
         semantic_inputs,
     }))
 }
