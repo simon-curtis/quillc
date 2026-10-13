@@ -57,6 +57,14 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [self-contained rlib interoperability run](results/2026-10-13-rlib-extern-clean.json)
+passes all 58/58 curated cases at clean revision `e3f5db6`. Its artifact case
+builds a Quill object, packages it with rustc-generated metadata, and verifies
+that pinned rustc accepts the `.rlib` through `--extern` and produces matching
+runtime output for `i32`, `u64`, and `usize` public functions. The rlib path is
+limited to safe, synchronous, non-generic, top-level scalar signatures on Linux
+x86-64. This 100% corpus result does not establish overall Rust compatibility.
+
 The [C string literal stringify run](results/2026-10-13-stringify-c-literals-clean.json)
 passes 57/58 cases (98.3%) at clean revision `10d029e`. The runtime
 `stringify!` comparison now includes a C string literal and matches rustc;
