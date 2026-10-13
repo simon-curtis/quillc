@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [indexed-slice while-condition run](results/2026-10-13-slice-while-index-clean.json)
+passes 78/78 cases at clean revision `3ed33bb`. Its loop traverses a borrowed
+slice by reevaluating a runtime index on each iteration; a second case runs
+past the slice and matches rustc's bounds panic. This curated pass rate is not
+an overall Rust compatibility percentage.
+
 The [fixed-i32-array runtime-index run](results/2026-10-13-fixed-i32-array-index-clean.json)
 passes 76/76 cases at clean revision `cac1ddc`. It adds in-range and
 out-of-range runtime indexing for immutable `[i32; N]` arrays, matching
