@@ -8,6 +8,7 @@ members = [
     "crates/quill-source",
     "crates/quill-syntax",
     "crates/quill-query",
+    "crates/quill-lsp",
     "crates/quill-cargo",
     "crates/quill-cfg",
     "crates/quill-typeck",
@@ -19,4 +20,4 @@ exclude = ["benchmarks/catalog-flow"]
 version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.98"

@@ -1,0 +1,13 @@
+[package]
+name = "quill-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ra_ap_syntax = "=0.0.358"
+serde_json = "1"
+toml = "0.9"
+url = "2"
+# Keep the parser's Unicode identifier tables in sync with its Unicode property tables.
+unicode-ident = "=1.0.24"
