@@ -18,4 +18,5 @@
   }
   search.addEventListener('input', filter);
   status.addEventListener('change', filter);
+  filter();
 })();

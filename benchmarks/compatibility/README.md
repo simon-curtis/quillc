@@ -2,8 +2,9 @@
 
 This directory holds executable comparisons against the Rust compiler named by
 `rust-toolchain.toml`. It is the evidence source for compatibility work; the
-website's 29 manually categorized entries remain an implementation index, not
-a conformance score.
+website compatibility inventory groups the Rust surface by subsystem; it is
+not a test denominator or a conformance score. See
+[the inventory scope](../../docs/rust-compatibility-inventory.md).
 
 The completion target and evidence required before claiming full compatibility
 are defined in [`TARGET.md`](TARGET.md). The corpus below is an early
@@ -80,7 +81,8 @@ indexing, and the tested `Result` status check also match rustc. Build-script su
 `rustc-cfg`; other directives and build dependencies remain incomplete.
 
 The 91.3% rate is only for these curated cases; it is not an overall Rust
-compatibility score and cannot be compared directly to the manually curated
-10.3% feature index. The full destination remains in [`TARGET.md`](TARGET.md),
+compatibility score. The case count and the grouped website inventory describe
+different things and must not be compared as percentages. The full destination
+remains in [`TARGET.md`](TARGET.md),
 including language, diagnostics, standard library, Cargo, and Linux and
 Windows platforms. Earlier reports remain available for historical runs.
