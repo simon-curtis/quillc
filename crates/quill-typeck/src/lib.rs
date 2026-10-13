@@ -316,31 +316,60 @@ fn trait_is_implemented_for_type(
 ) -> bool {
     let trait_name = trait_name.rsplit("::").next().unwrap_or(trait_name);
     let type_name = type_name.rsplit("::").next().unwrap_or(type_name);
-    let mut required = HashSet::new();
-    let mut provided = HashSet::new();
-    for function in signatures.methods.values().flatten() {
-        let method = function.name.rsplit("::").next().unwrap_or(&function.name);
-        for scope in &function.scope {
-            if scope
-                .strip_prefix("trait:")
-                .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
-            {
-                required.insert(method);
-            }
-            if scope
-                .strip_prefix("traitimpl:")
-                .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
-                && function.scope.iter().any(|scope| {
-                    scope.strip_prefix("impl:").is_some_and(|owner| {
-                        owner.rsplit("::").next().unwrap_or(owner) == type_name
-                    })
+    let methods: Vec<_> = signatures.methods.values().flatten().collect();
+    let required: Vec<_> = methods
+        .iter()
+        .copied()
+        .filter(|function| {
+            function.scope.iter().any(|scope| {
+                scope
+                    .strip_prefix("trait:")
+                    .is_some_and(|owner| owner.rsplit("::").next().unwrap_or(owner) == trait_name)
+            })
+        })
+        .collect();
+    let provided: Vec<_> = methods
+        .into_iter()
+        .filter(|function| {
+            function.scope.iter().any(|scope| {
+                scope.strip_prefix("traitimpl:").is_some_and(|owner| {
+                    owner.rsplit("::").next().unwrap_or(owner) == trait_name
                 })
-            {
-                provided.insert(method);
-            }
-        }
-    }
-    !required.is_empty() && required.is_subset(&provided)
+            }) && function.scope.iter().any(|scope| {
+                scope.strip_prefix("impl:").is_some_and(|owner| {
+                    owner.rsplit("::").next().unwrap_or(owner) == type_name
+                })
+            })
+        })
+        .collect();
+    !required.is_empty()
+        && required.iter().all(|trait_method| {
+            let method_name = trait_method.name.rsplit("::").next().unwrap_or(&trait_method.name);
+            provided.iter().any(|implementation| {
+                implementation.name.rsplit("::").next() == Some(method_name)
+                    && implementation.parameters.len() == trait_method.parameters.len()
+                    && implementation
+                        .parameters
+                        .iter()
+                        .zip(&trait_method.parameters)
+                        .all(|(actual, expected)| {
+                            actual.type_text.replace("Self", type_name)
+                                == expected.type_text.replace("Self", type_name)
+                        })
+                    && implementation
+                        .return_type
+                        .as_deref()
+                        .map(|ty| ty.replace("Self", type_name))
+                        == trait_method
+                            .return_type
+                            .as_deref()
+                            .map(|ty| ty.replace("Self", type_name))
+                    && implementation.is_async == trait_method.is_async
+                    && implementation.is_const == trait_method.is_const
+                    && implementation.is_unsafe == trait_method.is_unsafe
+                    && implementation.has_abi == trait_method.has_abi
+            })
+        })
 }
 
 fn normalized_crate_path(path: &str) -> &str {
@@ -5199,6 +5228,29 @@ mod tests {
             "trait Value { fn value(&self) -> u64; } struct Number; fn read<T: Value>(item: &T) -> u64 { item.value() } fn main() { let _result = read(&Number); }",
         );
         let parsed = parse(&source);
+        let structs = [StructSignature {
+            path: "Number".to_owned(),
+            ..StructSignature::default()
+        }];
+        let diagnostics = check_functions_with_declarations_and_structs(
+            &parsed.functions,
+            &parsed.functions,
+            false,
+            &[],
+            &structs,
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("does not implement `Value`")),
+            "{diagnostics:?}"
+        );
+
+        let wrong_signature = SourceFile::from_text(
+            "generic-trait-wrong-signature.rs",
+            "trait Value { fn value(&self) -> u64; } struct Number; impl Value for Number { fn value(&self) -> i32 { 42 } } fn read<T: Value>(item: &T) -> u64 { item.value() } fn main() { let _result = read(&Number); }",
+        );
+        let parsed = parse(&wrong_signature);
         let structs = [StructSignature {
             path: "Number".to_owned(),
             ..StructSignature::default()

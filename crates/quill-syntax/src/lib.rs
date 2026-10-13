@@ -976,6 +976,7 @@ fn supported_local_trait(item: &syn::ItemTrait) -> bool {
     item.generics.params.is_empty()
         && item.generics.where_clause.is_none()
         && item.supertraits.is_empty()
+        && !item.items.is_empty()
         && item.items.iter().all(|trait_item| match trait_item {
             syn::TraitItem::Fn(function) => {
                 function.default.is_none()
@@ -1013,7 +1014,17 @@ fn supported_local_trait_impl(item: &syn::ItemImpl) -> bool {
                     .first()
                     .is_some_and(|segment| matches!(segment.arguments, syn::PathArguments::None))
         })
-        && item.items.iter().all(|item| matches!(item, syn::ImplItem::Fn(_)))
+        && item.items.iter().all(|item| match item {
+            syn::ImplItem::Fn(function) => {
+                function.sig.generics.params.is_empty()
+                    && function.sig.generics.where_clause.is_none()
+                    && function.sig.constness.is_none()
+                    && function.sig.asyncness.is_none()
+                    && !matches!(function.sig.safety, syn::Safety::Unsafe(_))
+                    && function.sig.abi.is_none()
+            }
+            _ => false,
+        })
 }
 
 struct AstCollector<'a> {
