@@ -437,9 +437,8 @@ name = "quill-cfg"
 version = "0.0.1"
 dependencies = [
  "blake3",
- "proc-macro2",
+ "ra_ap_syntax",
  "serde",
- "syn",
 ]
 
 [[package]]
@@ -476,6 +475,7 @@ dependencies = [
 name = "quill-lsp"
 version = "0.0.1"
 dependencies = [
+ "crossbeam-channel",
  "ra_ap_syntax",
  "serde_json",
  "toml",
@@ -517,6 +517,7 @@ dependencies = [
  "quill-cfg",
  "quill-parallel",
  "quill-source",
+ "ra_ap_syntax",
  "serde",
  "serde_json",
  "syn",
