@@ -525,6 +525,19 @@ fn emit_subset_object(
     } else {
         None
     };
+    let exit_value = if let Some(main_index) = main_index {
+        validate_reachable_struct_expressions(parse, &HashSet::from([main_index]))?;
+        let value = main_exit_value(
+            &parse.functions[main_index],
+            &parse.functions,
+            &parse.structs,
+        )?;
+        validate_value_target(&value, &by_name, &parse.functions, 0)?;
+        value
+    } else {
+        Value::Integer(0)
+    };
+
     let explicit_roots = main_index.iter().copied().collect::<Vec<_>>();
     let reachable_items = quill_hir::codegen_reachable_items(
         &parse.functions,
@@ -560,18 +573,6 @@ fn emit_subset_object(
         ))?)
     } else {
         None
-    };
-    let exit_value = if let Some(main_index) = main_index {
-        validate_reachable_struct_expressions(parse, &HashSet::from([main_index]))?;
-        let value = main_exit_value(
-            &parse.functions[main_index],
-            &parse.functions,
-            &parse.structs,
-        )?;
-        validate_value_target(&value, &by_name, &parse.functions, 0)?;
-        value
-    } else {
-        Value::Integer(0)
     };
 
     let mut hir = lower_functions("quill_input", &parse.functions);
