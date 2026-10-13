@@ -11,6 +11,19 @@ type ImportAliasMap = HashMap<String, HashMap<String, String>>;
 type CallResolutionCache = HashMap<(String, String), Option<String>>;
 static BUILD_SCRIPT_ID: AtomicU64 = AtomicU64::new(0);
 
+struct HasherWriter<'a>(&'a mut blake3::Hasher);
+
+impl std::io::Write for HasherWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.update(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 struct BuildFileStamp {
     path: PathBuf,
@@ -1748,18 +1761,6 @@ fn workspace_cfg_digest(workspace: &quill_cargo::CargoWorkspace) -> [u8; 32] {
 }
 
 fn parse_semantic_digest(source: &ParsedSource) -> Result<[u8; 32], String> {
-    struct HashWriter<'a>(&'a mut blake3::Hasher);
-    impl std::io::Write for HashWriter<'_> {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0.update(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
     let mut hasher = blake3::Hasher::new();
     hash_component(
         &mut hasher,
@@ -1777,7 +1778,7 @@ fn parse_semantic_digest(source: &ParsedSource) -> Result<[u8; 32], String> {
         hash_component(&mut hasher, component.as_bytes());
     }
     hasher.update(b"parse-tree");
-    bincode::serialize_into(HashWriter(&mut hasher), &source.parse)
+    bincode::serialize_into(HasherWriter(&mut hasher), &source.parse)
         .map_err(|_| "could not fingerprint parsed Rust source".to_owned())?;
     Ok(*hasher.finalize().as_bytes())
 }
@@ -2590,16 +2591,20 @@ fn compile_parsed_sources(
                     )
                 })
                 .collect::<Vec<_>>();
-            let cache_input = bincode::serialize(&(
-                &*target,
-                source_fingerprints,
-                &function_headers,
-                &parse.structs,
-                &imports,
-                object_compiler_stamp.as_ref(),
-            ))
+            let mut object_hasher = blake3::Hasher::new();
+            bincode::serialize_into(
+                HasherWriter(&mut object_hasher),
+                &(
+                    &*target,
+                    source_fingerprints,
+                    &function_headers,
+                    &parse.structs,
+                    &imports,
+                    object_compiler_stamp.as_ref(),
+                ),
+            )
             .map_err(|error| format!("could not fingerprint package object: {error}"))?;
-            let object_fingerprint = *blake3::hash(&cache_input).as_bytes();
+            let object_fingerprint = *object_hasher.finalize().as_bytes();
             let (object, cache_hit) =
                 emit_target_object_cached(object_fingerprint, parse, &imports, object_cache_root)?;
             if cache_hit && std::env::var_os("QUILL_PROFILE").is_some() {
