@@ -60,7 +60,9 @@ retains a custom lexer for `lex` and token spans. `quill-cfg` reads attributes
 from the same syntax tree. A test-only Syn oracle checks the existing Quill
 model during migration. The compiler discovers conventional and supported
 `#[path]` modules, applies supported target/feature `cfg`, and parses
-independent files in parallel.
+independent files in parallel. Lowered index expressions retain their source
+path and expression/base locations so supported native bounds checks can
+report the original source location.
 HIR records module/target ownership, imports, struct fields, impl ownership,
 and selected qualified calls. Complete Rust name resolution, visibility, type
 namespaces, and general macro expansion remain incomplete. Exact supported

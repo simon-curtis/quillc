@@ -16,6 +16,12 @@ is a curated Linux regression score, not an overall Rust compatibility
 percentage; the completion target above requires broader upstream suites and
 Windows evidence as well.
 
+The [clean borrow-checker snapshot](results/2026-10-13-main-borrowck-liveness-clean.json)
+passes 87/120 cases (72.5%) at revision `317d4ad`. It records nested-block
+borrow liveness and shadowing behavior against the pinned nightly on Linux
+x86-64. This is a historical snapshot from an earlier corpus revision, not the
+current compatibility score or evidence of overall Rust compatibility.
+
 ## Run the corpus
 
 1. Build the Quill executable you intend to measure. Set `QUILLC` to select it
