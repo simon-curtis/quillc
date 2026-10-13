@@ -1392,6 +1392,47 @@ fn check_move_expression(
                 diagnostics,
             );
         }
+        BodyExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_move_expression(
+                condition,
+                false,
+                signatures,
+                struct_signatures,
+                locals,
+                moved,
+                diagnostics,
+            );
+            let mut then_locals = locals.clone();
+            let mut then_moved = moved.clone();
+            check_move_expression(
+                then_branch,
+                consume,
+                signatures,
+                struct_signatures,
+                &mut then_locals,
+                &mut then_moved,
+                diagnostics,
+            );
+            let mut else_locals = locals.clone();
+            let mut else_moved = moved.clone();
+            if let Some(else_branch) = else_branch {
+                check_move_expression(
+                    else_branch,
+                    consume,
+                    signatures,
+                    struct_signatures,
+                    &mut else_locals,
+                    &mut else_moved,
+                    diagnostics,
+                );
+            }
+            moved.extend(then_moved);
+            moved.extend(else_moved);
+        }
         BodyExprKind::Return(Some(value)) => check_move_expression(
             value,
             true,
