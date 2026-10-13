@@ -327,6 +327,8 @@ pub struct MacroExpression {
     pub tokens: String,
     pub format_string: Option<String>,
     pub arguments: Vec<BodyExpr>,
+    /// Compile-time expansion for built-in macros whose inputs are literals.
+    pub const_expansion: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -2091,17 +2093,39 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
                 .collect()
         })
         .unwrap_or_default();
+    let path = mac
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>()
+        .join("::");
+    let const_expansion = (path == "concat")
+        .then(|| parsed_arguments.as_ref())
+        .flatten()
+        .and_then(|arguments| {
+            arguments
+                .iter()
+                .map(|argument| match argument {
+                    syn::Expr::Lit(expression) => match &expression.lit {
+                        syn::Lit::Str(value) => Some(value.value()),
+                        syn::Lit::Char(value) => Some(value.value().to_string()),
+                        syn::Lit::Int(value) => Some(value.base10_digits().to_owned()),
+                        syn::Lit::Float(value) => Some(value.base10_digits().to_owned()),
+                        syn::Lit::Bool(value) => Some(value.value.to_string()),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()
+                .map(|parts| parts.concat())
+        });
     MacroExpression {
-        path: mac
-            .path
-            .segments
-            .iter()
-            .map(|segment| segment.ident.to_string())
-            .collect::<Vec<_>>()
-            .join("::"),
+        path,
         tokens: mac.tokens.to_string(),
         format_string,
         arguments,
+        const_expansion,
     }
 }
 
@@ -3216,6 +3240,32 @@ mod tests {
             Some("item-{revision}")
         );
         assert!(macro_expression.arguments.is_empty());
+    }
+
+    #[test]
+    fn computes_literal_concat_macro_expansion() {
+        let source = SourceFile::from_text(
+            "concat.rs",
+            "fn value() -> &'static str { concat!(\"qu\", 'i', 12, 1.5, true) }",
+        );
+        let parsed = parse_ast(&source);
+        assert!(!parsed.had_error);
+        let body = parsed.functions[0].body.as_ref().unwrap();
+        let BodyExprKind::Block {
+            tail: Some(expression),
+            ..
+        } = &body.kind
+        else {
+            panic!("expected the function's concat expression");
+        };
+        let BodyExprKind::MacroInvocation(macro_expression) = &expression.kind else {
+            panic!("expected a preserved concat invocation");
+        };
+        assert_eq!(macro_expression.path, "concat");
+        assert_eq!(
+            macro_expression.const_expansion.as_deref(),
+            Some("qui121.5true")
+        );
     }
 
     #[test]

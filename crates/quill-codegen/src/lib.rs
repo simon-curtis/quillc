@@ -6032,6 +6032,12 @@ fn value_from_expression(
                 environment,
             )?))
         }
+        BodyExprKind::MacroInvocation(macro_expression) if macro_expression.path == "concat" => {
+            let value = macro_expression.const_expansion.as_ref().ok_or(
+                CodegenError::UnsupportedProgram("`concat!` currently requires literal arguments"),
+            )?;
+            Ok(Value::TextSlice(value.clone()))
+        }
         BodyExprKind::MacroInvocation(_) => Err(CodegenError::UnsupportedProgram(
             "expression macro has no native expansion",
         )),
