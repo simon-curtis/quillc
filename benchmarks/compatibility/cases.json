@@ -668,7 +668,7 @@
       "linux-x86-64-executables",
       "built-in-macros"
     ],
-    "source": "fn main() { let group = stringify!({a:1}); let list = stringify!([ a , b ]); let comment = stringify!(a/* comment */+b); let call = stringify!(foo ()); let path = stringify!(foo :: bar); println!(\"{group}|{list}|{comment}|{call}|{path}\"); }"
+    "source": "fn main() { let group = stringify!({a:1}); let list = stringify!([ a , b ]); let comment = stringify!(a/* comment */+b); let call = stringify!(foo ()); let path = stringify!(foo :: bar); let cstr = stringify!(c\"hello\"); println!(\"{group}|{list}|{comment}|{call}|{path}|{cstr}\"); }"
   },
   {
     "id": "edition-future-async-parse",

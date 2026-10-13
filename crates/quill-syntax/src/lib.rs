@@ -2820,15 +2820,120 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
 
 fn stringify_tokens(tokens: &proc_macro2::TokenStream, source: &SourceFile) -> Option<String> {
     let range = tokens.span().byte_range();
-    let text = source.text().get(range)?;
-    let fragment = SourceFile::from_text(source.path().to_path_buf(), text);
-    let items = build_token_trees(&fragment)?;
-    Some(stringify_sequence(
-        &items,
-        fragment.text(),
-        0..fragment.text().len(),
+    source.text().get(range.clone())?;
+    Some(stringify_macro_sequence(
+        tokens.clone().into_iter().collect::<Vec<_>>().as_slice(),
+        source.text(),
+        range,
         false,
     ))
+}
+
+fn stringify_macro_sequence(
+    tokens: &[proc_macro2::TokenTree],
+    source: &str,
+    bounds: Range<usize>,
+    preserve_colon_space: bool,
+) -> String {
+    use proc_macro2::{Delimiter as MacroDelimiter, TokenTree as MacroTokenTree};
+
+    let mut result = String::new();
+    let mut previous_end = bounds.start;
+    let mut previous = None;
+    for token in tokens {
+        let span = match token {
+            MacroTokenTree::Group(group) => group.span_open().byte_range().start
+                ..group.span_close().byte_range().end,
+            _ => token.span().byte_range(),
+        };
+        let gap = source.get(previous_end..span.start).unwrap_or_default();
+        if !gap.is_empty()
+            && !macro_stringify_suppresses_gap(
+                token,
+                previous,
+                preserve_colon_space,
+            )
+        {
+            result.push(' ');
+        }
+        match token {
+            MacroTokenTree::Group(group) => {
+                let open = group.span_open().byte_range();
+                let close = group.span_close().byte_range();
+                let open_text = source.get(open.clone()).unwrap_or_default();
+                let close_text = source.get(close.clone()).unwrap_or_default();
+                let inner_start = open.end;
+                let inner_end = close.start;
+                let children: Vec<_> = group.stream().into_iter().collect();
+                let preserve_edges = group.delimiter() == MacroDelimiter::Brace;
+                result.push_str(open_text);
+                if let (Some(first), Some(last)) = (children.first(), children.last()) {
+                    let first_span = macro_token_range(first);
+                    let last_span = macro_token_range(last);
+                    if preserve_edges
+                        && source.get(inner_start..first_span.start).is_some_and(|gap| !gap.is_empty())
+                    {
+                        result.push(' ');
+                    }
+                    result.push_str(&stringify_macro_sequence(
+                        &children,
+                        source,
+                        first_span.start..last_span.end,
+                        group.delimiter() == MacroDelimiter::Brace,
+                    ));
+                    if preserve_edges
+                        && source.get(last_span.end..inner_end).is_some_and(|gap| !gap.is_empty())
+                    {
+                        result.push(' ');
+                    }
+                } else if preserve_edges
+                    && source.get(inner_start..inner_end).is_some_and(|gap| !gap.is_empty())
+                {
+                    result.push(' ');
+                }
+                result.push_str(close_text);
+            }
+            _ => result.push_str(source.get(span.clone()).unwrap_or_default()),
+        }
+        previous = Some(token);
+        previous_end = span.end;
+    }
+    result
+}
+
+fn macro_token_range(token: &proc_macro2::TokenTree) -> Range<usize> {
+    match token {
+        proc_macro2::TokenTree::Group(group) => {
+            group.span_open().byte_range().start..group.span_close().byte_range().end
+        }
+        _ => token.span().byte_range(),
+    }
+}
+
+fn macro_stringify_suppresses_gap(
+    current: &proc_macro2::TokenTree,
+    previous: Option<&proc_macro2::TokenTree>,
+    preserve_colon_space: bool,
+) -> bool {
+    use proc_macro2::{Delimiter, Spacing, TokenTree};
+
+    if matches!(current, TokenTree::Punct(punct) if matches!(punct.as_char(), ',' | ';')) {
+        return true;
+    }
+    if !preserve_colon_space
+        && matches!(current, TokenTree::Punct(punct)
+            if punct.as_char() == ':' && punct.spacing() == Spacing::Alone)
+    {
+        return true;
+    }
+    let TokenTree::Group(group) = current else {
+        return false;
+    };
+    if group.delimiter() != Delimiter::Parenthesis {
+        return false;
+    }
+    matches!(previous, Some(TokenTree::Ident(_)))
+        || matches!(previous, Some(TokenTree::Punct(punct)) if matches!(punct.as_char(), '!' | '#'))
 }
 
 fn build_token_trees(source: &SourceFile) -> Option<Vec<TokenTree>> {
@@ -4238,6 +4343,7 @@ mod tests {
             ("a/* comment */+b", "a +b"),
             ("foo ()", "foo()"),
             ("foo :: bar", "foo :: bar"),
+            ("c\"hi\"", "c\"hi\""),
         ];
         for (tokens, expected) in cases {
             let text = format!("fn value() -> &'static str {{ stringify!({tokens}) }}");
