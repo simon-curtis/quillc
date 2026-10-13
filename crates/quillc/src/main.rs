@@ -2497,12 +2497,7 @@ fn compile_parsed_sources(
                 .get_mut(&owner_key)
                 .expect("target parse was initialized above")
                 .functions
-                .extend(functions.clone());
-            target_parses
-                .get_mut(&owner_key)
-                .expect("target parse was initialized above")
-                .structs
-                .extend(canonical_structs.clone());
+                .extend(functions);
         }
         combined.structs.extend(canonical_structs);
     }
