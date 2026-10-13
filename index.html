@@ -121,6 +121,21 @@
           <a class="text-link raw-results" href="benchmarks/catalog-flow/results.json">Raw measurements <span aria-hidden="true">↗</span></a>
         </div>
       </div>
+      <section class="binary-performance" aria-labelledby="binary-performance-title">
+        <h3 id="binary-performance-title">How fast is the compiled program?</h3>
+        <p class="binary-explanation">We expect Quill’s generated code to run slower than LLVM-backed rustc. Runtime performance is a separate measurement from how quickly Quill builds your code.</p>
+        <table class="binary-table">
+          <caption>Generated binary runtime · lower is better</caption>
+          <thead><tr><th scope="col">Median per launch</th><th scope="col">Quill</th><th scope="col">rustc</th></tr></thead>
+          <tbody>
+            <tr data-runtime="wall_seconds"><th scope="row">Elapsed time</th><td>—</td><td>—</td></tr>
+            <tr data-runtime="cpu_seconds"><th scope="row">CPU time</th><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <p class="binary-comparison">Runtime measurements not yet available.</p>
+        <p class="binary-method">Results appear automatically when the benchmark report includes binary timings.</p>
+        <a class="text-link" href="benchmarks/catalog-flow/RESULTS.md#generated-binary-runtime">Runtime method &amp; scope <span aria-hidden="true">↗</span></a>
+      </section>
       <div class="performance-provenance">
         <p>Current checkout <span id="checkout-revision"><a href="https://github.com/simon-curtis/quillc/commits">View commits</a></span><span class="benchmark-revision-note">Benchmark commit not recorded.</span></p>
         <a class="text-link" href="https://github.com/simon-curtis/quillc">View on GitHub <span aria-hidden="true">↗</span></a>

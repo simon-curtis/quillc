@@ -239,6 +239,37 @@ export function renderStats(html, data) {
   $(".benchmark-revision-note").text(" · " + provenance(c));
   $(".benchmark-context .raw-results").attr("href", "/" + catalog.path);
 
+  const runtime = c.runtime_medians;
+  if (runtime) {
+    const quill = runtime.quill_binary_runtime;
+    const rustc = runtime.rustc_binary_runtime;
+    $("[data-runtime]").each((_, row) => {
+      const metric = $(row).attr("data-runtime");
+      for (const [column, values] of [quill, rustc].entries()) {
+        const value = values?.[metric];
+        if (!Number.isFinite(value) || value < 0)
+          throw new Error(`Invalid binary runtime: ${metric}`);
+        $(row)
+          .find("td")
+          .eq(column)
+          .text(`${(value * 1000).toFixed(3)} ms`);
+      }
+    });
+    const ratio = quill?.wall_seconds / rustc?.wall_seconds;
+    $(".binary-comparison").text(
+      Number.isFinite(ratio) && ratio > 0
+        ? `Quill takes ${ratio.toFixed(1)}× as long as rustc to run this fixture.`
+        : "See the individual elapsed times above.",
+    );
+    const method = c.runtime_measurement;
+    const sampling = method
+      ? `${method.samples_per_binary} launches per binary after ${method.warmups_per_binary} warmups. ${method.method}. ${method.output_checked_each_run ? "Output checked on every run." : ""}`
+      : "See the raw report for sampling details.";
+    $(".binary-method").text(
+      `${sampling} One synthetic fixture; see the method for executable profiles and scope. ${provenance(c)}.`,
+    );
+  }
+
   if (lsp) {
     const d = lsp.value;
     const completion = d.measurements.completion;

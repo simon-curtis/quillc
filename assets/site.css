@@ -1006,6 +1006,91 @@ h2 {
   }
 }
 
+/* Generated binary runtime is separate from compilation measurements. */
+.binary-performance {
+  margin-top: 38px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+}
+.binary-performance h3 {
+  margin: 0 0 16px;
+  font-size: 27px;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  font-weight: 480;
+}
+.binary-explanation {
+  max-width: 740px;
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0 0 26px;
+}
+.binary-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.binary-table caption {
+  text-align: left;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.binary-table th {
+  font-weight: 450;
+}
+.binary-table th:first-child {
+  text-align: left;
+}
+.binary-table th,
+.binary-table td {
+  padding: 16px 0 16px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.binary-table th:first-child {
+  padding-left: 0;
+}
+.binary-table thead {
+  font-size: 12px;
+  color: var(--muted);
+}
+.binary-table td {
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+.binary-comparison {
+  margin: 22px 0 10px;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+.binary-method {
+  max-width: 800px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0 0 18px;
+}
+.binary-performance .text-link {
+  font-size: 12px;
+}
+@media (max-width: 540px) {
+  .binary-performance h3 {
+    font-size: 24px;
+  }
+  .binary-table td {
+    font-size: 17px;
+  }
+  .binary-table tbody th {
+    font-size: 13px;
+  }
+  .binary-table th,
+  .binary-table td {
+    padding-left: 8px;
+  }
+}
+
 /* Language server */
 .language-server {
   padding-block: 30px 48px;
