@@ -702,7 +702,14 @@ fn cargo_build_subset_command(arguments: Vec<String>) -> ExitCode {
 }
 
 fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
-    let workspace = quill_cargo::load_workspace(manifest).map_err(|error| error.to_string())?;
+    let mut profile_timer = profile_timer();
+    if restore_cached_cargo_build(manifest, output) {
+        profile_checkpoint("restore warm Cargo build", &mut profile_timer);
+        return Ok(());
+    }
+    profile_checkpoint("warm Cargo build cache miss", &mut profile_timer);
+    let workspace = load_cargo_workspace(manifest)?;
+    profile_checkpoint("load Cargo workspace", &mut profile_timer);
     let binary_names: Vec<_> = workspace
         .packages
         .iter()
@@ -715,8 +722,9 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
                 .map(|target| target.name.clone())
         })
         .collect();
+    profile_checkpoint("discover Cargo binary targets", &mut profile_timer);
     match binary_names.as_slice() {
-        [_] => compile_cargo_subset_for_target(manifest, output, None),
+        [_] => compile_cargo_subset_for_target_with_workspace(manifest, output, None, &workspace),
         [] => Err("cargo-build-subset found no default-member binary targets".into()),
         names => {
             std::fs::create_dir_all(output).map_err(|error| {
@@ -724,10 +732,11 @@ fn compile_cargo_subset(manifest: &str, output: &str) -> Result<(), String> {
             })?;
             for name in names {
                 let binary_output = Path::new(output).join(name);
-                compile_cargo_subset_for_target(
+                compile_cargo_subset_for_target_with_workspace(
                     manifest,
                     &binary_output.display().to_string(),
                     Some(name),
+                    &workspace,
                 )?;
             }
             Ok(())
@@ -740,19 +749,27 @@ fn compile_cargo_subset_for_target(
     output: &str,
     selected_bin: Option<&str>,
 ) -> Result<(), String> {
-    let mut profile_timer = profile_timer();
-    if selected_bin.is_none() && restore_cached_cargo_build(manifest, output) {
-        profile_checkpoint("restore cached executable", &mut profile_timer);
-        return Ok(());
-    }
-    profile_checkpoint("cache validation miss", &mut profile_timer);
-    let workspace = if let Some((workspace_root, _)) = fast_workspace_paths(manifest) {
+    let workspace = load_cargo_workspace(manifest)?;
+    compile_cargo_subset_for_target_with_workspace(manifest, output, selected_bin, &workspace)
+}
+
+fn load_cargo_workspace(manifest: &str) -> Result<quill_cargo::CargoWorkspace, String> {
+    if let Some((workspace_root, _)) = fast_workspace_paths(manifest) {
         quill_cargo::load_workspace_cached(manifest, cargo_cache_root(&workspace_root))
     } else {
         quill_cargo::load_workspace(manifest)
     }
-    .map_err(|error| error.to_string())?;
-    profile_checkpoint("load Cargo workspace", &mut profile_timer);
+    .map_err(|error| error.to_string())
+}
+
+fn compile_cargo_subset_for_target_with_workspace(
+    manifest: &str,
+    output: &str,
+    selected_bin: Option<&str>,
+    workspace: &quill_cargo::CargoWorkspace,
+) -> Result<(), String> {
+    let mut profile_timer = profile_timer();
+    profile_checkpoint("begin target compilation", &mut profile_timer);
     let candidates: Vec<_> = workspace
         .packages
         .iter()
@@ -772,6 +789,7 @@ fn compile_cargo_subset_for_target(
             candidates.len(),
         ));
     }
+    profile_checkpoint("select Cargo binary target", &mut profile_timer);
     let (package, target) = candidates[0];
     let package_build_targets: Vec<_> = package
         .targets
