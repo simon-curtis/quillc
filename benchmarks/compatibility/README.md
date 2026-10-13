@@ -53,8 +53,10 @@ default. Do not treat it as a valid rustc comparison; the corrected current
 report below supersedes it. The saved historical report is
 [`results/2026-10-13-initial-linux.json`](results/2026-10-13-initial-linux.json).
 
-The current 37-case run passes 26 (70.3%) against clean Quill revision
-`41a2eec` and probes 28 of 29 tracked categories. The earlier 28-case run
+The current 37-case run passes 26 (70.3%) against Quill revision
+`5c1a2db` and probes 28 of 29 tracked categories. The report marks five
+compiler workspace files as dirty because the shared checkout includes an
+in-progress LSP integration. The earlier 28-case run
 passed 25 (89.3%); the expanded cases add realistic variations to advertised
 language and library paths rather than treating one success as broad coverage.
 The local workspace dependency, feature cfg, multiple binary targets, scalar
@@ -64,8 +66,8 @@ from a Quill object into a rustc host and matches output.
 
 The report at
 [`results/2026-10-13-current-linux.json`](results/2026-10-13-current-linux.json)
-records the exact source revision, compiler-source cleanliness, binary hash,
-and build time. The website reports this result separately from the manually
+records the source revision, dirty source paths, binary hash, and build time.
+The website reports this result separately from the manually
 curated 10.3% documentation index. The full compatibility target remains
 stable Rust behavior, Rust diagnostics, Cargo workflows, and Linux and Windows
 targets as described in the project specification.

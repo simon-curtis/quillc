@@ -334,15 +334,29 @@ def main() -> int:
         if revision.returncode:
             raise RuntimeError("could not read Quill source revision")
         compiler_paths = [
-            "crates/quill-codegen/src/lib.rs",
-            "crates/quill-syntax/src/lib.rs",
-            "crates/quill-typeck/src/lib.rs",
-            "crates/quillc/src/main.rs",
-            "crates/quill-cargo/src/lib.rs",
+            ROOT / "Cargo.toml",
+            ROOT / "Cargo.lock",
+            ROOT / "rust-toolchain.toml",
         ]
-        dirty_sources = invoke(["git", "status", "--porcelain", "--", *compiler_paths], ROOT)
+        compiler_paths.extend(ROOT.glob("crates/*/Cargo.toml"))
+        compiler_paths.extend(ROOT.glob("crates/*/src/**/*.rs"))
+        compiler_paths = sorted(set(compiler_paths))
+        dirty_sources = invoke(
+            [
+                "git",
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                *[str(path.relative_to(ROOT)) for path in compiler_paths],
+            ],
+            ROOT,
+        )
         if dirty_sources.returncode:
             raise RuntimeError("could not inspect Quill source status")
+        dirty_source_paths = [
+            line[3:] for line in dirty_sources.stdout.decode().splitlines()
+        ]
         cases = json.loads(CASES.read_text(encoding="utf-8"))
         if args.case:
             selected = set(args.case)
@@ -390,7 +404,8 @@ def main() -> int:
             "rustc": version.stdout.decode("utf-8", "replace").strip(),
             "quillc": str(quill),
             "quillc_source_revision": revision.stdout.decode().strip(),
-            "quillc_source_dirty": bool(dirty_sources.stdout.strip()),
+            "quillc_source_dirty": bool(dirty_source_paths),
+            "quillc_source_dirty_paths": dirty_source_paths,
             "quillc_artifact_mtime": datetime.datetime.fromtimestamp(
                 quill.stat().st_mtime, datetime.timezone.utc).isoformat(),
             "quillc_sha256": hashlib.sha256(quill.read_bytes()).hexdigest(),
