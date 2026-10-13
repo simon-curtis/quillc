@@ -45,12 +45,12 @@ h2{font-size:clamp(46px,4.75vw,72px);line-height:1.075;font-weight:460;letter-sp
 /* Additional ink impressions echo the hero's halftone screen. */
 .print-transition{height:160px;margin-top:-62px;overflow:hidden;pointer-events:none}
 [data-print]{display:block;width:100%;height:100%}
-.print-transition+.performance{border-top:0;padding-top:78px}
+.section-impression+.performance{border-top:0;padding-top:78px}
 
 
 .benchmark-table .quill-value{position:relative}
 .benchmark-table .quill-value::before{content:'';display:block;position:absolute;inset:auto 0 10px auto;width:76px;height:5px;background-image:radial-gradient(circle,var(--rust) .7px,transparent .9px);background-size:3px 3px;opacity:.38;mask-image:linear-gradient(90deg,transparent,#000)}
-@media(max-width:900px){.print-transition{height:115px;margin-top:-30px}.print-transition+.performance{padding-top:48px}}
+@media(max-width:900px){.print-transition{height:115px;margin-top:-30px}.section-impression+.performance{padding-top:48px}}
 @media(max-width:540px){.benchmark-table .quill-value::before{width:49px;bottom:9px;height:3px}}
 
 @media(prefers-reduced-motion:no-preference){
@@ -234,14 +234,14 @@ h2{font-size:clamp(46px,4.75vw,72px);line-height:1.075;font-weight:460;letter-sp
 .hero::after{display:none}
 .project-overview{padding-block:28px 38px;border-bottom:0}
 .approach{padding-block:30px 58px}
-.print-transition+.performance{border-top:0;padding-block:48px 64px}
+.section-impression+.performance{border-top:0;padding-block:48px 64px}
 .stack{border-top:0;padding-block:30px 48px}
 .inspiration{border-top:0;padding-block:32px 68px}
 @media(max-width:900px){
   .section-impression{height:44px}
   .project-overview{padding-block:22px 30px}
   .approach{padding-block:24px 46px}
-  .print-transition+.performance{padding-block:36px 44px}
+  .section-impression+.performance{padding-block:36px 44px}
   .stack{padding-block:24px 38px}
   .inspiration{padding-block:26px 48px}
 }
