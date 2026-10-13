@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [indexed-slice if-condition run](results/2026-10-13-slice-if-index-clean.json)
+passes 80/80 cases at clean revision `8df05ff`. It checks both outcomes of an
+`if` whose condition indexes a borrowed slice, plus a matching runtime
+bounds-panic case. This curated pass rate is not an overall Rust compatibility
+percentage.
+
 The [indexed-slice while-condition run](results/2026-10-13-slice-while-index-clean.json)
 passes 78/78 cases at clean revision `3ed33bb`. Its loop traverses a borrowed
 slice by reevaluating a runtime index on each iteration; a second case runs
