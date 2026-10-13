@@ -61,6 +61,13 @@ clears the 3× wall-time gate in all four states on this fixture, but semantic
 CPU-time speedup remains below 3×. These results do not establish general Rust
 compiler performance.
 
+A separate clean semantic-incremental profile compared revisions `1301f37` and
+`a364f73`: removing duplicate HIR clones reduced the `prepare combined HIR
+input` phase from 30.72 ms to 12.86 ms (58%). The target compilation phase
+fell from 86.51 ms to 69.77 ms in one profile sample. This phase result is
+exploratory; it has no CPU or memory measurement and should not be confused
+with the repeated end-to-end table above. See the [profile record](../results/quill-hir-preparation-20261013.json).
+
 The warm cache-hit processes finish in about 1.35 ms for Quill. The former
 2 ms psutil polling loop perturbed those short runs; direct alternating samples
 measured a 1.24 ms Quill median, while the polling harness reported 6 ms. Warm runs now

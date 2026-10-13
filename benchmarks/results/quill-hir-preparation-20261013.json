@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13",
+  "experiment": "Remove duplicate function and struct clones during incremental HIR preparation",
+  "toolchain": "nightly-2026-08-23",
+  "host": {
+    "cpu": "Intel Core i7-8700K",
+    "logical_cpus": 12,
+    "architecture": "x86_64"
+  },
+  "workload": {
+    "fixture": "benchmarks/catalog-flow",
+    "rust_source_lines": 30992,
+    "state": "semantic incremental edit from 1..=128 to 1..=127",
+    "cache": "one baseline build then one semantic edit using same fresh QUILL_CACHE_DIR"
+  },
+  "method": "One QUILL_PROFILE wall-time sample per clean compiler revision; semantic source restored after each run. This is phase profiling, not a repeated performance benchmark.",
+  "baseline": {
+    "revision": "1301f37",
+    "clean": true,
+    "phases_ms": {
+      "parse_source_graph": 11.342,
+      "compute_semantic_cache_key": 0.027,
+      "compute_source_object_cache_keys": 0.005,
+      "resolve_imports_and_calls": 9.518,
+      "parallel_type_check": 10.898,
+      "prepare_combined_hir_input": 30.724,
+      "prepare_and_fetch_package_objects": 17.169,
+      "link_package_objects": 9.357,
+      "target_compilation_total_after_target_selection": 86.513
+    }
+  },
+  "candidate": {
+    "revision": "a364f73",
+    "clean": true,
+    "phases_ms": {
+      "parse_source_graph": 9.995,
+      "compute_semantic_cache_key": 0.027,
+      "compute_source_object_cache_keys": 0.005,
+      "resolve_imports_and_calls": 8.62,
+      "parallel_type_check": 11.226,
+      "prepare_combined_hir_input": 12.856,
+      "prepare_and_fetch_package_objects": 17.485,
+      "link_package_objects": 9.33,
+      "target_compilation_total_after_target_selection": 69.774
+    }
+  },
+  "changes": {
+    "prepare_combined_hir_input_ms_saved": 17.868,
+    "prepare_combined_hir_input_reduction_percent": 58.2,
+    "target_compilation_total_ms_saved": 16.739,
+    "target_compilation_total_reduction_percent": 19.3
+  },
+  "limitations": "Single-sample phase timings; CPU time and memory were not measured here. See catalog-flow results.json for repeated end-to-end build measurements."
+}
