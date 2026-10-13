@@ -1,14 +1,14 @@
 {
   "toolchain": "nightly-2026-08-23",
   "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
-  "quillc": "/home/simon/git/quillc/target/release/quillc",
+  "quillc": "/tmp/quillc-clean-buildscript/target/release/quillc",
   "quillc_source_revision": "41a2eec146d9b4501481fc0d7e03f686fdcd0175",
   "quillc_source_dirty": false,
-  "quillc_artifact_mtime": "2026-10-13T15:46:18.057122+00:00",
-  "quillc_sha256": "79e8007aeac81537bf4bc02dbd2e18a1bc752cf9210fa37c1398ba35e79a2cf6",
-  "passed": 25,
-  "total": 28,
-  "percent": 89.3,
+  "quillc_artifact_mtime": "2026-10-13T15:47:34.878840+00:00",
+  "quillc_sha256": "2fc601f4e6a1e8e59820e73efb95b37d4e5c4380f9aadbbbce931bf03a034409",
+  "passed": 26,
+  "total": 37,
+  "percent": 70.3,
   "results": [
     {
       "case": "hello-world",
@@ -222,7 +222,7 @@
           "line": 1,
           "column": 30
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-4mjh32f8/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-t9q7wrl_/diagnostic-type-mismatch/main.rs:1:30: error[E0308]: mismatched types"
       }
     },
     {
@@ -307,7 +307,7 @@
           "line": 1,
           "column": 78
         },
-        "quill_diagnostic": "/tmp/quill-rustc-compat-4mjh32f8/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
+        "quill_diagnostic": "/tmp/quill-rustc-compat-t9q7wrl_/diagnostic-use-after-move/main.rs:1:78: error[E0382]: borrow of moved value: `value`"
       }
     },
     {
@@ -342,7 +342,7 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-4mjh32f8/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-t9q7wrl_/generic-trait-dispatch/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -407,7 +407,124 @@
       "passed": false,
       "rustc_accepted": true,
       "quill_accepted": false,
-      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-4mjh32f8/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-4mjh32f8/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-4mjh32f8/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-4mjh32f8/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "reason": "Quill artifact is not consumable through rustc --extern: error: extern location for probe_lib is of an unknown type: /tmp/quill-rustc-compat-t9q7wrl_/rustc-extern-quill-library-artifact/libprobe_lib.o\n --> /tmp/quill-rustc-compat-t9q7wrl_/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror: file name should be lib*.rlib or lib*.so\n --> /tmp/quill-rustc-compat-t9q7wrl_/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^\n\nerror[E0463]: can't find crate for `probe_lib`\n --> /tmp/quill-rustc-compat-t9q7wrl_/rustc-extern-quill-library-artifact/main.rs:1:25\n  |\n1 | fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n  |                         ^^^^^^^^^ can't find crate\n\nerror: aborting due to 3 previous errors\n\nFor more information about this error, try `rustc --explain E0463`.",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "signed-i32-arithmetic-and-branching",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: native casts currently support u64/usize values that already use word representation",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "loop-break-and-continue",
+      "kind": "run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "runtime outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "two-scalar-tuple-return-and-fields",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: field read base is not a supported local struct",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "borrowed-integer-slice-iteration",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-t9q7wrl_/borrowed-integer-slice-iteration/main.rs:2:62: function argument has type `reference`, expected `reference` (Reference(Array(Integer(\"u64\"), 3)) vs Reference(Slice(Integer(\"u64\"))))",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "result-status-check",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: Result status checks require a supported Result call",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "vec-string-growth-and-index",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: array indexing currently requires a statically known array",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "btreemap-string-insert-and-get",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-t9q7wrl_/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-t9q7wrl_/btreemap-string-insert-and-get/main.rs:2:145: method `get` is outside the supported type-checking subset\n/tmp/quill-rustc-compat-t9q7wrl_/btreemap-string-insert-and-get/main.rs:2:145: method `unwrap` is outside the supported type-checking subset",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "generic-asref-string",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: unsupported program: generic call arguments must resolve to consistent i32, u64, or usize instances",
+      "rustc_status": 0,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "macro-repetition-expansion",
+      "kind": "run",
+      "passed": false,
+      "rustc_accepted": true,
+      "quill_accepted": false,
+      "reason": "Quill rejected positive case: quillc: /tmp/quill-rustc-compat-t9q7wrl_/macro-repetition-expansion/main.rs: unsupported item outside the native codegen subset",
       "rustc_status": 0,
       "quill_status": 1,
       "runtime_match": null,
@@ -446,9 +563,12 @@
       "id": "control-flow",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 4,
-      "passed": 4,
-      "failed": []
+      "cases": 7,
+      "passed": 5,
+      "failed": [
+        "signed-i32-arithmetic-and-branching",
+        "borrowed-integer-slice-iteration"
+      ]
     },
     {
       "id": "derive-implementations",
@@ -476,7 +596,7 @@
     },
     {
       "id": "external-dependencies-and-build-scripts",
-      "tracker_status": "planned",
+      "tracker_status": "partial",
       "probed": true,
       "cases": 1,
       "passed": 1,
@@ -494,26 +614,33 @@
       "id": "functions-and-scalar-arithmetic",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 3,
+      "cases": 6,
       "passed": 3,
-      "failed": []
+      "failed": [
+        "signed-i32-arithmetic-and-branching",
+        "two-scalar-tuple-return-and-fields",
+        "macro-repetition-expansion"
+      ]
     },
     {
       "id": "general-macro-expansion",
       "tracker_status": "planned",
       "probed": true,
-      "cases": 2,
+      "cases": 3,
       "passed": 2,
-      "failed": []
+      "failed": [
+        "macro-repetition-expansion"
+      ]
     },
     {
       "id": "generics",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 2,
+      "cases": 3,
       "passed": 1,
       "failed": [
-        "generic-trait-dispatch"
+        "generic-trait-dispatch",
+        "generic-asref-string"
       ]
     },
     {
@@ -528,11 +655,19 @@
       "id": "linux-x86-64-executables",
       "tracker_status": "available",
       "probed": true,
-      "cases": 24,
-      "passed": 22,
+      "cases": 33,
+      "passed": 23,
       "failed": [
         "generic-trait-dispatch",
-        "panic-runtime"
+        "panic-runtime",
+        "signed-i32-arithmetic-and-branching",
+        "two-scalar-tuple-return-and-fields",
+        "borrowed-integer-slice-iteration",
+        "result-status-check",
+        "vec-string-growth-and-index",
+        "btreemap-string-insert-and-get",
+        "generic-asref-string",
+        "macro-repetition-expansion"
       ]
     },
     {
@@ -555,25 +690,39 @@
       "id": "option--result--and",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 1,
+      "cases": 2,
       "passed": 1,
-      "failed": []
+      "failed": [
+        "result-status-check"
+      ]
     },
     {
       "id": "owned-strings",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 1,
+      "cases": 3,
       "passed": 1,
-      "failed": []
+      "failed": [
+        "vec-string-growth-and-index",
+        "btreemap-string-insert-and-get"
+      ]
     },
     {
       "id": "println--and-format",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 15,
-      "passed": 15,
-      "failed": []
+      "cases": 24,
+      "passed": 16,
+      "failed": [
+        "signed-i32-arithmetic-and-branching",
+        "two-scalar-tuple-return-and-fields",
+        "borrowed-integer-slice-iteration",
+        "result-status-check",
+        "vec-string-growth-and-index",
+        "btreemap-string-insert-and-get",
+        "generic-asref-string",
+        "macro-repetition-expansion"
+      ]
     },
     {
       "id": "rust-source-parsing",
@@ -623,9 +772,12 @@
       "id": "tuples--arrays--and-slices",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 1,
+      "cases": 3,
       "passed": 1,
-      "failed": []
+      "failed": [
+        "two-scalar-tuple-return-and-fields",
+        "borrowed-integer-slice-iteration"
+      ]
     },
     {
       "id": "type-checking",
@@ -639,17 +791,22 @@
       "id": "utf-8-string-literal-helper-calls",
       "tracker_status": "available",
       "probed": true,
-      "cases": 1,
+      "cases": 2,
       "passed": 1,
-      "failed": []
+      "failed": [
+        "generic-asref-string"
+      ]
     },
     {
       "id": "vec-and-btreemap",
       "tracker_status": "partial",
       "probed": true,
-      "cases": 1,
+      "cases": 3,
       "passed": 1,
-      "failed": []
+      "failed": [
+        "vec-string-growth-and-index",
+        "btreemap-string-insert-and-get"
+      ]
     },
     {
       "id": "windows-output",

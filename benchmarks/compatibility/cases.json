@@ -334,5 +334,111 @@
       "lib.rs": "pub fn sum(left: u64, right: u64) -> u64 { left + right }\n",
       "main.rs": "fn main() { let value = probe_lib::sum(19, 23); println!(\"{value}\"); }\n"
     }
+  },
+  {
+    "id": "signed-i32-arithmetic-and-branching",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "functions-and-scalar-arithmetic",
+      "control-flow",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn magnitude(value: i32) -> i32 { if value < 0 { 0 - value } else { value } }\nfn main() { let amount = magnitude(-17); let result: u64 = (amount + 25i32) as u64; println!(\"{result}\"); }"
+  },
+  {
+    "id": "loop-break-and-continue",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "control-flow",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut total: u64 = 0; for value in 0..8 { if value == 3 { continue; } if value == 6 { break; } total = total + value; } println!(\"{total}\"); }"
+  },
+  {
+    "id": "two-scalar-tuple-return-and-fields",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn pair() -> (u64, u64) { (19, 23) }\nfn main() { let values = pair(); let result = values.0 + values.1; println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-integer-slice-iteration",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn sum(values: &[u64]) -> u64 { let mut total: u64 = 0; for value in values { total = total + *value; } total }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = sum(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "result-status-check",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "option--result--and",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn check(value: u64) -> Result<(), &'static str> { if value == 42 { Ok(()) } else { Err(\"wrong\") } }\nfn main() { let result = check(42); let answer = if result.is_ok() { 42u64 } else { 0u64 }; println!(\"{answer}\"); }"
+  },
+  {
+    "id": "vec-string-growth-and-index",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "owned-strings",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<String> = Vec::new(); values.push(String::from(\"quill\")); values.push(String::from(\"rust\")); let first = values[0].clone(); println!(\"{first}\"); }"
+  },
+  {
+    "id": "btreemap-string-insert-and-get",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "owned-strings",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "use std::collections::BTreeMap;\nfn main() { let mut values: BTreeMap<String, String> = BTreeMap::new(); values.insert(String::from(\"answer\"), String::from(\"42\")); let result = values.get(\"answer\").unwrap(); println!(\"{result}\"); }"
+  },
+  {
+    "id": "generic-asref-string",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "generics",
+      "utf-8-string-literal-helper-calls",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn byte_len<T: AsRef<str>>(value: T) -> usize { value.as_ref().len() }\nfn main() { let owned = String::from(\"quill\"); let a = byte_len(owned); let b = byte_len(\"rust\"); println!(\"{a} {b}\"); }"
+  },
+  {
+    "id": "macro-repetition-expansion",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "general-macro-expansion",
+      "functions-and-scalar-arithmetic",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "macro_rules! sum { ($($value:expr),+ $(,)?) => {{ let mut total: u64 = 0; $(total = total + $value;)+ total }}; }\nfn main() { let result = sum!(7, 11, 24,); println!(\"{result}\"); }"
   }
 ]
