@@ -2,8 +2,10 @@ use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use std::sync::OnceLock;
 
+const DEFAULT_WORKERS: usize = 4;
+
 /// Bounded work-stealing workers shared by independent compiler tasks.
-/// `QUILL_JOBS` may cap the pool; otherwise all available CPUs are used.
+/// The default pool uses up to four workers; `QUILL_JOBS` can tune that cap.
 pub struct WorkPool {
     pool: ThreadPool,
 }
@@ -29,7 +31,7 @@ impl WorkPool {
         POOL.get_or_init(|| {
             let available = std::thread::available_parallelism().map_or(1, usize::from);
             let requested = requested_jobs_from("QUILL_TYPECK_JOBS").or_else(requested_jobs);
-            let workers = requested.map_or(available, |jobs| jobs.min(available));
+            let workers = bounded_worker_count(usize::MAX, available, requested);
             Self::new(workers).ok()
         })
         .as_ref()
@@ -102,14 +104,14 @@ fn requested_jobs_from(variable: &str) -> Option<usize> {
 }
 
 fn bounded_worker_count(task_count: usize, available: usize, requested: Option<usize>) -> usize {
+    let available = available.max(1);
+    let worker_cap = requested
+        .filter(|jobs| *jobs > 0)
+        .map_or(DEFAULT_WORKERS.min(available), |jobs| jobs.min(available));
     task_count
         .max(1)
-        .min(available.max(1))
-        .min(
-            requested
-                .filter(|jobs| *jobs > 0)
-                .unwrap_or(available.max(1)),
-        )
+        .min(available)
+        .min(worker_cap)
         .max(1)
 }
 
@@ -136,10 +138,12 @@ mod tests {
 
     #[test]
     fn worker_limit_caps_requested_jobs_to_available_cpus_and_tasks() {
+        assert_eq!(super::bounded_worker_count(50, 12, None), 4);
+        assert_eq!(super::bounded_worker_count(2, 12, None), 2);
         assert_eq!(super::bounded_worker_count(50, 12, Some(4)), 4);
         assert_eq!(super::bounded_worker_count(2, 12, Some(8)), 2);
         assert_eq!(super::bounded_worker_count(50, 12, Some(32)), 12);
-        assert_eq!(super::bounded_worker_count(50, 12, Some(0)), 12);
+        assert_eq!(super::bounded_worker_count(50, 12, Some(0)), 4);
     }
 
     #[test]
