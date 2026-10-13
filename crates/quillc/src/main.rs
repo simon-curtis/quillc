@@ -5,7 +5,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 type ImportAliasMap = HashMap<String, HashMap<String, String>>;
 type CallResolutionCache = HashMap<(String, String), Option<String>>;
@@ -2708,18 +2708,71 @@ fn emit_target_object_cached(
     Ok((object, false))
 }
 
-fn profile_timer() -> Option<Instant> {
-    std::env::var_os("QUILL_PROFILE").map(|_| Instant::now())
+#[derive(Clone, Copy)]
+struct ProfileTimer {
+    wall: Instant,
+    process_cpu: Option<Duration>,
 }
 
-fn profile_checkpoint(stage: &str, previous: &mut Option<Instant>) {
+#[cfg(target_os = "linux")]
+#[repr(C)]
+struct ClockTimespec {
+    seconds: std::os::raw::c_long,
+    nanoseconds: std::os::raw::c_long,
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn clock_gettime(
+        clock_id: std::os::raw::c_int,
+        time: *mut ClockTimespec,
+    ) -> std::os::raw::c_int;
+}
+
+fn process_cpu_clock() -> Option<Duration> {
+    #[cfg(target_os = "linux")]
+    {
+        // CLOCK_PROCESS_CPUTIME_ID includes CPU time spent by this process's
+        // worker threads, which is the useful measure for parallel phases.
+        const CLOCK_PROCESS_CPUTIME_ID: std::os::raw::c_int = 2;
+        let mut time = ClockTimespec {
+            seconds: 0,
+            nanoseconds: 0,
+        };
+        // SAFETY: `time` points to writable storage with the POSIX timespec ABI.
+        if unsafe { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &mut time) } != 0 {
+            return None;
+        }
+        return Some(Duration::new(time.seconds as u64, time.nanoseconds as u32));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+fn profile_timer() -> Option<ProfileTimer> {
+    std::env::var_os("QUILL_PROFILE").map(|_| ProfileTimer {
+        wall: Instant::now(),
+        process_cpu: process_cpu_clock(),
+    })
+}
+
+fn profile_checkpoint(stage: &str, previous: &mut Option<ProfileTimer>) {
     if let Some(started) = previous.as_mut() {
-        let now = Instant::now();
-        eprintln!(
-            "quill-profile {stage}: {:.3} ms",
-            now.duration_since(*started).as_secs_f64() * 1000.0
-        );
-        *started = now;
+        let wall_now = Instant::now();
+        let cpu_now = process_cpu_clock();
+        let wall_ms = wall_now.duration_since(started.wall).as_secs_f64() * 1000.0;
+        if let (Some(cpu_start), Some(cpu_end)) = (started.process_cpu, cpu_now) {
+            let cpu_ms = cpu_end.saturating_sub(cpu_start).as_secs_f64() * 1000.0;
+            eprintln!("quill-profile {stage}: wall={wall_ms:.3} ms cpu={cpu_ms:.3} ms");
+        } else {
+            eprintln!("quill-profile {stage}: wall={wall_ms:.3} ms");
+        }
+        *started = ProfileTimer {
+            wall: wall_now,
+            process_cpu: cpu_now,
+        };
     }
 }
 
