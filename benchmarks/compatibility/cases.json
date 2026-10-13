@@ -681,4 +681,697 @@
     "rustc_args": ["-Zunstable-options"],
     "source": "pub async fn answer() -> u64 { 42 }"
   }
+,
+  {
+    "id": "fixed-array-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let values: [u64; 3] = [7, 11, 13]; let index = 0usize; let index = index + 2; let result = values[index]; println!(\"{result}\"); }"
+  },
+  {
+    "id": "fixed-array-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(index: usize) -> u64 { let values: [u64; 3] = [7, 11, 13]; let result = values[index]; result }\nfn main() { let result = at(3); println!(\"{result}\"); }"
+  },
+  {
+    "id": "fixed-i32-array-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "println--and-format"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let values: [i32; 3] = [7, 11, 13]; let index = 0usize; let result = values[index] as u64; println!(\"{result}\"); }"
+  },
+  {
+    "id": "fixed-i32-array-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(index: usize) -> u64 { let values: [i32; 3] = [7, 11, 13]; let result = values[index] as u64; result }\nfn main() { let result = at(3); println!(\"{result}\"); }"
+  },
+  {
+    "id": "diagnostic-use-after-move-from-if-expression",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0382",
+    "rustc_message": "use of moved value: `value`",
+    "source": "fn main() { let value = String::from(\"owned\"); let moved = if true { value } else { String::from(\"other\") }; let again = value; }"
+  },
+  {
+    "id": "diagnostic-use-after-move-from-loop",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0382",
+    "rustc_message": "use of moved value: `value`",
+    "source": "fn main() { let value = String::from(\"owned\"); while true { let moved = value; break; } let again = value; }"
+  },
+  {
+    "id": "diagnostic-use-after-move-from-match-binding",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0382",
+    "rustc_message": "use of moved value: `value`",
+    "source": "fn main() { let value = String::from(\"owned\"); let selected = match value { owned => 1u64 }; let again = value; }"
+  },
+  {
+    "id": "match-wildcard-after-move-remains-accepted",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let value = String::from(\"owned\"); let moved = value; let selected = match value { _ => 1u64 }; }"
+  },
+  {
+    "id": "diagnostic-use-after-move-from-match-arm-merge",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0382",
+    "rustc_message": "use of moved value: `value`",
+    "source": "fn check(flag: bool) { let value = String::from(\"owned\"); let selected = match flag { true => { let moved = value; 1u64 }, false => { println!(\"{value}\"); 0u64 } }; let again = value; } fn main() { check(true); }"
+  },
+  {
+    "id": "match-arm-moves-do-not-leak",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn check(flag: bool) { let value = String::from(\"owned\"); let selected = match flag { true => { let moved = value; 1u64 }, false => { println!(\"{value}\"); 0u64 } }; } fn main() { check(true); }"
+  },
+  {
+    "id": "diagnostic-overlapping-mutable-borrows",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let second = &mut value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "mutable-borrow-ends-at-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let observed = &*first; let second = &mut value; println!(\"{second}\"); }"
+  },
+  {
+    "id": "diagnostic-shared-then-mutable-borrow",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &value; let second = &mut value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "diagnostic-mutable-then-shared-borrow",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+    "source": "fn main() { let mut value = String::from(\"owned\"); let first = &mut value; let second = &value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "shared-borrows-may-overlap",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let value = String::from(\"owned\"); let first = &value; let second = &value; println!(\"{first}{second}\"); }"
+  },
+  {
+    "id": "vec-u64-growth-index-and-iteration",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "iterators-and-traits"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); values.push(20); values.push(30); values.push(40); values.push(50); values.push(60); values.push(70); values.push(80); values.push(90); let first = values[0]; let mut total = first; for value in values { total = total + value; } println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-i32-local-index",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<i32> = Vec::new(); values.push(7); values.push(2); values.push(5); let first = values[0]; let output = first as u64; println!(\"{output}\"); }"
+  },
+  {
+    "id": "vec-u64-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); let first = values[1]; println!(\"{first}\"); }"
+  },
+  {
+    "id": "vec-index-inside-arithmetic-and-call",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn add(left: u64, right: u64) -> u64 { left + right }\nfn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); values.push(20); values.push(30); let total = add(values[0], values[1]) + values[2]; println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-index-in-call-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn identity(value: u64) -> u64 { value }\nfn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); let value = identity(values[1]); println!(\"{value}\"); }"
+  },
+  {
+    "id": "vec-index-in-selected-if-branches",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let first = if true { values[0] } else { values[1] }; let second = if false { values[1] } else { values[0] }; let total = first + second; println!(\"{total}\"); }"
+  },
+  {
+    "id": "vec-index-selected-if-branch-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let selected = if true { values[1] } else { values[0] }; println!(\"{selected}\"); }"
+  },
+  {
+    "id": "vec-index-in-explicit-return",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn first() -> u64 { let mut values: Vec<u64> = Vec::new(); values.push(42); return values[0]; }\nfn main() { let value = first(); println!(\"{value}\"); }"
+  },
+  {
+    "id": "vec-index-in-explicit-return-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn first() -> u64 { let mut values: Vec<u64> = Vec::new(); values.push(42); return values[1]; }\nfn main() { let value = first(); println!(\"{value}\"); }"
+  },
+  {
+    "id": "vec-index-in-mutable-assignment",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(10); values.push(42); let mut selected = 0u64; selected = values[1]; println!(\"{selected}\"); }"
+  },
+  {
+    "id": "vec-index-in-mutable-assignment-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "vec-and-btreemap",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn main() { let mut values: Vec<u64> = Vec::new(); values.push(42); let mut selected = 0u64; selected = values[1]; println!(\"{selected}\"); }"
+  },
+  {
+    "id": "borrowed-integer-slice-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn at(values: &[u64], index: usize) -> u64 { return values[index]; }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = at(&values, 2); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-integer-slice-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(values: &[u64], index: usize) -> u64 { return values[index]; }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let result = at(&values, 3); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-i32-slice-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn at(values: &[i32], index: usize) -> i32 { return values[index]; }\nfn main() { let values: [i32; 3] = [7, 11, 24]; let result = at(&values, 1); let output = result as u64; println!(\"{output}\"); }"
+  },
+  {
+    "id": "borrowed-mut-slice-runtime-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "functions-and-scalar-arithmetic"
+    ],
+    "edition": "2024",
+    "source": "fn at(values: &mut [u64], index: usize) -> u64 { return values[index]; }\nfn main() { let mut values: [u64; 3] = [7, 11, 24]; let result = at(&mut values, 2); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-mut-slice-runtime-index-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn at(values: &mut [u64], index: usize) -> u64 { return values[index]; }\nfn main() { let mut values: [u64; 1] = [7]; let result = at(&mut values, 1); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-index-in-while-condition",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 3] = [2, 1, 0]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-index-while-condition-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 1] = [2]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-index-in-if-condition",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn classify(values: &[u64], index: usize) -> u64 { let mut result = 0u64; if values[index] > 10 { result = 1; } else { result = 2; } result }\nfn main() { let values: [u64; 3] = [7, 11, 24]; let small = classify(&values, 0); let large = classify(&values, 2); let result = small + large; println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-index-if-condition-out-of-bounds",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn classify(values: &[u64], index: usize) -> u64 { let mut result = 0u64; if values[index] > 10 { result = 1; } else { result = 2; } result }\nfn main() { let values: [u64; 1] = [7]; let result = classify(&values, 1); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-if-short-circuit-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn check(values: &[u64]) -> u64 { let mut result = 0u64; if false && values[1] > 0 { result = 1; } else { result = 2; } if true || values[1] > 0 { result = result + 3; } result }\nfn main() { let values: [u64; 1] = [7]; let result = check(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-if-short-circuit-index-panics-when-reached",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn check(values: &[u64]) -> u64 { let mut result = 0u64; if true && values[1] > 0 { result = 1; } result }\nfn main() { let values: [u64; 1] = [7]; let result = check(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-if-expression-short-circuit-indexing",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let values: [u64; 1] = [7]; let skipped_and = if false && values[1] > 0 { 1u64 } else { 2u64 }; let skipped_or = if true || values[1] > 0 { 3u64 } else { 4u64 }; let result = skipped_and + skipped_or; println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-if-expression-short-circuit-index-panics-when-reached",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow",
+      "standard-library--drop--and-panic"
+    ],
+    "edition": "2024",
+    "normalize_main_thread_id": true,
+    "source": "fn check(values: &[u64]) -> u64 { let result = if values.len() > 0 && values[1] > 0 { 1u64 } else { 2u64 }; result }\nfn main() { let values: [u64; 1] = [7]; let result = check(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "borrowed-slice-while-short-circuit-index-guard",
+    "kind": "run",
+    "features": [
+      "linux-x86-64-executables",
+      "tuples--arrays--and-slices",
+      "control-flow"
+    ],
+    "edition": "2024",
+    "source": "fn count(values: &[u64]) -> u64 { let mut index = 0usize; while index < values.len() && values[index] > 0 { index = index + 1; } index as u64 }\nfn main() { let values: [u64; 2] = [2, 1]; let result = count(&values); println!(\"{result}\"); }"
+  },
+  {
+    "id": "diagnostic-reborrow-conflicts-with-origin",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() { let mut value = 42u64; let first = &mut value; let second = &*first; let third = &mut value; println!(\"{second}\"); println!(\"{third}\"); }"
+  },
+  {
+    "id": "shared-reborrow-ends-before-parent-reuse",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() { let mut value = 42u64; let first = &mut value; let second = &*first; println!(\"{second}\"); println!(\"{first}\"); }"
+  },
+  {
+    "id": "diagnostic-assign-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0506",
+    "rustc_message": "cannot assign to `value` because it is borrowed",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &value;\n    value = 7;\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "diagnostic-read-while-mutably-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0503",
+    "rustc_message": "cannot use `value` because it was mutably borrowed",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    let observed = value;\n    println!(\"{first} {observed}\");\n}"
+  },
+  {
+    "id": "assignment-after-mutable-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    println!(\"{first}\");\n    value = 7;\n    println!(\"{value}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    let moved = value;\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "move-after-shared-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    let moved = value;\n    println!(\"{moved}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-into-call-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    consume(value);\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "move-into-call-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn consume(value: String) { let _ = value; }\nfn main() {\n    let value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    consume(value);\n}"
+  },
+  {
+    "id": "diagnostic-mutate-vec-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `values` as mutable because it is also borrowed as immutable",
+    "source": "fn main() {\n    let mut values: Vec<u64> = Vec::new();\n    let first = &values;\n    values.push(42);\n    println!(\"{first:?}\");\n}"
+  },
+  {
+    "id": "diagnostic-read-method-while-mutably-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as immutable because it is also borrowed as mutable",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &mut value;\n    let length = value.len();\n    println!(\"{first} {length}\");\n}"
+  },
+  {
+    "id": "diagnostic-mut-method-while-shared-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &value;\n    value.push('!');\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-method-after-shared-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-parameter-into-call-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    consume(value);\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "diagnostic-mut-method-on-parameter-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn check(mut value: String) {\n    let first = &value;\n    value.push('!');\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-method-on-parameter-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn check(mut value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-in-nested-block-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    {\n        consume(value);\n    }\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "move-in-nested-block-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    {\n        consume(value);\n    }\n}"
+  },
+  {
+    "id": "diagnostic-mut-borrow-in-nested-block-while-outer-borrow-live",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    {\n        let second = &mut value;\n        println!(\"{second}\");\n    }\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-borrow-in-nested-block-after-outer-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    println!(\"{first}\");\n    {\n        let second = &mut value;\n        println!(\"{second}\");\n    }\n}"
+  },
+  {
+    "id": "shadowed-inner-local-does-not-keep-outer-borrow-live",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    {\n        let second = &mut value;\n        let first = 7u64;\n        println!(\"{second} {first}\");\n    }\n}"
+  },
+  {
+    "id": "diagnostic-outer-borrow-survives-inner-shadow",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0499",
+    "rustc_message": "cannot borrow `value` as mutable more than once at a time",
+    "source": "fn main() {\n    let mut value = 42u64;\n    let first = &mut value;\n    {\n        let second = &mut value;\n        let first = 7u64;\n        println!(\"{second} {first}\");\n    }\n    println!(\"{first}\");\n}"
+  }
 ]
