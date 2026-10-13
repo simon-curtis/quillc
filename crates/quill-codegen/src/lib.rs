@@ -2448,17 +2448,22 @@ fn aggregate_field_width(type_text: &str) -> Option<usize> {
 
 fn is_slice_type(type_text: &str) -> bool {
     let type_text = type_text.trim();
-    (type_text.starts_with("&[") && type_text.ends_with(']'))
+    slice_element_type(type_text).is_some()
         || matches!(type_text, "&str" | "String")
         || type_text.starts_with("impl Into<String>")
 }
 
-fn slice_element_widths(type_text: &str) -> Vec<usize> {
+fn slice_element_type(type_text: &str) -> Option<&str> {
     let type_text = type_text.trim();
-    let element = type_text
-        .strip_prefix("&[")
+    type_text
+        .strip_prefix("&mut [")
+        .or_else(|| type_text.strip_prefix("&["))
         .and_then(|inner| inner.strip_suffix(']'))
-        .unwrap_or("");
+        .map(str::trim)
+}
+
+fn slice_element_widths(type_text: &str) -> Vec<usize> {
+    let element = slice_element_type(type_text).unwrap_or("");
     if let Some([first, second]) = pair_type_fields(element) {
         return [first, second].into_iter().map(slice_field_width).collect();
     }
@@ -2486,11 +2491,7 @@ fn scalar_slice_layout(value: &Value) -> Option<(usize, usize, usize)> {
 }
 
 fn slice_record_type(type_text: &str, structs: &[StructItem]) -> Option<String> {
-    let element_type = type_text
-        .trim()
-        .strip_prefix("&[")?
-        .strip_suffix(']')?
-        .trim();
+    let element_type = slice_element_type(type_text)?;
     find_struct_type(element_type, structs).map(|record| record.name.clone())
 }
 
@@ -7180,13 +7181,8 @@ fn value_from_expression(
                         ..
                     }) = environment.get(name)
                 {
-                    let expected_element = parameter
-                        .type_text
-                        .trim()
-                        .strip_prefix("&[")
-                        .and_then(|inner| inner.strip_suffix(']'))
-                        .unwrap_or("")
-                        .trim();
+                    let expected_element =
+                        slice_element_type(&parameter.type_text).unwrap_or("");
                     let width = scalar_element_width(expected_element);
                     if width != 0 || expected_element == "String" || expected_element == "&str" {
                         args.push(Value::SliceLocal {
