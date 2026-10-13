@@ -218,8 +218,20 @@ impl ParseCache {
     }
 
     pub fn parse_file_with_cfg(&self, source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Parse {
+        self.parse_file_with_cfg_and_edition(source, cfg, "2024")
+    }
+
+    pub fn parse_file_with_cfg_and_edition(
+        &self,
+        source: &SourceFile,
+        cfg: &quill_cfg::CfgSet,
+        edition: &str,
+    ) -> Parse {
         let source_digest = *blake3::hash(source.text().as_bytes()).as_bytes();
-        let cfg_digest = cfg.fingerprint();
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&cfg.fingerprint());
+        hasher.update(edition.as_bytes());
+        let cfg_digest = *hasher.finalize().as_bytes();
         let cache_path = self.cache_path(source.path(), &cfg_digest);
         if let Some(parsed) = self.read_cache(&cache_path, &source_digest, &cfg_digest) {
             self.hits.fetch_add(1, Ordering::Relaxed);
@@ -227,7 +239,7 @@ impl ParseCache {
         }
 
         self.misses.fetch_add(1, Ordering::Relaxed);
-        let parsed = quill_syntax::parse_ast_with_cfg(source, cfg);
+        let parsed = quill_syntax::parse_ast_with_cfg_and_edition(source, cfg, edition);
         if self
             .write_cache(&cache_path, source_digest, cfg_digest, &parsed)
             .is_err()

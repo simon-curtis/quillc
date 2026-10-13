@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 
 use quill_source::SourceFile;
 use serde::{Deserialize, Serialize};
+use syn::ext::IdentExt;
 use syn::parse::Parser;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -184,7 +185,7 @@ fn generic_parameters_have_unsupported_bounds(
                     syn::TypeParamBound::Trait(bound) => {
                         !is_supported_copy_bound(bound)
                             && !is_supported_as_ref_str_bound(bound)
-                            && !is_supported_add_bound(bound, &parameter.ident.to_string())
+                            && !is_supported_add_bound(bound, &parameter.ident.unraw().to_string())
                     }
                     syn::TypeParamBound::Lifetime(_) => true,
                     _ => true,
@@ -220,7 +221,7 @@ fn generic_copy_parameters(
             syn::GenericParam::Type(parameter)
                 if parameter.bounds.iter().any(|bound| {
                     matches!(bound, syn::TypeParamBound::Trait(bound) if is_supported_copy_bound(bound))
-                }) => Some(parameter.ident.to_string()),
+                }) => Some(parameter.ident.unraw().to_string()),
             _ => None,
         })
         .collect()
@@ -235,7 +236,7 @@ fn generic_as_ref_str_parameters(
             syn::GenericParam::Type(parameter)
                 if parameter.bounds.iter().any(|bound| {
                     matches!(bound, syn::TypeParamBound::Trait(bound) if is_supported_as_ref_str_bound(bound))
-                }) => Some(parameter.ident.to_string()),
+                }) => Some(parameter.ident.unraw().to_string()),
             _ => None,
         })
         .collect()
@@ -250,10 +251,10 @@ fn generic_add_parameters(
             syn::GenericParam::Type(parameter)
                 if parameter.bounds.iter().any(|bound| {
                     matches!(bound, syn::TypeParamBound::Trait(bound)
-                        if is_supported_add_bound(bound, &parameter.ident.to_string()))
+                        if is_supported_add_bound(bound, &parameter.ident.unraw().to_string()))
                 }) =>
             {
-                Some(parameter.ident.to_string())
+                Some(parameter.ident.unraw().to_string())
             }
             _ => None,
         })
@@ -631,15 +632,25 @@ pub fn parse_files(pool: &quill_parallel::WorkPool, sources: &[SourceFile]) -> V
 /// Parse source for compiler phases that consume Rust items and bodies but do
 /// not need the standalone lexer's token stream or the bootstrap token tree.
 pub fn parse_ast(source: &SourceFile) -> Parse {
-    parse_ast_with_cfg(source, &quill_cfg::CfgSet::default())
+    parse_ast_with_cfg_and_edition(source, &quill_cfg::CfgSet::default(), "2024")
 }
 
 pub fn parse_ast_with_cfg(source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Parse {
-    if let Some(parse) = load_parse_cache(source, cfg) {
+    parse_ast_with_cfg_and_edition(source, cfg, "2024")
+}
+
+/// Parse source using its Cargo edition. Rust 2015 treats `async` as an
+/// identifier; newer editions reserve it for async syntax.
+pub fn parse_ast_with_cfg_and_edition(
+    source: &SourceFile,
+    cfg: &quill_cfg::CfgSet,
+    edition: &str,
+) -> Parse {
+    if let Some(parse) = load_parse_cache(source, cfg, edition) {
         return parse;
     }
     let mut result = Parse::default();
-    match syn::parse_file(source.text()) {
+    match parse_file_for_edition(source.text(), edition) {
         Ok(file) => {
             let mut collector = AstCollector::new(source, cfg);
             collector.visit_file(&file);
@@ -660,17 +671,50 @@ pub fn parse_ast_with_cfg(source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Parse
             });
         }
     }
-    store_parse_cache(source, cfg, &result);
+    store_parse_cache(source, cfg, edition, &result);
     result
 }
 
-fn parse_cache_path(source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Option<std::path::PathBuf> {
+fn parse_file_for_edition(source: &str, edition: &str) -> syn::Result<syn::File> {
+    if edition != "2015" {
+        return syn::parse_file(source);
+    }
+    fn rawify_async(tokens: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        use proc_macro2::{Ident, TokenTree};
+        tokens
+            .into_iter()
+            .map(|token| match token {
+                TokenTree::Ident(ident) if ident == "async" => {
+                    TokenTree::Ident(Ident::new_raw("async", ident.span()))
+                }
+                TokenTree::Group(group) => {
+                    let mut rewritten = proc_macro2::Group::new(
+                        group.delimiter(),
+                        rawify_async(group.stream()),
+                    );
+                    rewritten.set_span(group.span());
+                    TokenTree::Group(rewritten)
+                }
+                other => other,
+            })
+            .collect()
+    }
+    let tokens = source.parse::<proc_macro2::TokenStream>()?;
+    syn::parse2(rawify_async(tokens))
+}
+
+fn parse_cache_path(
+    source: &SourceFile,
+    cfg: &quill_cfg::CfgSet,
+    edition: &str,
+) -> Option<std::path::PathBuf> {
     let cache_root = std::env::var_os("QUILL_CACHE_DIR").map(std::path::PathBuf::from)?;
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"quill-parse-cache-v1");
     hasher.update(&parse_compiler_fingerprint());
     hasher.update(source.text().as_bytes());
     hasher.update(format!("{cfg:?}").as_bytes());
+    hasher.update(edition.as_bytes());
     Some(
         cache_root
             .join("parse-ast")
@@ -698,13 +742,13 @@ fn parse_compiler_fingerprint() -> [u8; 32] {
     })
 }
 
-fn load_parse_cache(source: &SourceFile, cfg: &quill_cfg::CfgSet) -> Option<Parse> {
-    let bytes = std::fs::read(parse_cache_path(source, cfg)?).ok()?;
+fn load_parse_cache(source: &SourceFile, cfg: &quill_cfg::CfgSet, edition: &str) -> Option<Parse> {
+    let bytes = std::fs::read(parse_cache_path(source, cfg, edition)?).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 
-fn store_parse_cache(source: &SourceFile, cfg: &quill_cfg::CfgSet, parse: &Parse) {
-    let Some(path) = parse_cache_path(source, cfg) else {
+fn store_parse_cache(source: &SourceFile, cfg: &quill_cfg::CfgSet, edition: &str, parse: &Parse) {
+    let Some(path) = parse_cache_path(source, cfg, edition) else {
         return;
     };
     let Some(parent) = path.parent() else {
@@ -816,7 +860,7 @@ impl<'a> AstCollector<'a> {
                 },
                 syn::FnArg::Typed(argument) => ParameterItem {
                     name: match &*argument.pat {
-                        syn::Pat::Ident(pattern) => Some(pattern.ident.to_string()),
+                        syn::Pat::Ident(pattern) => Some(pattern.ident.unraw().to_string()),
                         _ => None,
                     },
                     type_text: self
@@ -840,7 +884,7 @@ impl<'a> AstCollector<'a> {
             .params
             .iter()
             .filter_map(|parameter| match parameter {
-                syn::GenericParam::Type(parameter) => Some(parameter.ident.to_string()),
+                syn::GenericParam::Type(parameter) => Some(parameter.ident.unraw().to_string()),
                 syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => None,
             })
             .collect();
@@ -853,7 +897,7 @@ impl<'a> AstCollector<'a> {
             || signature.generics.where_clause.is_some()
             || generic_parameters_have_unsupported_bounds(&signature.generics.params);
         self.functions.push(FunctionItem {
-            name: signature.ident.to_string(),
+            name: signature.ident.unraw().to_string(),
             scope: self.scope.clone(),
             calls: calls.calls,
             qualified_calls: calls.qualified_calls,
@@ -965,7 +1009,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
             .params
             .iter()
             .filter_map(|parameter| match parameter {
-                syn::GenericParam::Type(parameter) => Some(parameter.ident.to_string()),
+                syn::GenericParam::Type(parameter) => Some(parameter.ident.unraw().to_string()),
                 syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => None,
             })
             .collect();
@@ -983,7 +1027,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
             })
             .collect();
         self.structs.push(StructItem {
-            name: item.ident.to_string(),
+            name: item.ident.unraw().to_string(),
             scope: self.scope.clone(),
             fields,
             generic_parameters,
@@ -1033,13 +1077,13 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                 self.unsupported_item_count += 1;
                 continue;
             };
-            if !variant_names.insert(variant.ident.to_string())
+            if !variant_names.insert(variant.ident.unraw().to_string())
                 || !discriminants.insert(discriminant)
             {
                 self.unsupported_item_count += 1;
             }
             variants.push(EnumVariantItem {
-                name: variant.ident.to_string(),
+                name: variant.ident.unraw().to_string(),
                 discriminant,
                 span: span_range(self.source, variant.span()),
             });
@@ -1056,7 +1100,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
             self.unsupported_item_count += 1;
         }
         self.enums.push(EnumItem {
-            name: item.ident.to_string(),
+            name: item.ident.unraw().to_string(),
             scope: self.scope.clone(),
             variants,
             derived_traits: supported_derives(&item.attrs).unwrap_or_default(),
@@ -1067,7 +1111,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
 
     fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
         self.modules.push(ModuleItem {
-            name: item.ident.to_string(),
+            name: item.ident.unraw().to_string(),
             parent_scope: self.scope.clone(),
             span: span_range(self.source, item.span()),
             body_span: item.content.as_ref().map(|(brace, _)| {
@@ -1093,7 +1137,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                 .path
                 .segments
                 .last()
-                .map(|segment| segment.ident.to_string())
+                .map(|segment| segment.ident.unraw().to_string())
                 .unwrap_or_else(|| "_".to_owned()),
             _ => "_".to_owned(),
         };
@@ -1105,7 +1149,7 @@ impl<'ast> syn::visit::Visit<'ast> for AstCollector<'_> {
                     .params
                     .iter()
                     .filter_map(|parameter| match parameter {
-                        syn::GenericParam::Type(parameter) => Some(parameter.ident.to_string()),
+                        syn::GenericParam::Type(parameter) => Some(parameter.ident.unraw().to_string()),
                         syn::GenericParam::Lifetime(_) | syn::GenericParam::Const(_) => None,
                     }),
             );
@@ -1299,7 +1343,7 @@ fn expand_syn_macros(
                 let name = if path.segments.len() == 1
                     && matches!(path.segments[0].arguments, syn::PathArguments::None)
                 {
-                    Some(path.segments[0].ident.to_string())
+                    Some(path.segments[0].ident.unraw().to_string())
                 } else {
                     None
                 };
@@ -1462,7 +1506,7 @@ fn supported_derives(attributes: &[syn::Attribute]) -> Option<Vec<String>> {
             if path.leading_colon.is_some() || path.segments.len() != 1 {
                 return None;
             }
-            let name = path.segments.last()?.ident.to_string();
+            let name = path.segments.last()?.ident.unraw().to_string();
             if !matches!(
                 name.as_str(),
                 "Copy" | "Clone" | "Debug" | "PartialEq" | "Eq"
@@ -1490,7 +1534,7 @@ fn field_supports_derive(ty: &syn::Type, trait_name: &str) -> bool {
             syn::Type::Path(path) if path.qself.is_none() => {
                 path.path.segments.last().is_some_and(|segment| {
                     matches!(
-                        segment.ident.to_string().as_str(),
+                        segment.ident.unraw().to_string().as_str(),
                         "bool"
                             | "char"
                             | "u8"
@@ -1524,7 +1568,7 @@ fn field_supports_derive(ty: &syn::Type, trait_name: &str) -> bool {
             let Some(segment) = path.path.segments.last() else {
                 return false;
             };
-            let name = segment.ident.to_string();
+            let name = segment.ident.unraw().to_string();
             match name.as_str() {
                 "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8"
                 | "i16" | "i32" | "i64" | "i128" | "isize" | "String" => true,
@@ -1581,7 +1625,7 @@ impl<'ast> syn::visit::Visit<'ast> for CallCollector {
                 .path
                 .segments
                 .iter()
-                .map(|segment| segment.ident.to_string())
+                .map(|segment| segment.ident.unraw().to_string())
                 .collect::<Vec<_>>();
             if path.len() == 1 {
                 self.calls.push(path[0].clone());
@@ -1604,14 +1648,14 @@ fn flatten_ast_use(
     match tree {
         syn::UseTree::Path(path) => {
             let mut path_prefix = prefix.to_vec();
-            path_prefix.push(path.ident.to_string());
+            path_prefix.push(path.ident.unraw().to_string());
             flatten_ast_use(&path.tree, &path_prefix, scope, span, is_public, output);
         }
         syn::UseTree::Name(name) => {
             let mut path = prefix.to_vec();
             let self_import = name.ident == "self" && !path.is_empty();
             if !self_import {
-                path.push(name.ident.to_string());
+                path.push(name.ident.unraw().to_string());
             }
             output.push(ImportItem {
                 scope: scope.to_vec(),
@@ -1626,7 +1670,7 @@ fn flatten_ast_use(
             let mut path = prefix.to_vec();
             let self_import = rename.ident == "self" && !path.is_empty();
             if !self_import {
-                path.push(rename.ident.to_string());
+                path.push(rename.ident.unraw().to_string());
             }
             output.push(ImportItem {
                 scope: scope.to_vec(),
@@ -1718,7 +1762,7 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                                     && binding.by_ref.is_none()
                                     && binding.subpat.is_none() =>
                             {
-                                Some(binding.ident.to_string())
+                                Some(binding.ident.unraw().to_string())
                             }
                             _ => None,
                         })
@@ -1734,14 +1778,14 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                 }
                 let (name, type_text, mutable) = match &local.pat {
                     syn::Pat::Ident(pattern) => (
-                        Some(pattern.ident.to_string()),
+                        Some(pattern.ident.unraw().to_string()),
                         None,
                         pattern.mutability.is_some(),
                     ),
                     syn::Pat::Type(pattern) => {
                         let (name, mutable) = match &*pattern.pat {
                             syn::Pat::Ident(ident) => {
-                                (Some(ident.ident.to_string()), ident.mutability.is_some())
+                                (Some(ident.ident.unraw().to_string()), ident.mutability.is_some())
                             }
                             _ => (None, false),
                         };
@@ -1786,7 +1830,7 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                         syn::Expr::Path(path)
                             if path.qself.is_none() && path.path.segments.len() == 1 =>
                         {
-                            Some(path.path.segments[0].ident.to_string())
+                            Some(path.path.segments[0].ident.unraw().to_string())
                         }
                         syn::Expr::Field(field) => {
                             let syn::Expr::Path(path) = &*field.base else {
@@ -1834,7 +1878,7 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                 syn::Expr::ForLoop(for_expr) => {
                     let name = match &*for_expr.pat {
                         syn::Pat::Ident(pattern) if pattern.subpat.is_none() => {
-                            Some(pattern.ident.to_string())
+                            Some(pattern.ident.unraw().to_string())
                         }
                         _ => None,
                     };
@@ -1861,7 +1905,7 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                             syn::Pat::Ident(pattern)
                                 if pattern.by_ref.is_none() && pattern.subpat.is_none() =>
                             {
-                                Some(vec![pattern.ident.to_string()])
+                                Some(vec![pattern.ident.unraw().to_string()])
                             }
                             syn::Pat::Tuple(pattern) => pattern
                                 .elems
@@ -1870,7 +1914,7 @@ fn lower_block(block: &syn::Block, source: &SourceFile) -> BodyExpr {
                                     syn::Pat::Ident(pattern)
                                         if pattern.by_ref.is_none() && pattern.subpat.is_none() =>
                                     {
-                                        Some(pattern.ident.to_string())
+                                        Some(pattern.ident.unraw().to_string())
                                     }
                                     _ => None,
                                 })
@@ -1946,7 +1990,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
             path.path
                 .segments
                 .iter()
-                .map(|segment| segment.ident.to_string())
+                .map(|segment| segment.ident.unraw().to_string())
                 .collect::<Vec<_>>()
                 .join("::"),
         ),
@@ -1968,7 +2012,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                     path.path
                         .segments
                         .iter()
-                        .map(|segment| segment.ident.to_string())
+                        .map(|segment| segment.ident.unraw().to_string())
                         .collect::<Vec<_>>()
                         .join("::")
                 }
@@ -1997,7 +2041,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                                         path.path
                                             .segments
                                             .iter()
-                                            .map(|segment| segment.ident.to_string())
+                                            .map(|segment| segment.ident.unraw().to_string())
                                             .collect::<Vec<_>>()
                                             .join("::")
                                     }
@@ -2035,7 +2079,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                 .iter()
                 .map(|pattern| match pattern {
                     syn::Pat::Ident(ident) if ident.by_ref.is_none() && ident.subpat.is_none() => {
-                        Some(ClosureParameter::Identifier(ident.ident.to_string()))
+                        Some(ClosureParameter::Identifier(ident.ident.unraw().to_string()))
                     }
                     syn::Pat::Tuple(tuple) => tuple
                         .elems
@@ -2044,7 +2088,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                             syn::Pat::Ident(ident)
                                 if ident.by_ref.is_none() && ident.subpat.is_none() =>
                             {
-                                Some(ident.ident.to_string())
+                                Some(ident.ident.unraw().to_string())
                             }
                             _ => None,
                         })
@@ -2067,7 +2111,7 @@ fn lower_expr(expression: &syn::Expr, source: &SourceFile) -> BodyExpr {
                     .path
                     .segments
                     .iter()
-                    .map(|segment| segment.ident.to_string())
+                    .map(|segment| segment.ident.unraw().to_string())
                     .collect::<Vec<_>>()
                     .join("::"),
                 fields: structure
@@ -2233,13 +2277,13 @@ fn lower_match_pattern(pattern: &syn::Pat) -> MatchPattern {
                 && pattern.mutability.is_none()
                 && pattern.subpat.is_none() =>
         {
-            MatchPattern::Binding(pattern.ident.to_string())
+            MatchPattern::Binding(pattern.ident.unraw().to_string())
         }
         syn::Pat::Path(path) if path.qself.is_none() => MatchPattern::Path(
             path.path
                 .segments
                 .iter()
-                .map(|segment| segment.ident.to_string())
+                .map(|segment| segment.ident.unraw().to_string())
                 .collect::<Vec<_>>()
                 .join("::"),
         ),
@@ -2418,7 +2462,7 @@ fn lower_macro_expression(mac: &syn::Macro, source: &SourceFile) -> MacroExpress
         .path
         .segments
         .iter()
-        .map(|segment| segment.ident.to_string())
+        .map(|segment| segment.ident.unraw().to_string())
         .collect::<Vec<_>>()
         .join("::");
     let const_expansion = (path == "concat")

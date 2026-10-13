@@ -64,6 +64,7 @@ struct CrateTargetId {
     package: String,
     target: String,
     cfg: quill_cfg::CfgSet,
+    edition: String,
 }
 
 impl CrateTargetId {
@@ -222,6 +223,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                     package: package.id.clone(),
                     target: target.name.clone(),
                     cfg: package.cfg.clone(),
+                    edition: target.edition.clone(),
                 },
                 target.source_path.display().to_string(),
             )
@@ -277,6 +279,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                 package: package.id.clone(),
                 target: target.name.clone(),
                 cfg: package.cfg.clone(),
+                edition: target.edition.clone(),
             };
             let parses = target_parses.remove(&owner).unwrap_or_default();
             quill_hir::lower_module_files(&owner.key(), &parses)
@@ -288,6 +291,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
             package: package.id.clone(),
             target: target.name.clone(),
             cfg: package.cfg.clone(),
+            edition: target.edition.clone(),
         };
         let aliases = dependency_aliases
             .entry(owner.key())
@@ -310,6 +314,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                         package: dependency_package.id.clone(),
                         target: library.name.clone(),
                         cfg: dependency_package.cfg.clone(),
+                        edition: library.edition.clone(),
                     }
                     .key(),
                 );
@@ -327,6 +332,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                     package: package.id.clone(),
                     target: library.name.clone(),
                     cfg: package.cfg.clone(),
+                    edition: library.edition.clone(),
                 }
                 .key(),
             );
@@ -347,6 +353,7 @@ fn cargo_workspace_command(arguments: Vec<String>, check_types: bool) -> ExitCod
                 package: package.id.clone(),
                 target: target.name.clone(),
                 cfg: package.cfg.clone(),
+                edition: target.edition.clone(),
             };
             let Some(hir) = crate_hirs.iter().find(|hir| hir.name == owner.key()) else {
                 continue;
@@ -922,6 +929,7 @@ fn compile_cargo_subset_for_target_with_workspace(
             package: package.id.clone(),
             target: target.name.clone(),
             cfg: package_cfg.clone(),
+            edition: target.edition.clone(),
         },
         target.source_path.display().to_string(),
     )];
@@ -931,6 +939,7 @@ fn compile_cargo_subset_for_target_with_workspace(
             package: package.id.clone(),
             target: library.name.clone(),
             cfg: package_cfg,
+            edition: library.edition.clone(),
         };
         crate_prefixes.insert(owner.key(), package.name.replace('-', "_"));
         roots.push((owner, library.source_path.display().to_string()));
@@ -980,6 +989,7 @@ fn compile_cargo_subset_for_target_with_workspace(
             package: dependency_package.id.clone(),
             target: library.name.clone(),
             cfg: dependency_package.cfg.clone(),
+            edition: library.edition.clone(),
         };
         crate_prefixes.insert(owner.key(), dependency.crate_name.clone());
         roots.push((owner, library.source_path.display().to_string()));
@@ -4073,6 +4083,7 @@ fn parse_module_trees_with_cfg(
         package: "standalone".into(),
         target: root.to_owned(),
         cfg: cfg.clone(),
+        edition: "2024".into(),
     };
     parse_module_roots(&[(Some(owner), root.to_owned())], pool)
 }
@@ -4143,6 +4154,10 @@ fn parse_module_roots(
                         .as_ref()
                         .map(|owner| owner.cfg.clone())
                         .unwrap_or_default(),
+                    owner
+                        .as_ref()
+                        .map(|owner| owner.edition.clone())
+                        .unwrap_or_else(|| "2024".into()),
                 )
             })
             .collect();
@@ -4150,7 +4165,9 @@ fn parse_module_roots(
         let parses = if inputs.len() <= 1 {
             inputs
                 .iter()
-                .map(|(source, cfg)| cache.parse_file_with_cfg(source, cfg))
+                .map(|(source, cfg, edition)| {
+                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
+                })
                 .collect()
         } else {
             if pool.is_none() {
@@ -4158,8 +4175,8 @@ fn parse_module_roots(
             }
             pool.as_ref()
                 .expect("pool initialized")
-                .map(&inputs, |(source, cfg)| {
-                    cache.parse_file_with_cfg(source, cfg)
+                .map(&inputs, |(source, cfg, edition)| {
+                    cache.parse_file_with_cfg_and_edition(source, cfg, edition)
                 })
         };
         let mut next_requests = Vec::new();

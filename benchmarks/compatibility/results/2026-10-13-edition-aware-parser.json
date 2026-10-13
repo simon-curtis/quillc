@@ -1,0 +1,656 @@
+{
+  "toolchain": "nightly-2026-08-23",
+  "rustc": "rustc 1.100.0-nightly (c54751567 2026-08-22)\nbinary: rustc\ncommit-hash: c54751567b19c4ceb08b0412d83529c2568cba8b\ncommit-date: 2026-08-22\nhost: x86_64-unknown-linux-gnu\nrelease: 1.100.0-nightly\nLLVM version: 23.1.0",
+  "quillc": "/home/simon/git/quillc/target/release/quillc",
+  "quillc_source_revision": "f4c74a335005125238e3649b3617bb6df0d8a305",
+  "quillc_source_dirty": true,
+  "quillc_source_dirty_paths": [
+    "crates/quill-lsp/src/lib.rs",
+    "crates/quill-query/src/lib.rs",
+    "crates/quill-syntax/src/lib.rs",
+    "crates/quillc/src/main.rs"
+  ],
+  "quillc_artifact_mtime": "2026-10-13T16:51:45.277933+00:00",
+  "quillc_sha256": "71887b1ba9404a80418ca3fd09f299efee811d0c3a56f71d9b3e60bd2594f3b9",
+  "passed": 2,
+  "total": 2,
+  "percent": 100.0,
+  "results": [
+    {
+      "case": "edition-2015-async-identifier",
+      "kind": "cargo-run",
+      "passed": true,
+      "rustc_accepted": true,
+      "quill_accepted": true,
+      "reason": "all Cargo binary outputs match",
+      "rustc_status": 0,
+      "quill_status": 0,
+      "runtime_match": true,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    },
+    {
+      "case": "edition-2018-async-identifier-rejected",
+      "kind": "syntax-reject",
+      "passed": true,
+      "rustc_accepted": false,
+      "quill_accepted": false,
+      "reason": "both reject source syntax",
+      "rustc_status": 1,
+      "quill_status": 1,
+      "runtime_match": null,
+      "diagnostic_checks": null,
+      "diagnostic_observed": null
+    }
+  ],
+  "feature_coverage": [
+    {
+      "id": "associated-types-and-constants",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "async-await-and-futures",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "attributes-and-lints",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "auto-traits-and-coherence",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "borrow-checking-and-lifetimes",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "built-in-macros",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-artifacts-and-rust-abi",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-build-configuration",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-build-script-protocol",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-dependency-resolution",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-target-kinds",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cargo-test-and-doctest",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "closures-and-capture",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "collections-beyond-vec-map",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "collections-complete-api",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "const-generics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "const-items-and-evaluation",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "control-flow",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "core-and-alloc",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "cross-compilation",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "derive-implementations",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "destructuring-patterns",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "diagnostics-parity",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "drop-and-unwinding",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "edition-semantics",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "enums-and-match",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "external-dependencies-and-build-scripts",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "features-and-cfg",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "floating-point-semantics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "foreign-items-and-ffi",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "function-types-and-abi",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "functions-and-scalar-arithmetic",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "general-macro-expansion",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "generators-and-coroutines",
+      "tracker_status": "unassessed",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "generics",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "if-let",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "impl-trait-and-projections",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "inline-assembly",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "io-filesystem-process",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "iterators-and-traits",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "let-else-and-pattern-conditions",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "lifetimes-and-higher-ranked-bounds",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "linux-x86-64-executables",
+      "tracker_status": "available",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "macro-rules-expansion",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "modules-and-imports",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "multiple-binary-targets",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "networking-and-time",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "no-std-and-custom-runtime",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "operators-casts-and-overflow",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "option--result--and",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "owned-strings",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "primitive-types-and-literals",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "println--and-format",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 1,
+      "passed": 1,
+      "failed": []
+    },
+    {
+      "id": "procedural-macros",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "references-and-raw-pointers",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rust-library-artifacts",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rust-source-parsing",
+      "tracker_status": "partial",
+      "probed": true,
+      "cases": 2,
+      "passed": 2,
+      "failed": []
+    },
+    {
+      "id": "rustc-diagnostics-and-lints",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "rustdoc-and-documentation-tests",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "single-binary-with-workspace-libraries",
+      "tracker_status": "available",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "standard-library--drop--and-panic",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "static-items-and-mutability",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "structs-and-inherent-methods",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "targets-beyond-linux-x86-64",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "threads-sync-and-atomics",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "trait-implementations-and-method-resolution",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "trait-objects-and-dynamic-dispatch",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "trait-solving",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "tuples--arrays--and-slices",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "type-checking",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "unions-and-layout",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "unsafe-rust",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "utf-8-string-literal-helper-calls",
+      "tracker_status": "available",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "vec-and-btreemap",
+      "tracker_status": "partial",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "windows-msvc-and-gnu",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    },
+    {
+      "id": "windows-output",
+      "tracker_status": "planned",
+      "probed": false,
+      "cases": 0,
+      "passed": 0,
+      "failed": []
+    }
+  ]
+}
