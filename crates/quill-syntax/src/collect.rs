@@ -1042,6 +1042,39 @@ fn generic_parameters_have_unsupported_bounds(
     })
 }
 
+fn where_clause_has_unsupported_bounds(
+    where_clause: Option<ast::WhereClause>,
+    local_traits: &HashSet<String>,
+) -> bool {
+    where_clause.into_iter().flat_map(|clause| clause.predicates()).any(|predicate| {
+        let Some(ast::Type::PathType(ty)) = predicate.ty() else {
+            return true;
+        };
+        let Some(path) = ty.path() else {
+            return true;
+        };
+        let path = path_parts(&path);
+        if path.segments.len() != 1 || !path.segments[0].plain() || !path.all_plain() {
+            return true;
+        }
+        let generic = path.joined();
+        predicate
+            .type_bound_list()
+            .into_iter()
+            .flat_map(|list| list.bounds())
+            .map(|bound| bound_kind(&bound))
+            .any(|bound| match bound {
+                BoundKind::Trait(bound) => {
+                    !is_supported_copy_bound(&bound)
+                        && !is_supported_as_ref_str_bound(&bound)
+                        && !is_supported_add_bound(&bound, &generic)
+                        && !is_local_trait_bound(&bound, local_traits)
+                }
+                BoundKind::Lifetime | BoundKind::Other => true,
+            })
+    })
+}
+
 fn parameters_with_bound(
     parameters: &[ast::GenericParam],
     supported: impl Fn(&TraitBound, &str) -> bool,
@@ -1070,6 +1103,40 @@ fn simple_generic_trait_bounds(parameters: &[ast::GenericParam]) -> Vec<(String,
         let name = type_param_name(parameter);
         for bound in type_param_bounds(parameter) {
             if let BoundKind::Trait(bound) = bound
+                && !is_supported_copy_bound(&bound)
+                && !is_supported_as_ref_str_bound(&bound)
+                && !is_supported_add_bound(&bound, &name)
+                && bound.path.segments.len() == 1
+                && bound.path.segments[0].plain()
+                && bound.plain
+            {
+                bounds.push((name.clone(), bound.path.joined()));
+            }
+        }
+    }
+    bounds
+}
+
+fn simple_where_trait_bounds(where_clause: Option<ast::WhereClause>) -> Vec<(String, String)> {
+    let mut bounds = Vec::new();
+    for predicate in where_clause.into_iter().flat_map(|clause| clause.predicates()) {
+        let Some(ast::Type::PathType(ty)) = predicate.ty() else {
+            continue;
+        };
+        let Some(path) = ty.path() else {
+            continue;
+        };
+        let path = path_parts(&path);
+        if path.segments.len() != 1 || !path.segments[0].plain() || !path.all_plain() {
+            continue;
+        }
+        let name = path.joined();
+        for bound in predicate
+            .type_bound_list()
+            .into_iter()
+            .flat_map(|list| list.bounds())
+        {
+            if let BoundKind::Trait(bound) = bound_kind(&bound)
                 && !is_supported_copy_bound(&bound)
                 && !is_supported_as_ref_str_bound(&bound)
                 && !is_supported_add_bound(&bound, &name)
@@ -1409,7 +1476,10 @@ impl Collector<'_> {
             }
         }
         let generic_has_bounds = self.impl_generic_has_bounds
-            || function.where_clause().is_some()
+            || where_clause_has_unsupported_bounds(
+                function.where_clause(),
+                &self.local_trait_names,
+            )
             || generic_parameters_have_unsupported_bounds(&generics, &self.local_trait_names);
         let lowered_body = body.as_ref().map(|block| lowerer.lower_block(block));
         let name = function.name();
@@ -1436,7 +1506,10 @@ impl Collector<'_> {
                 is_supported_as_ref_str_bound(bound)
             }),
             generic_add_parameters: parameters_with_bound(&generics, is_supported_add_bound),
-            generic_trait_bounds: simple_generic_trait_bounds(&generics),
+            generic_trait_bounds: simple_generic_trait_bounds(&generics)
+                .into_iter()
+                .chain(simple_where_trait_bounds(function.where_clause()))
+                .collect(),
             generic_has_bounds,
             is_async: function.async_token().is_some(),
             is_const: function.const_token().is_some(),

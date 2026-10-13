@@ -1832,6 +1832,19 @@ mod tests {
     }
 
     #[test]
+    fn collects_local_trait_bounds_from_where_clauses() {
+        let source = SourceFile::from_text(
+            "where-trait.rs",
+            "trait Value { fn value(&self) -> u64; } fn read<T>(item: &T) -> u64 where T: Value { item.value() }",
+        );
+        let parsed = parse_ast(&source);
+        assert_eq!(parsed.unsupported_item_count, 0);
+        let read = parsed.functions.iter().find(|function| function.name == "read").unwrap();
+        assert_eq!(read.generic_trait_bounds, [("T".to_owned(), "Value".to_owned())]);
+        assert!(!read.generic_has_bounds);
+    }
+
+    #[test]
     fn extracts_struct_fields_and_impl_methods_with_owner_scope() {
         let source = SourceFile::from_text(
             "model.rs",

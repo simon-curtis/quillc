@@ -193,6 +193,52 @@ fn simple_generic_trait_bounds(
         .collect()
 }
 
+fn simple_where_trait_bounds(
+    clause: Option<&syn::WhereClause>,
+) -> Vec<(String, String)> {
+    clause
+        .into_iter()
+        .flat_map(|clause| clause.predicates.iter())
+        .filter_map(|predicate| match predicate {
+            syn::WherePredicate::Type(predicate) => Some(predicate),
+            _ => None,
+        })
+        .flat_map(|predicate| {
+            let generic = match &predicate.bounded_ty {
+                syn::Type::Path(path) if path.qself.is_none() && path.path.segments.len() == 1 => {
+                    path.path.segments.first().map(|segment| segment.ident.unraw().to_string())
+                }
+                _ => None,
+            };
+            let Some(generic) = generic else {
+                return Vec::new();
+            };
+            predicate
+                .bounds
+                .iter()
+                .filter_map(move |bound| match bound {
+                    syn::TypeParamBound::Trait(bound)
+                        if !is_supported_copy_bound(bound)
+                            && !is_supported_as_ref_str_bound(bound)
+                            && !is_supported_add_bound(bound, &generic)
+                            && bound.path.segments.len() == 1
+                            && bound.path.segments.first().is_some_and(|segment| {
+                                matches!(segment.arguments, syn::PathArguments::None)
+                            })
+                            && bound.lifetimes.is_none()
+                            && bound.maybe.is_none()
+                            && bound.modifiers.require_empty().is_ok() =>
+                    {
+                        let trait_name = bound.path.segments.first()?.ident.unraw().to_string();
+                        Some((generic.clone(), trait_name))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 fn is_supported_add_bound(bound: &syn::TraitBound, generic: &str) -> bool {
     let segments: Vec<_> = bound.path.segments.iter().collect();
     let supported_path = matches!(segments.as_slice(), [add] if add.ident == "Add")
@@ -627,7 +673,10 @@ impl<'a> AstCollector<'a> {
                 &signature.generics.params,
             ),
             generic_add_parameters: generic_add_parameters(&signature.generics.params),
-            generic_trait_bounds: simple_generic_trait_bounds(&signature.generics.params),
+            generic_trait_bounds: simple_generic_trait_bounds(&signature.generics.params)
+                .into_iter()
+                .chain(simple_where_trait_bounds(signature.generics.where_clause.as_ref()))
+                .collect(),
             generic_has_bounds,
             is_async: signature.asyncness.is_some(),
             is_const: signature.constness.is_some(),

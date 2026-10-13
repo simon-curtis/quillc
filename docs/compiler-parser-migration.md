@@ -50,12 +50,22 @@ target machine.
 
 ## Validation and limits
 
-`cargo test -p quill-cfg -p quill-syntax` passes (10 cfg tests and 41 syntax
-tests; one large corpus test is ignored by default). Workspace source files
-and focused fixtures are compared against the test-only Syn oracle, including
-edition behavior, cfg filtering, byte spans, macro handling, CRLF, and
-malformed input. `cargo test -p quill-query` passes its 9 cache tests, and
-`cargo check -p quillc` passes.
+The current `cargo test -p quill-syntax --lib` run passes 44 tests, with 3
+opt-in corpus tests ignored by default. Workspace source files and focused
+fixtures are compared against the test-only Syn oracle, including edition
+behavior, cfg filtering, byte spans, macro handling, CRLF, and malformed input.
+The migration validation also recorded passing `quill-cfg` (10 tests),
+`quill-query` (9 cache tests), and `cargo check -p quillc` runs.
+
+On 2026-10-13, rustc acceptance gates checked 304 accepted fixtures among 440
+complete-source parser fixtures, then checked 1,125 rustc-accepted source files
+across eight installed standard-library crates. Quill's collector accepted all
+inputs rustc's AST dump accepted in both gates. The commands, fixture
+denominators, and limits are documented in
+[`rust-syntax-coverage.md`](rust-syntax-coverage.md). These tests establish
+broad measured coverage, not universal compatibility with every Rust grammar
+form; malformed inputs, unstable syntax, and grammar differences still need
+ongoing differential coverage.
 
 The broader `cargo test -p quill-hir -p quill-typeck -p quill-codegen` suite
 passes (111 tests). `cargo test -p quillc` currently has two failures in
