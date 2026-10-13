@@ -57,6 +57,12 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [move-flow run](results/2026-10-13-move-flow-clean.json) passes 89/89
+curated cases at clean revision `f392c5f`. In addition to the conditional move
+diagnostic, it checks a use after moving a non-`Copy` value in a `while` body;
+Quill matches rustc's E0382 code, message, and primary location. This 100%
+corpus result does not establish overall Rust compatibility.
+
 The [conditional-move run](results/2026-10-13-if-move-clean.json) passes
 88/88 curated cases at clean revision `95b2509`. Its new diagnostic probe
 checks a use after moving a non-`Copy` value through one arm of an `if`
