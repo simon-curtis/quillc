@@ -19,6 +19,7 @@ quill-typeck = { path = "../quill-typeck" }
 quill-codegen = { path = "../quill-codegen" }
 quill-link = { path = "../quill-link" }
 quill-query = { path = "../quill-query" }
+quill-lsp = { path = "../quill-lsp" }
 
 [[bin]]
 name = "quillc"
