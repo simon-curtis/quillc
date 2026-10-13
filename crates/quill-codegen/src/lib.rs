@@ -3277,7 +3277,7 @@ fn lower_slice_fold_expression(
     if !matches!(iterator_method.as_str(), "bytes" | "iter") || !iterator_arguments.is_empty() {
         return Ok(None);
     }
-    let BodyExprKind::Closure { parameters, body } = &arguments[1].kind else {
+    let BodyExprKind::Closure { parameters, body, .. } = &arguments[1].kind else {
         return Err(CodegenError::UnsupportedProgram(
             "slice iterator fold requires a supported two-parameter closure",
         ));
@@ -7140,7 +7140,7 @@ fn is_repeatable_match_scrutinee(expression: &BodyExpr) -> bool {
 }
 
 fn is_trimmed_empty_string_closure(expression: &BodyExpr) -> bool {
-    let BodyExprKind::Closure { parameters, body } = &expression.kind else {
+    let BodyExprKind::Closure { parameters, body, .. } = &expression.kind else {
         return false;
     };
     let [quill_syntax::ClosureParameter::Identifier(parameter)] = parameters.as_slice() else {
