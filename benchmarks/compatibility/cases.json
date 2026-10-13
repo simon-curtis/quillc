@@ -1276,5 +1276,38 @@
     ],
     "edition": "2024",
     "source": "fn main() {\n    let mut value = String::from(\"owned\");\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
+  },
+  {
+    "id": "diagnostic-move-parameter-into-call-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0505",
+    "rustc_message": "cannot move out of `value` because it is borrowed",
+    "source": "fn consume(value: String) { let _ = value; }\nfn check(value: String) {\n    let first = &value;\n    consume(value);\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "diagnostic-mut-method-on-parameter-while-borrowed",
+    "kind": "diagnostic",
+    "features": [
+      "borrow-checking-and-lifetimes",
+      "diagnostics-parity"
+    ],
+    "edition": "2024",
+    "rustc_error_code": "E0502",
+    "rustc_message": "cannot borrow `value` as mutable because it is also borrowed as immutable",
+    "source": "fn check(mut value: String) {\n    let first = &value;\n    value.push('!');\n    println!(\"{first}\");\n}"
+  },
+  {
+    "id": "mut-method-on-parameter-after-borrow-last-use",
+    "kind": "check",
+    "features": [
+      "borrow-checking-and-lifetimes"
+    ],
+    "edition": "2024",
+    "source": "fn check(mut value: String) {\n    let first = &value;\n    println!(\"{first}\");\n    value.push('!');\n    println!(\"{value}\");\n}"
   }
 ]

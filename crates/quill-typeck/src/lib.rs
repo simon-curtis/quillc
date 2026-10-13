@@ -1047,7 +1047,7 @@ fn check_one_function(
         function_structs,
         &mut diagnostics,
     );
-    check_local_borrow_conflicts(body, signatures, function_structs, &mut diagnostics);
+    check_local_borrow_conflicts(function, body, signatures, function_structs, &mut diagnostics);
     check_mutability(body, &mut mutable_locals, &mut diagnostics);
     check_loop_control(body, 0, &mut diagnostics);
     if strict_calls {
@@ -1098,16 +1098,36 @@ fn check_move_uses(
 /// second borrow; this preserves Rust's non-lexical end of borrow for simple
 /// straight-line bodies.
 fn check_local_borrow_conflicts(
+    function: &FunctionItem,
     body: &BodyExpr,
     signatures: &SignatureIndex<'_>,
     struct_signatures: &[StructSignature],
     diagnostics: &mut Vec<TypeDiagnostic>,
 ) {
-    check_local_borrow_conflicts_in_expression(body, signatures, struct_signatures, diagnostics);
+    let local_types = function
+        .parameters
+        .iter()
+        .filter_map(|parameter| {
+            parameter.name.as_ref().map(|name| {
+                (
+                    name.clone(),
+                    type_from_syntax(&parameter.type_text, struct_signatures),
+                )
+            })
+        })
+        .collect();
+    check_local_borrow_conflicts_in_expression(
+        body,
+        &local_types,
+        signatures,
+        struct_signatures,
+        diagnostics,
+    );
 }
 
 fn check_local_borrow_conflicts_in_expression(
     expression: &BodyExpr,
+    local_types: &HashMap<String, Ty>,
     signatures: &SignatureIndex<'_>,
     struct_signatures: &[StructSignature],
     diagnostics: &mut Vec<TypeDiagnostic>,
@@ -1115,7 +1135,7 @@ fn check_local_borrow_conflicts_in_expression(
     match &expression.kind {
         BodyExprKind::Block { statements, tail } => {
             let mut borrows = Vec::<(String, String, bool, Option<String>)>::new();
-            let mut local_types = HashMap::<String, Ty>::new();
+            let mut local_types = local_types.clone();
             for (index, statement) in statements.iter().enumerate() {
                 let method_expressions: Vec<&BodyExpr> = match statement {
                     BodyStatement::Let {
@@ -1326,6 +1346,7 @@ fn check_local_borrow_conflicts_in_expression(
                 }
                 check_local_borrow_conflicts_in_statement(
                     statement,
+                    &local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1360,6 +1381,7 @@ fn check_local_borrow_conflicts_in_expression(
             if let Some(tail) = tail {
                 check_local_borrow_conflicts_in_expression(
                     tail,
+                    &local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1374,6 +1396,7 @@ fn check_local_borrow_conflicts_in_expression(
         | BodyExprKind::Parenthesized(expression)
         | BodyExprKind::Dereference(expression) => check_local_borrow_conflicts_in_expression(
             expression,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1385,6 +1408,7 @@ fn check_local_borrow_conflicts_in_expression(
             for argument in arguments {
                 check_local_borrow_conflicts_in_expression(
                     argument,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1398,6 +1422,7 @@ fn check_local_borrow_conflicts_in_expression(
         } => {
             check_local_borrow_conflicts_in_expression(
                 receiver,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1405,6 +1430,7 @@ fn check_local_borrow_conflicts_in_expression(
             for argument in arguments {
                 check_local_borrow_conflicts_in_expression(
                     argument,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1413,6 +1439,7 @@ fn check_local_borrow_conflicts_in_expression(
         }
         BodyExprKind::Closure { body, .. } => check_local_borrow_conflicts_in_expression(
             body,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1421,6 +1448,7 @@ fn check_local_borrow_conflicts_in_expression(
             for (_, value) in fields {
                 check_local_borrow_conflicts_in_expression(
                     value,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1429,6 +1457,7 @@ fn check_local_borrow_conflicts_in_expression(
         }
         BodyExprKind::FieldAccess { base, .. } => check_local_borrow_conflicts_in_expression(
             base,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1436,12 +1465,14 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Index { base, index, .. } => {
             check_local_borrow_conflicts_in_expression(
                 base,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 index,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1450,12 +1481,14 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Binary { left, right, .. } => {
             check_local_borrow_conflicts_in_expression(
                 left,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 right,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1468,12 +1501,14 @@ fn check_local_borrow_conflicts_in_expression(
         } => {
             check_local_borrow_conflicts_in_expression(
                 condition,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 then_branch,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1481,6 +1516,7 @@ fn check_local_borrow_conflicts_in_expression(
             if let Some(else_branch) = else_branch {
                 check_local_borrow_conflicts_in_expression(
                     else_branch,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1490,6 +1526,7 @@ fn check_local_borrow_conflicts_in_expression(
         BodyExprKind::Match { scrutinee, arms } => {
             check_local_borrow_conflicts_in_expression(
                 scrutinee,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1497,6 +1534,7 @@ fn check_local_borrow_conflicts_in_expression(
             for arm in arms {
                 check_local_borrow_conflicts_in_expression(
                     &arm.body,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1507,6 +1545,7 @@ fn check_local_borrow_conflicts_in_expression(
             for argument in &macro_expression.arguments {
                 check_local_borrow_conflicts_in_expression(
                     argument,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1515,6 +1554,7 @@ fn check_local_borrow_conflicts_in_expression(
         }
         BodyExprKind::Return(Some(value)) => check_local_borrow_conflicts_in_expression(
             value,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1530,6 +1570,7 @@ fn check_local_borrow_conflicts_in_expression(
 
 fn check_local_borrow_conflicts_in_statement(
     statement: &BodyStatement,
+    local_types: &HashMap<String, Ty>,
     signatures: &SignatureIndex<'_>,
     struct_signatures: &[StructSignature],
     diagnostics: &mut Vec<TypeDiagnostic>,
@@ -1539,6 +1580,7 @@ fn check_local_borrow_conflicts_in_statement(
             if let Some(initializer) = initializer {
                 check_local_borrow_conflicts_in_expression(
                     initializer,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
@@ -1554,6 +1596,7 @@ fn check_local_borrow_conflicts_in_statement(
             ..
         } => check_local_borrow_conflicts_in_expression(
             initializer,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1563,12 +1606,14 @@ fn check_local_borrow_conflicts_in_statement(
         } => {
             check_local_borrow_conflicts_in_expression(
                 condition,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 body,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1576,6 +1621,7 @@ fn check_local_borrow_conflicts_in_statement(
         }
         BodyStatement::Loop { body, .. } => check_local_borrow_conflicts_in_expression(
             body,
+            local_types,
             signatures,
             struct_signatures,
             diagnostics,
@@ -1585,18 +1631,21 @@ fn check_local_borrow_conflicts_in_statement(
         } => {
             check_local_borrow_conflicts_in_expression(
                 start,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 end,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 body,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1605,12 +1654,14 @@ fn check_local_borrow_conflicts_in_statement(
         BodyStatement::ForEach { iterator, body, .. } => {
             check_local_borrow_conflicts_in_expression(
                 iterator,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
             );
             check_local_borrow_conflicts_in_expression(
                 body,
+                local_types,
                 signatures,
                 struct_signatures,
                 diagnostics,
@@ -1620,6 +1671,7 @@ fn check_local_borrow_conflicts_in_statement(
             for argument in arguments {
                 check_local_borrow_conflicts_in_expression(
                     argument,
+                    local_types,
                     signatures,
                     struct_signatures,
                     diagnostics,
