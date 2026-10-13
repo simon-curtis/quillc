@@ -29,7 +29,7 @@ catalog-flow records=128 digest=0000a53352b1a3d7
 ## Paired build measurements
 
 Five runs were collected on 2026-10-13 from a clean release build at revision
-`798c9df` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
+`ed5eed4` and Rust nightly `2026-08-23`, on an Intel i7-8700K host with 12
 logical CPUs. Both commands selected the same binary and eight-crate source
 dependency graph. The table reports medians. Cold runs cleared the Rust target
 and Quill parse/type-check/artifact caches, but retained the OS file cache.
@@ -44,22 +44,23 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.737 s | 5.716 s | 565.4 MiB |
-| `quillc cargo-build-subset` | Cold | 0.343 s | 1.817 s | 129.1 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019476 s | 0.019700 s | 21.7 MiB |
-| `quillc cargo-build-subset` | Warm | 0.001313 s | 0.001137 s | 21.7 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.293 s | 0.418 s | 227.4 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.082 s | 34.4 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.306 s | 0.433 s | 225.6 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.085 s | 0.176 s | 50.2 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.682 s | 5.628 s | 571.7 MiB |
+| `quillc cargo-build-subset` | Cold | 0.331 s | 1.823 s | 131.2 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.018980 s | 0.019385 s | 22.0 MiB |
+| `quillc cargo-build-subset` | Warm | 0.001313 s | 0.001125 s | 22.0 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.286 s | 0.412 s | 229.1 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.025 s | 0.083 s | 34.3 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.301 s | 0.427 s | 227.6 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.082 s | 0.175 s | 50.3 MiB |
 
-Quill's median wall-time ratios were 7.99× cold, 14.84× warm, 11.27× for the
-comment edit, and 3.62× for the semantic edit. Peak RSS was lower in the cold
+Quill's median wall-time ratios were 8.11× cold, 14.46× warm, 11.36× for the
+comment edit, and 3.65× for the semantic edit. Peak RSS was lower in the cold
 and both incremental states, and equal in the warm state. CPU-time ratios were
-3.15× cold, 17.33× warm, 5.10× for the comment edit, and 2.45× for the
+3.09× cold, 17.23× warm, 4.95× for the comment edit, and 2.45× for the
 semantic edit. This run clears the 3× wall-time gate in all four states on
 this fixture, but semantic CPU-time speedup remains below 3×. These results
-do not establish general Rust compiler performance.
+do not establish general Rust compiler performance. The previous clean run at
+`798c9df` is retained in [`results-20261013-798c9df.json`](results-20261013-798c9df.json).
 
 A nested call-resolution cache and borrowed qualified-call traversal were
 measured against the same fixture. The candidate did not reduce the semantic
@@ -100,16 +101,16 @@ and the earlier `3f16b03` run is retained in
 
 ## Generated binary runtime
 
-A separate 2026-10-13 run at compiler revision `798c9df` timed the resulting
+A separate 2026-10-13 run at compiler revision `ed5eed4` timed the resulting
 executables: five warmups followed by 25 alternating launches per binary.
 Every invocation produced the same output. Wall time includes process startup.
 
 | Binary | Median wall time | Range | Median CPU time |
 |---|---:|---:|---:|
-| `rustc` | 1.026 ms | see raw samples | 0.833 ms |
-| Quill | 18.024 ms | see raw samples | 17.674 ms |
+| `rustc` | 1.007 ms | see raw samples | 0.830 ms |
+| Quill | 17.392 ms | see raw samples | 17.146 ms |
 
-For this workload, the Quill binary's median wall time was 17.57× the `rustc`
+For this workload, the Quill binary's median wall time was 17.27× the `rustc`
 binary's. These are debug-profile executables for one small synthetic fixture;
 the measurements include launch overhead and do not establish runtime
 performance for other programs. The raw per-launch samples are in
