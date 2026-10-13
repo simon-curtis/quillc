@@ -27,18 +27,20 @@ for the build process and descendants.
 
 | Compiler path | State | Wall | CPU | Peak process-tree RSS |
 |---|---|---:|---:|---:|
-| `rustc cargo build -p catalog-flow` | Cold | 2.658 s | 5.581 s | 565.9 MiB |
-| `quillc cargo-build-subset` | Cold | 0.326 s | 1.891 s | 145.4 MiB |
-| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 18.9 MiB |
-| `quillc cargo-build-subset` | Warm | 0.006 s | 0.002 s | 18.3 MiB |
-| `rustc cargo build -p catalog-flow` | Incremental | 0.282 s | 0.407 s | 236.3 MiB |
-| `quillc cargo-build-subset` | Incremental | 0.023 s | 0.077 s | 32.6 MiB |
-| `rustc cargo build -p catalog-flow` | Semantic edit | 0.301 s | 0.425 s | 227.4 MiB |
-| `quillc cargo-build-subset` | Semantic edit | 0.103 s | 0.190 s | 73.5 MiB |
+| `rustc cargo build -p catalog-flow` | Cold | 2.698 s | 5.647 s | 567.3 MiB |
+| `quillc cargo-build-subset` | Cold | 0.314 s | 1.839 s | 133.3 MiB |
+| `rustc cargo build -p catalog-flow` | Warm | 0.019 s | 0.020 s | 18.7 MiB |
+| `quillc cargo-build-subset` | Warm | 0.006 s | 0.002 s | 18.1 MiB |
+| `rustc cargo build -p catalog-flow` | Incremental | 0.287 s | 0.410 s | 229.0 MiB |
+| `quillc cargo-build-subset` | Incremental | 0.026 s | 0.082 s | 35.3 MiB |
+| `rustc cargo build -p catalog-flow` | Semantic edit | 0.302 s | 0.426 s | 229.0 MiB |
+| `quillc cargo-build-subset` | Semantic edit | 0.084 s | 0.174 s | 52.1 MiB |
 
-Quill's median wall-time ratios were 8.15× cold, 3.17× warm, 12.26× for the
-comment edit, and 2.92× for the semantic edit. It used less sampled peak RSS
-in all four states. The semantic-edit result is below the 3× target.
+Quill's median wall-time ratios were 8.59× cold, 3.17× warm, 11.04× for the
+comment edit, and 3.60× for the semantic edit. It used less sampled peak RSS
+in all four states. The semantic-edit median now clears the 3× wall-time
+target; this measures only the documented fixture and does not establish
+general Rust compiler performance.
 
 The implementation work behind the latest run includes restricting the
 cross-target function index to exports, memoizing repeated call resolution,
@@ -47,8 +49,11 @@ preparation, and reusing source-derived package objects. On an incremental
 semantic edit, cached package objects now skip type-checking and HIR assembly;
 only exported interfaces and generic bodies are retained for dependent crates.
 A nested body-parallelism trial increased cold RSS without improving wall time
-and was reverted. These are experiment notes, not separate acceptance
-results.
+and was reverted. The latest change moves parsed function bodies into the
+qualified-function index instead of deep-cloning them; on the semantic-edit
+fixture, wall time fell from the previous 0.103 s median to 0.084 s, and peak
+RSS fell from 73.5 MiB to 52.1 MiB. These are experiment notes, not separate
+acceptance results.
 
 ## Scope
 

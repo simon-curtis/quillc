@@ -1616,7 +1616,7 @@ fn compile_subset_main_with_cfg(
 }
 
 fn compile_parsed_sources(
-    parsed_files: Vec<ParsedSource>,
+    mut parsed_files: Vec<ParsedSource>,
     output_path: &str,
     crate_prefixes: &HashMap<String, String>,
     object_cache_root: Option<&Path>,
@@ -1729,22 +1729,21 @@ fn compile_parsed_sources(
         return Err("duplicate enum paths are outside the native codegen subset".to_owned());
     }
 
+    // The parsed functions are consumed by the compilation pipeline. Moving
+    // them avoids recursively cloning every body just to qualify its path.
     let keyed_functions: Vec<Vec<_>> = parsed_files
-        .iter()
+        .iter_mut()
         .map(|file| {
-            file.parse
-                .functions
-                .iter()
-                .map(|function| {
-                    let prefix = file
-                        .owner
-                        .as_ref()
-                        .and_then(|owner| crate_prefixes.get(&owner.key()))
-                        .map(String::as_str)
-                        .unwrap_or("");
-                    let key = canonical_function_path(file, function, prefix);
-                    let mut function = function.clone();
-                    function.name = key;
+            let prefix = file
+                .owner
+                .as_ref()
+                .and_then(|owner| crate_prefixes.get(&owner.key()))
+                .map(String::as_str)
+                .unwrap_or("");
+            std::mem::take(&mut file.parse.functions)
+                .into_iter()
+                .map(|mut function| {
+                    function.name = canonical_function_path(file, &function, prefix);
                     function
                 })
                 .collect()
@@ -1803,13 +1802,13 @@ fn compile_parsed_sources(
             .and_then(|owner| crate_prefixes.get(&owner.key()))
             .map(String::as_str)
             .unwrap_or("");
-        for (source_function, keyed_function) in file.parse.functions.iter().zip(functions) {
-            if !source_function.is_public {
+        for keyed_function in functions {
+            if !keyed_function.is_public {
                 continue;
             }
             let mut module_path = file.module_path.clone();
             module_path.extend(
-                source_function
+                keyed_function
                     .scope
                     .iter()
                     .filter_map(|scope| scope.strip_prefix("mod:").map(str::to_owned)),
