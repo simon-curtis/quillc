@@ -4,6 +4,18 @@ Use this corpus to compare Quill with the pinned rustc. Read [the completion
 target](TARGET.md) before interpreting a pass rate, and [the inventory guide](../../docs/rust-compatibility-inventory.md)
 when updating feature status.
 
+## Expanded Linux snapshot
+
+The [expanded 120-case report](results/2026-10-13-expanded-66ebe93.json)
+passes 84 cases (70.0%) at clean compiler revision `66ebe93`, using pinned
+nightly `2026-08-23` on `x86_64-unknown-linux-gnu`. Runtime indexing accounts
+for most mismatches: fixed arrays, `Vec`, and borrowed slices reject dynamic
+indices that rustc accepts. The remaining failures include `--extern` library
+artifacts, match-after-move acceptance, and borrow diagnostics/liveness. This
+is a curated Linux regression score, not an overall Rust compatibility
+percentage; the completion target above requires broader upstream suites and
+Windows evidence as well.
+
 ## Run the corpus
 
 1. Build the Quill executable you intend to measure. Set `QUILLC` to select it
