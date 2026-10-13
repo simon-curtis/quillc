@@ -153,9 +153,8 @@ export function renderStats(html, data) {
   const $ = load(html);
   const { catalog, compatibility, lsp, counts } = data;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  $("#compatibility-score").text(
-    total ? decimal((counts.available / total) * 100) : "—",
-  );
+  $("#compatibility-score").text(counts.available);
+  $(".score-unit").text(` / ${total}`);
   const summary = `${counts.available} available · ${counts.partial} partial · ${counts.planned} not yet · ${counts.unassessed} unassessed`;
   $("#coverage-counts").text(summary);
   $("#coverage-bar").attr("aria-label", `${total} tracked entries: ${summary}`);
