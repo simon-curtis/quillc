@@ -58,6 +58,13 @@ Use explicitly pinned reports for comparisons.
 
 ## Recorded Linux evidence
 
+The [method-borrow run](results/2026-10-13-method-borrow-clean.json) passes
+111/111 curated cases at clean revision `62a806e`. It catches E0502 when a
+shared or mutable borrow conflicts with supported String and Vec method
+receivers, and accepts mutation after a shared borrow's last use. Quill matches
+rustc's checked diagnostic codes, messages, and primary locations. This 100%
+corpus result does not establish overall Rust compatibility.
+
 The [call-move run](results/2026-10-13-call-move-clean.json) passes 107/107
 curated cases at clean revision `0b32025`. It detects E0505 when a non-`Copy`
 local is moved into a function call while a borrow remains live, and accepts
