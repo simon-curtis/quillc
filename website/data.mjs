@@ -239,7 +239,7 @@ export function renderStats(html, data) {
     parserStage
       .find("[data-stage-provenance]")
       .text("Compiler revision and target not recorded.");
-    parserStage.find("[data-stage-report]").attr("href", "/docs/compiler-parser-migration.md");
+    parserStage.find("[data-stage-report]").remove();
   }
 
   $("#compatibility-score").text("—");
