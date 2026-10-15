@@ -120,7 +120,7 @@ export async function siteData() {
           : name,
       })),
   );
-  const [catalog, compatibility, lsp, syntax, crates] = await Promise.all([
+  const [catalog, compatibility, lsp, syntax, crates, parser] = await Promise.all([
     report("benchmarks/catalog-flow/results.json"),
     latest(
       files,
@@ -143,6 +143,13 @@ export async function siteData() {
     files.includes("benchmarks/crates/results.json")
       ? report("benchmarks/crates/results.json")
       : null,
+    latest(
+      files,
+      "benchmarks/results/",
+      (d) =>
+        d.benchmark === "quill-compiler-parser-compatibility" &&
+        d.compiler_parser_api === "parse_ast_with_cfg_and_edition",
+    ),
   ]);
   return {
     revision: revision(),
@@ -153,6 +160,7 @@ export async function siteData() {
     docs,
     catalog,
     compatibility,
+    parser,
     lsp,
     syntax,
   };
@@ -170,15 +178,16 @@ const escape = (text) =>
   );
 const link = (url, label) => `<a href="/${escape(url)}">${escape(label)}</a>`;
 const provenance = (data) => {
-  const rev = data.quillc_source_revision || data.revision;
+  const rev = data.quillc_source_revision || data.quill_source_revision || data.revision;
+  const dirty = data.quillc_source_dirty ?? data.quill_source_dirty;
   return rev
-    ? `Recorded revision ${rev.slice(0, 8)}${data.quillc_source_dirty === true ? " · modified checkout" : data.quillc_source_dirty === false ? " · clean checkout" : " · checkout cleanliness not recorded"}`
+    ? `Recorded revision ${rev.slice(0, 8)}${dirty === true ? " · modified checkout" : dirty === false ? " · clean checkout" : " · checkout cleanliness not recorded"}`
     : "Revision not recorded";
 };
 
 export function renderStats(html, data) {
   const $ = load(html);
-  const { catalog, compatibility, lsp, counts } = data;
+  const { catalog, compatibility, parser, lsp, counts } = data;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   for (const stage of ["checking", "generating"]) {
     const areas = data.stageAreas[stage];
@@ -192,6 +201,45 @@ export function renderStats(html, data) {
     $(`[data-stage="${stage}"] [data-stage-areas]`).html(areas.map(a =>
       `<li><a href="/compatibility.html#${escape(a.id)}">${escape(a.name)}</a> — ${a.status === "planned" ? "not yet" : escape(a.status)}</li>`
     ).join(""));
+  }
+
+  const parserStage = $("[data-stage=\"parsing\"]");
+  if (parser) {
+    const d = parser.value;
+    if (
+      !Number.isFinite(d.cases_checked) ||
+      !Number.isFinite(d.passed) ||
+      d.cases_checked <= 0 ||
+      d.passed < 0 ||
+      d.passed > d.cases_checked
+    )
+      throw new Error(`Invalid compiler parser report: ${parser.path}`);
+    const percentage = Math.round((d.passed / d.cases_checked) * 100);
+    parserStage.find("[data-stage-value]").text(`${percentage}%`);
+    parserStage
+      .find("[data-stage-count]")
+      .text(`${number(d.passed)} of ${number(d.cases_checked)} rustc-accepted sources parsed`);
+    parserStage
+      .find("[data-stage-detail]")
+      .text(
+        `${number(d.corpora.upstream_parser_fixtures.passed)} syntax fixtures · ${number(d.corpora.rust_library_sources.passed)} compiler source files`,
+      );
+    parserStage
+      .find("[data-stage-limit]")
+      .text("Corpus coverage is a regression measure, not proof of every Rust grammar form.");
+    parserStage
+      .find("[data-stage-provenance]")
+      .text(`${provenance(d)} · ${d.target || "target not recorded"}`);
+    parserStage.find("[data-stage-report]").attr("href", `/${parser.path}`);
+  } else {
+    parserStage.find("[data-stage-count]").text("Compiler parser corpus not measured");
+    parserStage
+      .find("[data-stage-limit]")
+      .text("The editor syntax report does not measure the compiler parser path.");
+    parserStage
+      .find("[data-stage-provenance]")
+      .text("Compiler revision and target not recorded.");
+    parserStage.find("[data-stage-report]").attr("href", "/docs/compiler-parser-migration.md");
   }
 
   $("#compatibility-score").text("—");

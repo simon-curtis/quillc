@@ -31,10 +31,12 @@
   <h2 id="language-coverage-title">Rust language coverage.</h2>
 <div class="language-stages">
   <section data-stage="parsing" aria-label="Parsing coverage">
-    <h3>Parsing</h3><div class="stage-value">—</div>
-    <p>Compiler coverage not yet measured</p>
-    <p class="stage-detail">Reads Rust source into a syntax tree.</p>
-    <p class="stage-detail">The comprehensive syntax report covers the editor parser, not the compiler pipeline.</p>
+    <h3>Parsing</h3><div class="stage-value" data-stage-value>—</div>
+    <p data-stage-count>Compiler parser corpus not measured</p>
+    <p class="stage-detail" data-stage-detail>Reads Rust source into a syntax tree.</p>
+    <p class="stage-detail" data-stage-provenance></p>
+    <p class="stage-detail" data-stage-limit></p>
+    <a data-stage-report href="/docs/compiler-parser-migration.md">Parser coverage report ↗</a>
     <a href="/docs/compiler-parser-migration.md">Parser implementation ↗</a>
   </section>
   <section data-stage="checking" aria-label="Checking coverage">
@@ -50,7 +52,7 @@
     <details><summary>Counted areas</summary><ul data-stage-areas></ul></details>
   </section>
 </div>
-<p class="project-fit-note">Percentages count tracked areas with partial or full support, with equal weight per area. Partial means gaps remain. These stage inventories measure implementation breadth, not conformance to every Rust rule; they are not averaged into an overall score. Libraries, Cargo, and platforms are tracked separately.</p>
+<p class="project-fit-note">Parsing shows the rustc-accepted source corpus pass rate. Checking and generating count tracked areas with partial or full support, with equal weight per area. Partial means gaps remain. Neither measure proves full Rust conformance; they are not averaged into an overall score. Libraries, Cargo, and platforms are tracked separately.</p>
 </section>
 <section class="crate-benchmarks" aria-labelledby="crate-benchmarks-title">
   <div class="crate-benchmarks-heading">
@@ -89,7 +91,7 @@
 <div class="compatibility-rows">
 <section class="compatibility-row" data-status="available" id="linux-x86-64-executables" aria-labelledby="linux-x86-64-executables-title"><div><p class="feature-category">Platforms</p><h2 id="linux-x86-64-executables-title"><a href="#linux-x86-64-executables">Linux x86-64 executables</a></h2></div><p class="feature-status status-available">Available</p><div class="feature-detail"><p>Emits native machine code and ELF objects; the system linker produces a runnable executable for supported programs.</p><a href="README.md#current-state">Source notes ↗</a></div></section>
 <section class="compatibility-row" data-status="planned" id="windows-output" aria-labelledby="windows-output-title"><div><p class="feature-category">Platforms</p><h2 id="windows-output-title"><a href="#windows-output">Windows output</a></h2></div><p class="feature-status status-planned">Not yet</p><div class="feature-detail"><p>Windows is a target for full compatibility. The current native target is Linux x86-64.</p><a href="docs/architecture.md#constraints">Source notes ↗</a></div></section>
-<section class="compatibility-row" data-status="partial" id="rust-source-parsing" aria-labelledby="rust-source-parsing-title"><div><p class="feature-category">Language</p><h2 id="rust-source-parsing-title"><a href="#rust-source-parsing">Rust source parsing</a></h2></div><p class="feature-status status-partial">Partial</p><div class="feature-detail"><p>Syn parses most stable syntax and some unstable syntax. Parsing a construct does not mean Quill can type-check or execute it.</p><a href="README.md#current-state">Source notes ↗</a></div></section>
+<section class="compatibility-row" data-status="partial" id="rust-source-parsing" aria-labelledby="rust-source-parsing-title"><div><p class="feature-category">Language</p><h2 id="rust-source-parsing-title"><a href="#rust-source-parsing">Rust source parsing</a></h2></div><p class="feature-status status-partial">Partial</p><div class="feature-detail"><p>The compiler uses rust-analyzer’s syntax parser and lowers supported constructs into Quill’s model. Parsing a construct does not mean Quill can type-check or execute it.</p><a href="docs/compiler-parser-migration.md">Parser implementation and evidence ↗</a></div></section>
 <section class="compatibility-row" data-status="partial" id="functions-and-scalar-arithmetic" aria-labelledby="functions-and-scalar-arithmetic-title"><div><p class="feature-category">Language</p><h2 id="functions-and-scalar-arithmetic-title"><a href="#functions-and-scalar-arithmetic">Functions and scalar arithmetic</a></h2></div><p class="feature-status status-partial">Partial</p><div class="feature-detail"><p>Direct and recursive calls, selected i32/u64/usize operations, and supported returns. Division errors trap; Rust panic and overflow-check behavior are not fully matched.</p><a href="README.md#current-state">Source notes ↗</a></div></section>
 <section class="compatibility-row" data-status="partial" id="control-flow" aria-labelledby="control-flow-title"><div><p class="feature-category">Language</p><h2 id="control-flow-title"><a href="#control-flow">Control flow</a></h2></div><p class="feature-status status-partial">Partial</p><div class="feature-detail"><p>Selected if/else and while conditions, including runtime-indexed borrowed-slice reads with short-circuit &&/|| evaluation in statements and value-producing local initializers, unlabeled loop, integer-range for loops, and unlabeled break/continue. Supported borrowed slices also have native iteration paths.</p><a href="README.md#current-state">Source notes ↗</a></div></section>
 <section class="compatibility-row" data-status="partial" id="enums-and-match" aria-labelledby="enums-and-match-title"><div><p class="feature-category">Language</p><h2 id="enums-and-match-title"><a href="#enums-and-match">Enums and match</a></h2></div><p class="feature-status status-partial">Partial</p><div class="feature-detail"><p>Fieldless i32-represented enums and scalar patterns, including ranges, or-patterns, and simple identifier bindings. Guards, payload variants, and destructuring bindings are unsupported.</p><a href="README.md#current-state">Source notes ↗</a></div></section>

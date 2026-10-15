@@ -1,142 +1,141 @@
 # Develop and publish the website
 
-For visual changes, read the [design decisions](design.md). Review work against
-[the website standards](../../CODING_STANDARDS.md).
+Use this guide for website content, statistics, assets, and publication. For
+composition work, read [the design record](design.md) and apply
+[the review criteria](../../CODING_STANDARDS.md).
 
 ## Local preview
 
-From the repository root (Node version requirements are in `package.json`):
+1. Use the Node version required by [package.json](../../package.json). From
+   the repository root, install locked dependencies and start development:
 
-```sh
-npm ci --ignore-scripts
-npm run dev
-```
+   ```sh
+   npm ci --ignore-scripts
+   npm run dev
+   ```
 
-Vite+ listens on `0.0.0.0:4173`. Open `http://localhost:4173` locally, or the
-host's LAN address on another device. CSS updates in place; changes to docs,
-reports, scripts, and HTML reload open pages. Git revision changes also reload.
-`serve.py` is a compatibility launcher for this same command.
+2. Open the URL printed by Vite+. [vite.config.mjs](../../vite.config.mjs)
+   owns the host and port. Preview is ready when the requested page loads and
+   an edit appears after Vite updates it. CSS updates in place; HTML, docs,
+   reports, scripts, and Git revision changes reload pages.
 
-Every non-ignored repository `.md` and `.json` file is served in the existing
-document reader at its original URL; Markdown is rendered and JSON is
-pretty-printed. `?raw=1` returns the source data. Project notes lists all
-documents, including newly added files. Relative Markdown links and images keep
-their original base. Dot-directories, build output, and files resolving outside
-the repository are excluded from publication.
+`serve.py` launches the same development command. For generated output, use
+`npm run build` followed by `npm run preview`; choose another `--port` if the
+development server occupies the configured port.
 
-## Color themes
+## Change content
 
-Use the header control to cycle **System → Dark → Light**. System is the default;
-an explicit choice is stored as `quill-theme` in local storage and shared across
-tabs. When storage is unavailable, the control still works for the current page.
+1. Find the authoritative source for each claim. Use the implementation and
+   [architecture guide](../architecture.md) for compiler behavior,
+   [the inventory workflow](../rust-compatibility-inventory.md) for feature
+   scope, and [statistics and publication](#statistics-and-publication) for
+   measurements.
+2. Update every affected page. Link detailed contracts and evidence; preserve
+   the workload, revision, and limits needed to interpret each claim.
+3. Inspect the served page and its links. Finish when the rendered claim matches
+   its source and related pages agree. Layout, theme, and asset changes also
+   require [visual review](#review-a-change).
 
-The small inline initializer in each HTML template applies the preference before
-styles paint. [`assets/theme.js`](../../assets/theme.js) manages the control,
-system changes, and browser theme color. Palette tokens live in
-[`assets/site.css`](../../assets/site.css); component styles should use those
-tokens. Halftone canvases repaint on `quill:themechange`, including when reduced
-motion is enabled. New page templates need both the initializer and theme script.
+### Document publication
 
-For a theme change, inspect text, controls, code/JSON, feature statuses, and
-halftone art in both palettes. Check that the saved preference survives navigation
-and that narrow headers still fit. Desktop and 390px browser inspection covered
-the homepage, compatibility page, and Markdown reader during implementation;
-physical iPhone behavior has not been verified.
+The document reader serves eligible repository Markdown and JSON at their
+original paths; `?raw=1` returns source. Relative links and images retain their
+original base. Project notes indexes newly added documents automatically.
+
+[publicFiles](../../website/data.mjs) owns eligibility: Git-ignored paths,
+dot-directories, build output, and paths resolving outside the repository are
+excluded. Keep public documentation and reports within that boundary. Reloading
+updates displayed evidence; it does not generate a new compiler measurement.
 
 ## Statistics and publication
 
-Edit or regenerate source reports; page figures are generated automatically.
-`website/data.mjs` supplies the same data to development pages and production
-HTML, including readable figures with JavaScript disabled. `/site-data.json`
-records the selected reports, documentation index, and current revision.
+[website/data.mjs](../../website/data.mjs) selects reports and renders figures
+for both development and production, including HTML readable without JavaScript.
+Inspect `/site-data.json` to identify the reports and revision actually displayed.
 
-- Catalog Flow uses `benchmarks/catalog-flow/results.json` for times, ratios,
-  workload size, run count, machine, source revision, and `runtime_medians` for
-  generated-binary runtime. The metric switch reads
-  that same report.
-- Compiler checks select the newest report in `benchmarks/compatibility/results/`.
-  Report category coverage remains distinct from the current documentation index.
-- LSP latency and syntax coverage select reports by their `benchmark` identifier
-  under `benchmarks/results/`. Adding a matching report makes it eligible automatically.
-- Selection prefers recorded run/artifact timestamps, then filename date,
-  filesystem modification time, and filename. Record timestamps in new report
-  formats for unambiguous ordering across machines.
-- Stage coverage uses the curated entries in `compatibility.html`. Checking
-  includes the Checking category; generating uses the explicit feature IDs in
-  `siteData`. Each percentage counts areas with partial or full support at equal
-  weight. The expandable lists expose the denominator and remaining gaps.
-  Compiler parsing coverage remains unmeasured; the LSP syntax report cannot
-  establish it. Passing a probe never promotes a feature automatically.
-- Real-crate tables on the homepage and compatibility page read
-  `benchmarks/crates/results.json`. They show pinned versions, source size,
-  parsing, subset checking, rustc checking, and compiler provenance. The current
-  report has no native-build measurements, so that column says “Not measured”.
-  Single observations are not paired performance results. Missing reports show
-  an unavailable state. Extend the renderer with explicit evidence when the
-  report gains new stages; never infer a native build from parsing or checking.
+| Claim | Authoritative input | Interpretation |
+| --- | --- | --- |
+| Build time and generated-binary runtime | [Catalog Flow report](../../benchmarks/catalog-flow/results.json) | Keep build modes, runtime, workload, host, and compiler provenance together. |
+| Differential compiler checks | Reports under [compatibility/results](../../benchmarks/compatibility/results) | Case outcomes describe that corpus and compiler state. |
+| Editor latency and syntax | Matching benchmark IDs under [benchmarks/results](../../benchmarks/results) | Each report covers its own operations and syntax scope. |
+| Compiler parser acceptance | `quill-compiler-parser-compatibility` reports under [benchmarks/results](../../benchmarks/results) | Counts rustc-accepted sources from the named corpora, separately from editor syntax. |
+| Compiler parser coverage | `quill-compiler-parser-compatibility` reports under [benchmarks/results](../../benchmarks/results) | Pass rate over rustc-accepted fixtures and library files; not all Rust syntax. |
+| Stage coverage | Curated [compatibility rows](../../compatibility.html) and feature IDs in `siteData` | Areas with partial or full support are counted equally; disclose the denominator and gaps. |
+| Real-crate probes | [Crate report](../../benchmarks/crates/results.json) | Parsing, subset checking, native builds, and rustc checking require their own evidence. |
 
-Malformed reports surface an error. Missing LSP or compiler reports display an
-unavailable state instead of retaining copied numbers. Reloading displays new
-measurements; it does not run compiler benchmarks or infer new results from code.
+Report selection uses recorded run/artifact timestamps, filename dates,
+filesystem modification times, then filenames. Include timestamps in new report
+formats so selection is reproducible across machines. The compiler-parsing stage
+selects its own report and shows “unmeasured” when none is available. Generate
+the report through
+[the compiler acceptance gates](../compiler-parser-migration.md#rustc-acceptance-gates).
+Editor syntax reports measure a different path.
 
-```sh
-npm run build
-npm run preview
-```
+To change a measured section:
 
-The build writes `target/website`, including Markdown, report JSON, and referenced
-public media. Preview serves that built snapshot; use a different `--port` if the
-development server is already running. The existing deployment workflow now
-installs locked dependencies and builds with Vite+. `scripts/build-website.py`
-remains a compatibility entry point. Source HTML provides the layout; modify
-`renderStats` when changing a measured section's markup. Do not copy new numbers
-into HTML or create another benchmark snapshot under `assets/`.
+1. Record or select evidence through [the benchmark workflow](../../benchmarks/README.md).
+   Update the source report; figures in source HTML are not a second data store.
+2. If markup or report structure changes, update `renderStats` and affected
+   controls to consume the same fields. New stages require explicit evidence.
+3. Inspect `/site-data.json` and the rendered pages. Check missing-report behavior
+   shows an unavailable state and malformed reports surface an error. Completion
+   means every displayed figure traces to its selected report and scope.
+
+### Build and deploy
+
+`npm run build` writes the static snapshot, documents, JSON, and referenced media
+to `target/website`. `scripts/build-website.py` is a compatibility entry point.
+
+[The website workflow](../../.github/workflows/website.yml) owns CI triggers,
+bundle checks, deployment commands, credentials, and deployed-revision checking.
+Use it for publication; a local build alone establishes only the generated
+snapshot. A deployment is complete when its checks pass and the live
+`/project-status.json` reports the intended revision. Package hosting has a
+separate [release workflow](../arch-packaging.md#hosting-boundaries).
 
 ## Review a change
 
-1. Capture the existing section before changing its structure or stylesheet.
-2. In T3, call `preview_status` first and use an owned tab. Open a preview if none
-   exists. Wait for Vite to apply the edit; do not assume an old screenshot is current.
-3. Wait for `document.fonts.ready`, then two animation frames. Scroll the section
-   into view and let its finite entrance animation settle. Do not wait on infinite
-   animations. For geometry comparisons, finish only finite animations.
-4. Capture the changed section with neighbouring content at 1280 × 800 and
-   390 × 844. Check 320px too when changing width-sensitive content. Check for
-   overflow, wrapping, hit targets, and the placement of the halftone impressions.
-5. Compare against [the design record](design.md). Exercise affected controls,
-   keyboard focus, and reduced-motion behavior when those areas change. Review
-   compatibility and Markdown pages when changing shared CSS.
-6. Record what was inspected and any limitations. Commit website files separately
-   from compiler work; inspect the staged diff before committing.
+1. Capture the current section before changing its structure or stylesheet.
+2. In T3, call `preview_status` and use an agent-owned tab or open one. Wait for
+   Vite to apply the edit.
+3. Wait for `document.fonts.ready` and two animation frames. Scroll the section
+   into view and let entrance animations settle. For geometry comparisons,
+   finish finite animations and leave infinite animations running.
+4. Capture the section with its neighbours at 1280 × 800 and 390 × 844; add
+   320px when width sensitivity matters. Check overflow, wrapping, hit targets,
+   and halftone boundaries.
+5. Exercise affected controls, keyboard focus, and reduced motion. For shared
+   CSS, also inspect the compatibility page and Markdown reader.
+6. Apply [the review criteria](../../CODING_STANDARDS.md). Record inspected
+   views, behavior, evidence, and unresolved limits. Finish when each applicable
+   criterion has evidence or a named open issue.
 
-Screenshots are review evidence, not replacements for source. Keep temporary
-captures outside the tracked tree unless intentionally updating this reference.
+Keep temporary captures outside the tracked tree unless intentionally updating
+an approved reference. Follow [AGENTS.md](../../AGENTS.md) when staging work.
 
-## CSS tooling
+## Color themes
 
-```sh
-npm ci --ignore-scripts
-npm run format:css
-npm run check:css
-```
+The header cycles System → Dark → Light. `quill-theme` stores the explicit
+choice and synchronizes tabs; without storage, the control still works for the
+current page. Each template needs the inline initializer before styles paint
+and [theme.js](../../assets/theme.js) for the control and system changes.
 
-Prettier formats the three stylesheets. Stylelint rejects duplicate selectors,
-duplicate properties, empty blocks, unknown properties, and invalid hex colours.
-Responsive overrides in different media conditions are intentional. Keep each
-component's rules together instead of adding a later duplicate to win the cascade.
+Use palette tokens from [site.css](../../assets/site.css). Halftone canvases
+repaint on `quill:themechange`, including under reduced motion. Theme changes
+are complete when text, controls, code/JSON, statuses, and artwork work in both
+palettes, the preference survives navigation, and narrow headers remain usable.
 
-Tooling is development-only. At setup, npm reported a transitive `braces`
-stack-exhaustion advisory through Stylelint; the available audit fix downgraded
-Stylelint to an obsolete major. Our commands use fixed local globs. Reassess the
-advisory when updating dependencies; do not apply that downgrade automatically.
+## CSS changes
 
-## File map
+Use the format and check scripts in [package.json](../../package.json).
+Keep a component's base and responsive rules together. Remove obsolete selectors
+when replacing a component; intentional media-query overrides stay with it.
 
-- `index.html`: homepage; `compatibility.html`: compatibility index.
-- `project.html`: project documentation landing page.
-- `assets/site.css`: shared foundation and homepage components, grouped by section.
-- `assets/compatibility.css` and `assets/document.css`: page-specific styles.
-- `assets/print-fields.js`: halftone rendering; `assets/motion.js`: shared motion.
-- `vite.config.mjs`: Vite+ development and production configuration.
-- `website/content-plugin.mjs`: Markdown routes, live reload, and publication.
-- `website/data.mjs`: report selection and server-rendered statistics.
+## Implementation map
+
+- `index.html`, `compatibility.html`, `project.html`: page content and structure.
+- `assets/site.css`: shared foundation and homepage components;
+  `assets/compatibility.css` and `assets/document.css`: page-specific styles.
+- `assets/print-fields.js`, `assets/motion.js`: halftone artwork and motion.
+- `website/content-plugin.mjs`: document routes, live reload, and publication.
+- `website/data.mjs`: report selection and statistics rendering.
